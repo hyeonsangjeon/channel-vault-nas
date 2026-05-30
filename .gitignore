@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
@@ -14,6 +15,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+node_modules/
 lib/
 lib64/
 parts/
@@ -205,6 +207,25 @@ tempCodeRunnerFile.py
 
 # Ruff stuff:
 .ruff_cache/
+
+# Channel Vault runtime data
+metadata/
+downfolder/
+
+# Private agent planning / local working notes
+docs/tasks/
+docs/private/
+docs/scratch/
+docs/worklog/
+tasks/
+SPEC.local.md
+SPEC.private.md
+TASKS.local.md
+TASKS.private.md
+*.local.md
+*.private.md
+*.scratch.md
+copilot-session-*.md
 
 # PyPI configuration file
 .pypirc
