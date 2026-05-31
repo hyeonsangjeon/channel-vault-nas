@@ -33,6 +33,12 @@ from app.schemas.source import (
     RegisteredChannel,
     SourceNormalizeRequest,
 )
+from app.services.archive_metrics import (
+    build_channel_cadence_from_db,
+    build_channel_coverage_from_db,
+    list_missing_videos_from_db,
+    list_removed_saved_videos_from_db,
+)
 from app.services.channel_policy import get_channel_policy, update_channel_policy
 from app.services.channel_registration import (
     list_registered_channels,
@@ -185,27 +191,63 @@ async def create_download_candidates(
     return result
 
 
-@router.get("/{channel_id}/coverage", response_model=ChannelCoverage)
-async def get_channel_coverage(channel_id: str) -> ChannelCoverage:
+@router.get("/{channel_id:int}/coverage", response_model=ChannelCoverage)
+async def get_channel_coverage(channel_id: int, db: DbSession) -> ChannelCoverage:
     """Return source/archived/missing/removed completeness for a channel."""
+    coverage = await build_channel_coverage_from_db(db, channel_id)
+    if coverage is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return coverage
+
+
+@router.get("/{channel_id:int}/missing", response_model=list[MissingVideo])
+async def get_missing_videos(channel_id: int, db: DbSession) -> list[MissingVideo]:
+    """Return source videos that are not mirrored locally yet."""
+    videos = await list_missing_videos_from_db(db, channel_id)
+    if videos is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return videos
+
+
+@router.get("/{channel_id:int}/removed", response_model=list[RemovedVideo])
+async def get_removed_saved_videos(channel_id: int, db: DbSession) -> list[RemovedVideo]:
+    """Return videos removed from source but preserved locally."""
+    videos = await list_removed_saved_videos_from_db(db, channel_id)
+    if videos is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return videos
+
+
+@router.get("/{channel_id:int}/cadence", response_model=ChannelCadence)
+async def get_channel_cadence(channel_id: int, db: DbSession) -> ChannelCadence:
+    """Return upload rhythm and next expected upload for a channel."""
+    cadence = await build_channel_cadence_from_db(db, channel_id)
+    if cadence is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return cadence
+
+
+@router.get("/{channel_id}/coverage", response_model=ChannelCoverage)
+async def get_mock_channel_coverage(channel_id: str) -> ChannelCoverage:
+    """Return deterministic coverage for legacy fixture ids."""
     return build_channel_coverage(channel_id)
 
 
 @router.get("/{channel_id}/missing", response_model=list[MissingVideo])
-async def get_missing_videos(channel_id: str) -> list[MissingVideo]:
-    """Return source videos that are not mirrored locally yet."""
+async def get_mock_missing_videos(channel_id: str) -> list[MissingVideo]:
+    """Return deterministic missing videos for legacy fixture ids."""
     return build_missing_videos(channel_id)
 
 
 @router.get("/{channel_id}/removed", response_model=list[RemovedVideo])
-async def get_removed_saved_videos(channel_id: str) -> list[RemovedVideo]:
-    """Return videos removed from source but preserved locally."""
+async def get_mock_removed_saved_videos(channel_id: str) -> list[RemovedVideo]:
+    """Return deterministic removed videos for legacy fixture ids."""
     return build_removed_videos(channel_id)
 
 
 @router.get("/{channel_id}/cadence", response_model=ChannelCadence)
-async def get_channel_cadence(channel_id: str) -> ChannelCadence:
-    """Return upload rhythm and next expected upload for a channel."""
+async def get_mock_channel_cadence(channel_id: str) -> ChannelCadence:
+    """Return deterministic cadence for legacy fixture ids."""
     return build_channel_cadence(channel_id)
 
 
