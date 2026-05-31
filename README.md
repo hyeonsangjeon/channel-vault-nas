@@ -82,11 +82,17 @@ Deferred until after the core loop is reliable:
 
 ## Documentation
 
-- [Product Brief](docs/product-brief.md)
+- [Product Brief / Product Spec](docs/product-brief.md)
 - [Architecture Draft](docs/architecture.md)
 - [Design Direction](docs/design-direction.md)
 - [Archive Priorities](docs/archive-priorities.md)
+- [Storage Recovery](docs/storage-recovery.md)
 - [Use Boundaries](docs/use-boundaries.md)
+
+Product specs and public architecture notes live in `docs/`. Private task
+handoffs, scratch notes, and local planning files should stay in
+`.codex/tasks/`, `TASKS.local.md`, or `SPEC.local.md`; those paths are ignored
+by git.
 
 ## Planned Repository Shape
 
@@ -114,6 +120,14 @@ pip install -e ".[dev]"
 uvicorn app.main:app --reload
 ```
 
+Useful backend media-worker settings:
+
+```bash
+CVN_YTDLP_BINARY=yt-dlp
+CVN_FFPROBE_BINARY=ffprobe
+CVN_MEDIA_PROBE_TIMEOUT_SECONDS=20
+```
+
 Frontend:
 
 ```bash
@@ -122,12 +136,77 @@ npm install
 npm run dev
 ```
 
-The first screen is an `Archive Observatory` dashboard with mock data and a D3
-channel constellation. Real channel sync will replace the mock snapshot in the
-next backend slices.
+The first screen is an `Archive Observatory` dashboard. The current backend
+snapshot is DB-backed for registered channels, sync jobs, and download queue
+candidates, while a few lower-priority visual panels still use local mock
+fallbacks until the media worker and storage scanner land.
+
+After a channel exists, the UI auto-opens the first registered channel and shows
+Archive Launch Control: queue search, selectable candidate/queued jobs,
+preflight storage estimates, yt-dlp command preview, and metadata-only bulk
+actions before any real media transfer starts.
+
+Launch Control also includes a safe worker control room. By default the media
+worker is locked (`CVN_DOWNLOAD_WORKER_ENABLED=false`), but the UI and
+`GET /api/jobs/downloads/worker/plan` show queued claim order, archive
+destination folders, running-job telemetry, dry-run mode, and the exact yt-dlp
+command that would run.
+`POST /api/jobs/downloads/worker/run-once` defaults to a non-mutating dry-run;
+real transfer requires both `CVN_DOWNLOAD_WORKER_ENABLED=true` and
+`dry_run=false`. If a real transfer is enabled, worker progress is committed
+while yt-dlp runs and `POST /api/jobs/downloads/{job_id}/stop` can terminate an
+in-process job. Worker passes are also retained in SQLite through
+`GET /api/jobs/downloads/worker/runs`, and the worker room shows the most recent
+run ledger. The same audit endpoint supports status, dry-run/live, and failed
+run filters; the frontend worker history drawer exposes those filters with run
+duration, started/completed/failed counts, and skip/failure reasons.
+An optional in-process scheduler can run bounded worker passes on an interval,
+but only when both `CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED=true` and
+`CVN_DOWNLOAD_WORKER_ENABLED=true` are set.
+Each channel policy can pause worker claims independently, so a channel can stay
+synced and queued while the media worker skips it until the policy console
+resumes it.
+The top-level runtime console is backed by `GET /api/settings/runtime` and shows
+whether the real worker and scheduler are enabled, the scheduler cadence/limit,
+whether the scheduler is off, worker-locked, armed, waiting, running, or
+recently failed, and whether local `yt-dlp` and `ffprobe` commands resolve on
+the NAS host. The same surface shows next/last scheduler tick labels for quick
+operator debugging. Its Env guide drawer converts that live snapshot into the
+exact `.env` lines needed to arm the worker/scheduler and override `yt-dlp` or
+`ffprobe` binary paths, then lets the operator copy the manifest in one click.
+
+The selected channel also exposes a Vault Library shelf backed by SQLite:
+videos, indexed media files, queue state, media byte totals, and sidecar
+fidelity are shown together so archived and still-missing items stay visible.
+Existing NAS folders can be indexed through the import kit: `video.info.json`
+sidecars are scanned and applied to SQLite as channel, video, and media-file
+records without moving the original files.
+Completed worker jobs use the same sidecar contract, but apply only the
+finished video folder so large NAS roots are not rescanned after every
+download.
+During rescan or targeted post-download indexing, the backend best-effort runs
+`ffprobe` to fill `MediaFile` container, codec, FPS, resolution, and duration
+fields. The library shelf renders those facts as compact quality chips beside
+duration, sidecar fidelity, queue status, and media size. The shelf can be
+filtered by integrity, missing sidecar type, and codec/profile such as `h264`,
+`1080p`, or `mp4`, with quick-view presets for common checks like missing
+subtitles, media-only files, 1080p h264, and complete mp4 assets. Selecting a
+library card opens a media detail drawer with per-file stream actions,
+technical profile, path integrity state, and sidecar/subtitle inventory.
+
+Startup is NAS-safe by default: the app backs up SQLite, runs Alembic
+`upgrade head`, then keeps an early `create_all` safety net for development
+schemas. The default SQLite URL is anchored to the backend directory so tests
+and app startup use the same local DB path. Set
+`CVN_DB_MIGRATE_ON_STARTUP=false` to disable startup migrations.
 
 Frontend text is localized from `frontend/src/locales/*.json`. Initial
 languages are English, Korean, Japanese, Chinese, and Hindi.
+
+Browser smoke coverage lives in `frontend/e2e/`. `npm run e2e:smoke` starts an
+isolated FastAPI backend, Vite frontend, temporary SQLite DB, and temporary NAS
+fixture, then verifies registration UI, queue preflight/bulk actions, library
+shelf, worker control room, and rescan apply flows on desktop and mobile.
 
 ## Release Direction
 

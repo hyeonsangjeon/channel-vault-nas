@@ -211,17 +211,20 @@ tempCodeRunnerFile.py
 # Channel Vault runtime data
 metadata/
 downfolder/
+frontend/playwright-report/
+frontend/test-results/
 
 # Private agent planning / local working notes
+.codex/tasks/
 docs/tasks/
 docs/private/
 docs/scratch/
 docs/worklog/
 tasks/
-SPEC.local.md
-SPEC.private.md
 TASKS.local.md
+SPEC.local.md
 TASKS.private.md
+SPEC.private.md
 *.local.md
 *.private.md
 *.scratch.md

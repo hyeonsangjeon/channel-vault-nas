@@ -2,8 +2,19 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete
 
+from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.main import app
+from app.models.archive import (
+    Channel,
+    ChannelPolicy,
+    DownloadJob,
+    DownloadWorkerRun,
+    MediaFile,
+    SyncJob,
+    Video,
+)
 
 
 @pytest.mark.asyncio
@@ -20,18 +31,47 @@ async def test_health_endpoint() -> None:
 
 @pytest.mark.asyncio
 async def test_dashboard_snapshot_endpoint() -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        await session.commit()
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/dashboard")
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["metrics"]) >= 4
-    assert data["coverage"]["percent"] >= 90
-    assert data["coverage"]["removed_saved"] >= 1
+    assert len(data["metrics"]) == 5
+    assert data["coverage"]["percent"] == 0
+    assert data["coverage"]["removed_saved"] == 0
     assert data["fidelity"]["info_json"] >= data["coverage"]["archived"]
-    assert len(data["channels"]) >= 3
+    assert data["channels"] == []
     assert len(data["queue"]) >= 3
+
+
+@pytest.mark.asyncio
+async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings/runtime")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["download_worker_enabled"] is False
+    assert data["download_worker_scheduler_enabled"] is False
+    assert data["download_worker_scheduler_interval_seconds"] >= 5
+    assert data["scheduler_status"]["state"] == "off"
+    assert data["scheduler_status"]["worker_enabled"] is False
+    assert {binary["name"] for binary in data["binaries"]} == {"yt-dlp", "ffprobe"}
+    assert "secret" not in data
 
 
 @pytest.mark.asyncio
@@ -46,13 +86,13 @@ async def test_channel_archive_priority_endpoints() -> None:
         imports = await client.get("/api/imports/sources")
 
     assert coverage.status_code == 200
-    assert coverage.json()["missing"] == 13
+    assert coverage.json()["missing"] == 17
 
     assert missing.status_code == 200
     assert missing.json()[0]["source_state"] == "available"
 
     assert removed.status_code == 200
-    assert "video.mp4" in removed.json()[0]["local_relative_path"]
+    assert removed.json() == []
 
     assert cadence.status_code == 200
     assert cadence.json()["typical_upload_dow"] == 3
@@ -62,3 +102,43 @@ async def test_channel_archive_priority_endpoints() -> None:
 
     assert imports.status_code == 200
     assert imports.json()[0]["id"] == "google-takeout"
+
+
+@pytest.mark.asyncio
+async def test_channel_source_normalization_accepts_handle_share_and_id() -> None:
+    transport = ASGITransport(app=app)
+    cases = [
+        (
+            "https://youtube.com/@wingnut987s4?si=LZr7f3vNJZsuoRo1",
+            "handle",
+            "@wingnut987s4",
+            "https://www.youtube.com/@wingnut987s4",
+            True,
+        ),
+        (
+            "UCmLADXQtWVuzOnOK5TNrWaw",
+            "channel_id",
+            "UCmLADXQtWVuzOnOK5TNrWaw",
+            "https://www.youtube.com/channel/UCmLADXQtWVuzOnOK5TNrWaw",
+            False,
+        ),
+        (
+            "https://www.youtube.com/@wingnut987s4",
+            "handle",
+            "@wingnut987s4",
+            "https://www.youtube.com/@wingnut987s4",
+            False,
+        ),
+    ]
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        for raw, identifier_type, identifier, canonical_url, tracking_removed in cases:
+            response = await client.post("/api/channels/_normalize", json={"value": raw})
+            assert response.status_code == 200
+            data = response.json()
+            assert data["source_type"] == "channel"
+            assert data["identifier_type"] == identifier_type
+            assert data["identifier"] == identifier
+            assert data["canonical_url"] == canonical_url
+            assert data["probe_url"] == canonical_url
+            assert data["tracking_query_removed"] is tracking_removed

@@ -61,6 +61,52 @@ Implications:
   anchor is `upload_date + video_id`.
 - Source deletion/private/block events never delete local media by default.
 
+See `docs/storage-recovery.md` for the full SQLite + sidecar recovery contract.
+
+## Source Registration Contract
+
+Channel registration accepts the forms users naturally copy from YouTube:
+
+- Share/handle URL with tracking query:
+  `https://youtube.com/@wingnut987s4?si=LZr7f3vNJZsuoRo1`
+- Raw channel ID:
+  `UCmLADXQtWVuzOnOK5TNrWaw`
+- Canonical handle URL:
+  `https://www.youtube.com/@wingnut987s4`
+
+The backend normalizes these before persistence/probing:
+
+- Handle inputs become `https://www.youtube.com/@wingnut987s4`.
+- Channel ID inputs become
+  `https://www.youtube.com/channel/UCmLADXQtWVuzOnOK5TNrWaw`.
+- Share tracking query/fragment values are stripped and never become part of the
+  source identity.
+- The first yt-dlp probe stores both the user-facing handle and immutable
+  YouTube channel ID when both are available.
+
+Test fixture channel:
+
+```text
+title: wingnut987S
+handle: @wingnut987s4
+channel_id: UCmLADXQtWVuzOnOK5TNrWaw
+source_url: https://www.youtube.com/@wingnut987s4
+```
+
+Registration flow:
+
+```text
+POST /api/channels/_probe
+  -> read-only yt-dlp flat playlist probe, storage forecast, folder preview
+
+POST /api/channels
+  -> repeat probe server-side, upsert Channel + flat Video rows, return summary
+```
+
+The first implementation uses a fast synchronous HTTP response path. The
+payload shape is intentionally compatible with a later WebSocket/job mode for
+large channels.
+
 ## Backend Foundation
 
 Backend stack:
@@ -198,6 +244,8 @@ Suggested fields:
 - `subtitles_enabled`
 - `subtitle_languages`
 - `retention_policy`
+- `worker_paused`
+- `worker_pause_reason`
 - `created_at`
 - `updated_at`
 
@@ -219,6 +267,10 @@ Suggested fields:
 - `status`
 - `progress`
 - `quality`
+- `priority`
+- `preflight_status`
+- `estimated_bytes`
+- `preflight_checked_at`
 - `error_message`
 - `attempt_count`
 - `started_at`
@@ -267,6 +319,8 @@ GET    /api/dashboard
 
 GET    /api/channels
 POST   /api/channels
+POST   /api/channels/_normalize
+POST   /api/channels/_probe
 GET    /api/channels/{channel_id}
 PATCH  /api/channels/{channel_id}
 DELETE /api/channels/{channel_id}
@@ -290,16 +344,31 @@ POST   /api/videos/{video_id}/download
 
 GET    /api/jobs/sync
 GET    /api/jobs/downloads
+GET    /api/jobs/downloads/preflight
+GET    /api/jobs/downloads/worker/plan
+GET    /api/jobs/downloads/worker/runs?channel_id=&status=&dry_run=&failed_only=&limit=
+POST   /api/jobs/downloads/worker/run-once
+POST   /api/jobs/downloads/bulk
 POST   /api/jobs/downloads/{job_id}/retry
+POST   /api/jobs/downloads/{job_id}/cancel
+POST   /api/jobs/downloads/{job_id}/stop
+
+GET    /api/events/recent
 
 GET    /api/library
+GET    /api/library?channel_id=&query=&status=&integrity=&codec=&missing_sidecar=
+GET    /api/library/_rescan/plan
+POST   /api/library/_rescan/apply
+GET    /api/library/{video_id}
+GET    /api/library/{video_id}/files
 GET    /api/library/{video_id}/stream
 GET    /api/library/{video_id}/file
 
+GET    /api/settings/runtime
 GET    /api/settings
 PATCH  /api/settings
 
-GET    /ws/events
+WS     /ws/events
 ```
 
 `Quick Download` can later be exposed separately:
@@ -328,10 +397,17 @@ Initial event types:
 - `sync.progress`
 - `sync.completed`
 - `sync.failed`
+- `policy.updated`
 - `video.discovered`
+- `download.candidates`
+- `download.preflight`
+- `download.bulk`
 - `download.queued`
-- `download.metadata`
+- `download.cancelled`
+- `download.stop_requested`
 - `download.progress`
+- `library.rescan.applied`
+- `download.metadata`
 - `download.completed`
 - `download.failed`
 - `storage.updated`
@@ -351,6 +427,19 @@ Start simple with in-process asyncio tasks:
 - `SyncManager`: fetches channel/playlist metadata and upserts videos.
 - `DownloadManager`: processes download jobs sequentially at first.
 - `YtDlpService`: wraps yt-dlp commands and emits parsed progress.
+- `DownloadWorkerRun`: persists each bounded worker pass with dry-run/live
+  mode, started/completed/failed counts, duration, and skip/failure context for
+  filtered operator review.
+- `DownloadWorkerScheduler`: optional FastAPI-lifespan task that runs bounded
+  worker passes on an interval only when both scheduler and real transfer flags
+  are enabled; it reuses the same pause-aware worker claim query.
+- `RuntimeSettings`: non-secret operator snapshot for worker/scheduler flags,
+  scheduler cadence/limit, archive paths, and local `yt-dlp`/`ffprobe` command
+  health. It also includes in-process scheduler telemetry so the UI can show
+  whether the scheduler is off, worker-locked, armed, waiting, running, or
+  recently failed, next/last tick timing, and feeds a frontend env manifest
+  drawer with exact `.env` lines and copy feedback for arming the local NAS
+  worker loop.
 
 This mirrors the existing `DownloadManager` pattern, but splits sync and download
 responsibilities so the domain stays readable.
@@ -384,6 +473,9 @@ Add for Channel Vault:
 - Subtitle download attached to `Subtitle`, not treated as a generic download.
 - Preserve manual subtitles and auto-generated subtitles distinctly.
 - Post-download filesystem scan to create `MediaFile`.
+- Best-effort `ffprobe` after sidecar/media indexing to populate technical
+  `MediaFile` facts: container, video/audio codec, FPS, resolution, and
+  duration.
 
 ## Media Storage
 
@@ -434,6 +526,12 @@ Rules:
 - Keep `upload_date + video_id` in the folder/file anchor.
 - Always store `video.info.json` next to media.
 - Keep thumbnails/subtitles/NFO sidecars next to the media when available.
+- Probe indexed media with `CVN_FFPROBE_BINARY` when available; probing must be
+  optional and timeout-bound so a missing or slow binary never blocks archive
+  recovery.
+- Library file detail responses expose media existence, stream URL, compact
+  size labels, integrity state, expected sidecar existence, and discovered
+  subtitle sidecars while keeping paths archive-relative.
 - Do not automatically rename archived media when a source title changes.
 - Prevent path traversal on every file endpoint.
 - Streaming endpoint should support HTTP range requests before beta.
@@ -500,6 +598,11 @@ services:
       - CVN_SECRET_KEY=change-me
       - CVN_DATABASE_URL=sqlite+aiosqlite:///./metadata/app.db
       - CVN_DOWNLOAD_DIR=./downfolder
+      - CVN_DB_BACKUP_ON_STARTUP=true
+      - CVN_DB_MIGRATE_ON_STARTUP=true
+      - CVN_DOWNLOAD_WORKER_ENABLED=false
+      - CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED=false
+      - CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS=300
 ```
 
 The existing `youtube-dl-nas` image and `latest` tag must remain untouched.
