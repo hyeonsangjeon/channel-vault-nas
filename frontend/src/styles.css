@@ -4558,6 +4558,112 @@ button {
   opacity: 0.55;
 }
 
+.storage-triage-console {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.13);
+  border-radius: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.065), rgba(52, 211, 153, 0.055)),
+    rgba(2, 6, 12, 0.24);
+}
+
+.storage-triage-head,
+.storage-triage-head span,
+.storage-triage-actions {
+  display: flex;
+  align-items: center;
+}
+
+.storage-triage-head {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storage-triage-head span {
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 820;
+}
+
+.storage-triage-head svg {
+  color: var(--color-info);
+}
+
+.storage-triage-head strong {
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #bae6fd;
+  background: rgba(56, 189, 248, 0.07);
+  font-size: 0.66rem;
+}
+
+.storage-triage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-triage-grid article {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.storage-triage-grid span,
+.storage-triage-grid small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-triage-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.98rem;
+}
+
+.storage-triage-grid small {
+  margin-top: 2px;
+  color: #dff6ff;
+}
+
+.storage-triage-actions {
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.storage-triage-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: #e0f2fe;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.storage-triage-actions button:hover {
+  border-color: rgba(52, 211, 153, 0.2);
+  background: rgba(52, 211, 153, 0.07);
+}
+
 .storage-tree-panel {
   display: grid;
   gap: 8px;
@@ -5204,6 +5310,7 @@ button {
   .scheduler-tick-summary,
   .scheduler-numeric-filters,
   .storage-scan-grid,
+  .storage-triage-grid,
   .worker-stats,
   .worker-running-job,
   .launch-hero {
@@ -5234,6 +5341,11 @@ button {
   }
 
   .storage-recovery-strip button {
+    width: 100%;
+  }
+
+  .storage-triage-actions button {
+    justify-content: center;
     width: 100%;
   }
 

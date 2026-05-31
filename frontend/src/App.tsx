@@ -455,6 +455,31 @@ function App() {
     () => Math.max(1, ...(storageScan?.folder_tree.map((node) => node.bytes) ?? [0])),
     [storageScan],
   );
+  const storageOrphanBytesLabel = useMemo(
+    () => formatBytes(storageScan?.orphan_sidecars.reduce((sum, sidecar) => sum + sidecar.size_bytes, 0) ?? 0),
+    [storageScan],
+  );
+  const storageOrphanKindSummary = useMemo(() => {
+    if (!storageScan?.orphan_sidecars.length) return t("storage.triage.none");
+    const counts = storageScan.orphan_sidecars.reduce<Record<string, number>>((summary, sidecar) => {
+      summary[sidecar.kind] = (summary[sidecar.kind] ?? 0) + 1;
+      return summary;
+    }, {});
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([kind, count]) => `${kind} ${count}`)
+      .join(" · ");
+  }, [storageScan, t]);
+  const storagePressureLeader = useMemo(
+    () => [...(storageScan?.channels ?? [])].sort((a, b) => b.pressure_score - a.pressure_score)[0] ?? null,
+    [storageScan],
+  );
+  const storageTriageMode = storageDriftTotal
+    ? t("storage.triage.mode.rescan")
+    : storageScan?.orphan_sidecars.length
+      ? t("storage.triage.mode.sidecars")
+      : t("storage.triage.mode.clean");
   const activeTimeline = useMemo<TimelineVideo[]>(
     () =>
       channelVideos.length
@@ -1635,6 +1660,15 @@ function App() {
     setLibrarySidecarFilter("all");
     setLibraryCodecFilter("");
     setLibraryViewNameDraft("");
+  }
+
+  function handleOpenStorageTriageView(target: "missing_media" | "partial_sidecars") {
+    setActiveLibraryPreset(null);
+    setActiveSavedLibraryViewId(null);
+    setLibraryQuery("");
+    setLibraryCodecFilter("");
+    setLibraryIntegrityFilter(target);
+    setLibrarySidecarFilter(target === "partial_sidecars" ? "any" : "all");
   }
 
   async function handleSaveLibraryView() {
@@ -3135,6 +3169,47 @@ function App() {
                   <Download size={14} />
                   {workflowStatus === "bulk" ? t("import.rescan.running") : t("storage.recovery.action")}
                 </button>
+              </div>
+            ) : null}
+            {storageScan ? (
+              <div className="storage-triage-console" aria-label={t("storage.triage.title")}>
+                <div className="storage-triage-head">
+                  <span>
+                    <SlidersHorizontal size={13} />
+                    {t("storage.triage.title")}
+                  </span>
+                  <strong>{storageTriageMode}</strong>
+                </div>
+                <div className="storage-triage-grid">
+                  <article>
+                    <span>{t("storage.triage.orphans")}</span>
+                    <strong>{storageScan.orphan_sidecars.length}</strong>
+                    <small>{storageOrphanBytesLabel} · {storageOrphanKindSummary}</small>
+                  </article>
+                  <article>
+                    <span>{t("storage.triage.pressure")}</span>
+                    <strong>{storagePressureLeader?.pressure_score ?? 0}</strong>
+                    <small>{storagePressureLeader?.title ?? t("storage.triage.none")}</small>
+                  </article>
+                  <article>
+                    <span>{t("storage.triage.drift")}</span>
+                    <strong>{storageDriftTotal}</strong>
+                    <small>
+                      {storageDrift.unindexed_media_count} {t("storage.scan.unindexed")} ·{" "}
+                      {storageDrift.indexed_missing_count} {t("storage.scan.indexedMissing")}
+                    </small>
+                  </article>
+                </div>
+                <div className="storage-triage-actions">
+                  <button onClick={() => handleOpenStorageTriageView("missing_media")} type="button">
+                    <AlertTriangle size={13} />
+                    {t("storage.triage.actionMissing")}
+                  </button>
+                  <button onClick={() => handleOpenStorageTriageView("partial_sidecars")} type="button">
+                    <FileCheck2 size={13} />
+                    {t("storage.triage.actionSidecar")}
+                  </button>
+                </div>
               </div>
             ) : null}
             {storageScan?.folder_tree.length ? (
