@@ -157,6 +157,22 @@ type QueuePreflightFilter = "all" | "ready" | "review" | "unchecked";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
+type DownloadTelemetryStatus = "running" | "completed" | "failed" | "cancelled";
+type DownloadTelemetry = {
+  jobId: number;
+  videoId: number | null;
+  videoTitle: string;
+  channelId: number | null;
+  channelTitle: string | null;
+  archiveDir: string | null;
+  quality: string | null;
+  percent: number;
+  speed: string | null;
+  eta: string | null;
+  status: DownloadTelemetryStatus;
+  error: string | null;
+  updatedAt: string;
+};
 type SavedLibraryView = {
   id: string;
   name: string;
@@ -331,6 +347,7 @@ function App() {
   const [rescanResult, setRescanResult] = useState<RescanApplyResult | null>(null);
   const [workerPlan, setWorkerPlan] = useState<DownloadWorkerPlan | null>(null);
   const [workerRuns, setWorkerRuns] = useState<DownloadWorkerRunAudit[]>([]);
+  const [downloadTelemetry, setDownloadTelemetry] = useState<Record<number, DownloadTelemetry>>({});
   const [workerHistoryRuns, setWorkerHistoryRuns] = useState<DownloadWorkerRunAudit[]>([]);
   const [workerHistoryOpen, setWorkerHistoryOpen] = useState(false);
   const [workerHistoryFilter, setWorkerHistoryFilter] = useState<WorkerHistoryFilter>("all");
@@ -622,6 +639,42 @@ function App() {
     () => (workerPlan?.running_jobs.length ? workerPlan.running_jobs.map((item) => item.job) : runningJobs),
     [runningJobs, workerPlan],
   );
+  const telemetryByJobId = useMemo(
+    () => new Map(Object.values(downloadTelemetry).map((item) => [item.jobId, item])),
+    [downloadTelemetry],
+  );
+  const visibleDownloadTelemetry = useMemo(() => {
+    const jobIds = new Set(downloadJobs.map((job) => job.id));
+    return Object.values(downloadTelemetry)
+      .filter((item) => jobIds.has(item.jobId) || item.channelId === registeredChannelId)
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  }, [downloadJobs, downloadTelemetry, registeredChannelId]);
+  const activeDownloadTelemetry = useMemo(() => {
+    const fromRunningJobs = runningWorkerJobs.map((job) => {
+      const existing = telemetryByJobId.get(job.id);
+      return (
+        existing ?? {
+          jobId: job.id,
+          videoId: job.video_id,
+          videoTitle: job.video_title,
+          channelId: job.channel_id,
+          channelTitle: job.channel_title,
+          archiveDir: job.archive_path,
+          quality: job.quality,
+          percent: job.progress,
+          speed: null,
+          eta: null,
+          status: "running" as DownloadTelemetryStatus,
+          error: null,
+          updatedAt: job.updated_at,
+        }
+      );
+    });
+    const fromEvents = visibleDownloadTelemetry.filter((item) => item.status === "running");
+    return dedupeDownloadTelemetry([...fromRunningJobs, ...fromEvents]).slice(0, 5);
+  }, [runningWorkerJobs, telemetryByJobId, visibleDownloadTelemetry]);
+  const latestDownloadTelemetry = activeDownloadTelemetry[0] ?? visibleDownloadTelemetry[0] ?? null;
+  const liveActiveJobCount = Math.max(simpleFlowStats.running, activeDownloadTelemetry.length);
   const workerHistorySummary = useMemo(
     () => ({
       total: workerHistoryRuns.length,
@@ -951,6 +1004,7 @@ function App() {
       try {
         const event = JSON.parse(message.data) as ArchiveEvent;
         setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 8));
+        applyDownloadTelemetryEvent(event);
         getDashboard().then(setDashboard).catch(() => undefined);
         getStorageScan().then(setStorageScan).catch(() => undefined);
         const channelId = registeredChannelIdRef.current;
@@ -1000,6 +1054,7 @@ function App() {
       setLibrary(null);
       setWorkerPlan(null);
       setWorkerRuns([]);
+      setDownloadTelemetry({});
       return;
     }
 
@@ -1964,6 +2019,38 @@ function App() {
     setSelectedJobIds((current) => current.filter((id) => activeIds.has(id)));
   }
 
+  function applyDownloadTelemetryEvent(event: ArchiveEvent) {
+    const status = downloadTelemetryStatusFromEvent(event.type);
+    if (!status) return;
+    const jobId = readEventNumber(event.data, "job_id");
+    if (jobId === null) return;
+    setDownloadTelemetry((current) => {
+      const existing = current[jobId];
+      const percent =
+        status === "completed"
+          ? 100
+          : readEventNumber(event.data, "percent") ?? existing?.percent ?? (status === "running" ? 0 : 100);
+      return {
+        ...current,
+        [jobId]: {
+          jobId,
+          videoId: readEventNumber(event.data, "video_id") ?? existing?.videoId ?? null,
+          videoTitle: readEventString(event.data, "video_title") ?? existing?.videoTitle ?? `Job #${jobId}`,
+          channelId: readEventNumber(event.data, "channel_id") ?? existing?.channelId ?? null,
+          channelTitle: readEventString(event.data, "channel_title") ?? existing?.channelTitle ?? null,
+          archiveDir: readEventString(event.data, "archive_dir") ?? existing?.archiveDir ?? null,
+          quality: readEventString(event.data, "quality") ?? existing?.quality ?? null,
+          percent: Math.max(0, Math.min(percent, 100)),
+          speed: readEventString(event.data, "speed") ?? existing?.speed ?? null,
+          eta: readEventString(event.data, "eta") ?? existing?.eta ?? null,
+          status,
+          error: readEventString(event.data, "error") ?? existing?.error ?? null,
+          updatedAt: event.occurred_at,
+        },
+      };
+    });
+  }
+
   async function refreshChannelAfterEvent(channelId: number, eventType: string) {
     if (eventType === "download.progress" || eventType === "download.started" || eventType === "download.preflight") {
       const [jobs, workerSnapshot] = await Promise.all([
@@ -2439,9 +2526,11 @@ function App() {
               </article>
               <article>
                 <span>{t("detail.flow.progress")}</span>
-                <strong>{simpleFlowStats.running}</strong>
+                <strong>{liveActiveJobCount}</strong>
                 <small>
-                  {t("detail.flow.queueSummary").replace("{queued}", String(simpleFlowStats.queued))}
+                  {latestDownloadTelemetry && latestDownloadTelemetry.status === "running"
+                    ? downloadTelemetrySummary(latestDownloadTelemetry)
+                    : t("detail.flow.queueSummary").replace("{queued}", String(simpleFlowStats.queued))}
                 </small>
                 <button onClick={() => setActiveChannelTab("downloads")} type="button">
                   <History size={13} />
@@ -2661,41 +2750,49 @@ function App() {
                   ) : null}
                 </div>
                 <div className="job-list">
-                  {downloadJobs.slice(0, 4).map((job) => (
-                    <article className={`job-row ${job.status}`} key={job.id}>
-                      <span />
-                      <div className="job-main">
-                        <strong>{job.video_title}</strong>
-                        <small>{job.video_external_id} · {job.quality}</small>
-                        {job.status === "running" || job.progress > 0 ? (
-                          <div aria-label={t("job.progress")} className="job-progress">
-                            <span style={{ width: `${Math.max(0, Math.min(job.progress, 100))}%` }} />
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="job-actions">
-                        <em>{jobStatusLabel(job.status, t)}</em>
-                        <button
-                          aria-label={t("job.retry")}
-                          disabled={job.status === "running" || job.status === "completed"}
-                          onClick={() => handleRetryJob(job.id)}
-                          title={t("job.retry")}
-                          type="button"
-                        >
-                          <RotateCcw size={13} />
-                        </button>
-                        <button
-                          aria-label={job.status === "running" ? t("job.stop") : t("job.cancel")}
-                          disabled={job.status !== "candidate" && job.status !== "queued" && job.status !== "running"}
-                          onClick={() => (job.status === "running" ? handleStopJob(job.id) : handleCancelJob(job.id))}
-                          title={job.status === "running" ? t("job.stop") : t("job.cancel")}
-                          type="button"
-                        >
-                          {job.status === "running" ? <Square size={13} /> : <XCircle size={13} />}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                  {downloadJobs.slice(0, 4).map((job) => {
+                    const telemetry = telemetryByJobId.get(job.id);
+                    return (
+                      <article className={`job-row ${job.status}`} key={job.id}>
+                        <span />
+                        <div className="job-main">
+                          <strong>{job.video_title}</strong>
+                          <small>{job.video_external_id} · {job.quality}</small>
+                          {job.status === "running" || job.progress > 0 ? (
+                            <div aria-label={t("job.progress")} className="job-progress">
+                              <span style={{ width: `${Math.max(0, Math.min(telemetry?.percent ?? job.progress, 100))}%` }} />
+                            </div>
+                          ) : null}
+                          {telemetry ? (
+                            <small className="job-telemetry-line">
+                              {downloadTelemetrySummary(telemetry)}
+                            </small>
+                          ) : null}
+                        </div>
+                        <div className="job-actions">
+                          <em>{telemetry ? downloadTelemetryStatusLabel(telemetry.status, t) : jobStatusLabel(job.status, t)}</em>
+                          <button
+                            aria-label={t("job.retry")}
+                            disabled={job.status === "running" || job.status === "completed"}
+                            onClick={() => handleRetryJob(job.id)}
+                            title={t("job.retry")}
+                            type="button"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                          <button
+                            aria-label={job.status === "running" ? t("job.stop") : t("job.cancel")}
+                            disabled={job.status !== "candidate" && job.status !== "queued" && job.status !== "running"}
+                            onClick={() => (job.status === "running" ? handleStopJob(job.id) : handleCancelJob(job.id))}
+                            title={job.status === "running" ? t("job.stop") : t("job.cancel")}
+                            type="button"
+                          >
+                            {job.status === "running" ? <Square size={13} /> : <XCircle size={13} />}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
                   {downloadJobs.length === 0 ? <p className="empty-copy">{t("queue.empty")}</p> : null}
                 </div>
               </div>
@@ -2908,6 +3005,7 @@ function App() {
                   const selected = selectedJobIds.includes(job.id);
                   const actionable = isSelectableQueueJob(job);
                   const signals = launchJobSignals(job, t);
+                  const telemetry = telemetryByJobId.get(job.id);
                   return (
                     <article className={`launch-job ${job.status} ${selected ? "selected" : ""} ${actionable ? "" : "locked"}`} key={job.id}>
                       <button
@@ -2923,6 +3021,12 @@ function App() {
                         <strong>{job.video_title}</strong>
                         <span>{job.video_external_id} · {job.quality} · P{job.priority}</span>
                         {job.archive_path ? <small>{compactArchivePath(job.archive_path)}</small> : null}
+                        {telemetry ? (
+                          <div className="launch-job-progress" aria-label={t("job.progress")}>
+                            <span style={{ width: `${Math.max(0, Math.min(telemetry.percent, 100))}%` }} />
+                            <em>{downloadTelemetrySummary(telemetry)}</em>
+                          </div>
+                        ) : null}
                         {signals.length ? (
                           <div className="launch-job-signals" aria-label={t("launch.signal.title")}>
                             {signals.map((signal) => (
@@ -2934,7 +3038,9 @@ function App() {
                         ) : null}
                       </div>
                       <div className="launch-job-meta">
-                        <em className={`queue-status-pill ${job.status}`}>{queueJobStatusLabel(job.status, t)}</em>
+                        <em className={`queue-status-pill ${telemetry?.status ?? job.status}`}>
+                          {telemetry ? downloadTelemetryStatusLabel(telemetry.status, t) : queueJobStatusLabel(job.status, t)}
+                        </em>
                         <em className={`preflight-pill ${job.preflight_status}`}>{preflightLabel(job.preflight_status, t)}</em>
                         <small>{formatBytes(job.estimated_bytes ?? 0)}</small>
                       </div>
@@ -3025,6 +3131,25 @@ function App() {
                       {workerPlan?.enabled ? t("worker.enabled") : t("worker.locked")}
                     </span>
                   </div>
+                  {latestDownloadTelemetry ? (
+                    <div className={`live-progress-strip ${latestDownloadTelemetry.status}`}>
+                      <div>
+                        <span>{t("worker.liveProgress")}</span>
+                        <strong>{latestDownloadTelemetry.videoTitle}</strong>
+                        <small>
+                          {downloadTelemetrySummary(latestDownloadTelemetry)}
+                          {latestDownloadTelemetry.archiveDir ? ` · ${latestDownloadTelemetry.archiveDir}` : ""}
+                        </small>
+                      </div>
+                      <div className="live-progress-readout">
+                        <strong>{Math.round(latestDownloadTelemetry.percent)}%</strong>
+                        <em>{downloadTelemetryStatusLabel(latestDownloadTelemetry.status, t)}</em>
+                      </div>
+                      <div className="live-progress-meter" aria-label={t("job.progress")}>
+                        <span style={{ width: `${Math.max(0, Math.min(latestDownloadTelemetry.percent, 100))}%` }} />
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="worker-stats">
                     <article>
                       <span>{t("worker.queued")}</span>
@@ -5049,6 +5174,49 @@ function jobStatusLabel(status: string, t: (key: TranslationKey) => string) {
   if (status === "failed") return t("job.status.failed");
   if (status === "cancelled") return t("job.status.cancelled");
   return t("job.status.candidate");
+}
+
+function downloadTelemetryStatusLabel(status: DownloadTelemetryStatus, t: (key: TranslationKey) => string) {
+  if (status === "completed") return t("job.status.completed");
+  if (status === "failed") return t("job.status.failed");
+  if (status === "cancelled") return t("job.status.cancelled");
+  return t("job.status.running");
+}
+
+function downloadTelemetrySummary(item: DownloadTelemetry) {
+  const parts = [`${Math.round(item.percent)}%`];
+  if (item.speed) parts.push(item.speed);
+  if (item.eta) parts.push(`ETA ${item.eta}`);
+  return parts.join(" · ");
+}
+
+function downloadTelemetryStatusFromEvent(type: string): DownloadTelemetryStatus | null {
+  if (type === "download.started" || type === "download.progress") return "running";
+  if (type === "download.completed") return "completed";
+  if (type === "download.failed") return "failed";
+  if (type === "download.cancelled" || type === "download.stop_requested") return "cancelled";
+  return null;
+}
+
+function readEventNumber(data: Record<string, unknown>, key: string) {
+  const value = data[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readEventString(data: Record<string, unknown>, key: string) {
+  const value = data[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function dedupeDownloadTelemetry(items: DownloadTelemetry[]) {
+  const seen = new Set<number>();
+  const result: DownloadTelemetry[] = [];
+  for (const item of items) {
+    if (seen.has(item.jobId)) continue;
+    seen.add(item.jobId);
+    result.push(item);
+  }
+  return result.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
 
 function autoSyncStatusLabel(channel: ChannelDetail | null, t: (key: TranslationKey) => string) {
