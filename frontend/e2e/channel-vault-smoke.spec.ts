@@ -204,6 +204,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.getByLabel("저장할 뷰 이름").fill("무자막 h264");
   await page.getByRole("button", { name: "뷰 저장" }).click();
   await expect(page.locator(".saved-view-pill").filter({ hasText: "무자막 h264" })).toBeVisible();
+  await expect(page.locator(".saved-view-pill.active").filter({ hasText: "무자막 h264" })).toBeVisible();
+  await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("h264 1080p");
   await page.screenshot({ path: testInfo.outputPath("library-filtered.png"), fullPage: true });
   await page.locator(".library-card").filter({ hasText: "Golden hour archive" }).click();
   await expect(page.getByLabel("미디어 파일 상세")).toBeVisible();
