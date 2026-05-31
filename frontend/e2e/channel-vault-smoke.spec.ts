@@ -174,6 +174,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(runtimeGuide.getByText("복사됨")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("runtime-env-guide.png"), fullPage: true });
   await page.getByRole("button", { name: "닫기" }).click();
+  const dueWatchlist = page.getByLabel("Due 채널 목록").first();
+  await expect(dueWatchlist.getByRole("button").first()).toBeVisible();
+  await dueWatchlist.getByRole("button").first().click();
   await expect(page.getByText("다음 sync 예정")).toBeVisible();
   await expect(page.getByText("마지막 자동 sync")).toBeVisible();
   await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
