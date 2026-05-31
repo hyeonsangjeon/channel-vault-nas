@@ -34,7 +34,10 @@ from app.services.download_worker import (
     run_download_worker_once,
     stop_running_download_job,
 )
-from app.services.metadata_scheduler import list_metadata_sync_ticks
+from app.services.metadata_scheduler import (
+    list_metadata_sync_ticks,
+    run_metadata_sync_scheduler_tick,
+)
 from app.services.runtime_settings import list_scheduler_ticks
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -138,6 +141,12 @@ async def get_metadata_sync_scheduler_ticks(
         scheduler_limit=scheduler_limit,
         limit=limit,
     )
+
+
+@router.post("/sync/scheduler/run-once", response_model=MetadataSyncTickRead)
+async def run_metadata_sync_scheduler_once() -> MetadataSyncTickRead:
+    """Run one metadata scheduler pass immediately, even when the loop is disabled."""
+    return await run_metadata_sync_scheduler_tick(force=True, trigger="manual")
 
 
 @router.post("/downloads/worker/run-once", response_model=DownloadWorkerRunResult)

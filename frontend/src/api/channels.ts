@@ -883,6 +883,10 @@ export async function getMetadataSyncTicks(
   return getJson(`/api/jobs/sync/scheduler/ticks?${params}`);
 }
 
+export async function runMetadataSyncSchedulerOnce(): Promise<MetadataSyncTick> {
+  return postJson("/api/jobs/sync/scheduler/run-once", {});
+}
+
 export async function getStorageScan(): Promise<StorageScan> {
   return getJson("/api/storage/scan");
 }

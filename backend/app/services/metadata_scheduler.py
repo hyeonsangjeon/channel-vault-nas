@@ -101,12 +101,12 @@ class MetadataSyncScheduler:
             metadata_scheduler_state.set_next_tick(None)
 
 
-async def run_metadata_sync_scheduler_tick() -> MetadataSyncTickRead:
+async def run_metadata_sync_scheduler_tick(*, force: bool = False, trigger: str = "scheduler") -> MetadataSyncTickRead:
     """Run one metadata scheduler tick and persist its audit row."""
     started_at = datetime.now(UTC)
     async with AsyncSessionLocal() as session:
         tick = MetadataSyncTick(
-            trigger="scheduler",
+            trigger=trigger,
             status="running",
             scheduler_enabled=settings.metadata_sync_scheduler_enabled,
             interval_seconds=settings.metadata_sync_scheduler_interval_seconds,
@@ -118,7 +118,7 @@ async def run_metadata_sync_scheduler_tick() -> MetadataSyncTickRead:
         await session.commit()
         await session.refresh(tick)
 
-    if not settings.metadata_sync_scheduler_enabled:
+    if not force and not settings.metadata_sync_scheduler_enabled:
         await _mark_tick_skipped(tick_id=tick.id, reason="metadata scheduler disabled")
         metadata_scheduler_state.mark_completed("skipped")
         return await _read_tick(tick.id)

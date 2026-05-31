@@ -420,6 +420,7 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
         tick = await run_metadata_sync_scheduler_tick()
         metadata_ticks = await client.get("/api/jobs/sync/scheduler/ticks?limit=5")
         detail = await client.get(f"/api/channels/{channel_id}")
+        manual_tick = await client.post("/api/jobs/sync/scheduler/run-once")
 
     assert created.status_code == 200
     assert [channel.id for channel in due_before] == [channel_id]
@@ -432,6 +433,9 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
     assert tick.candidates_created_count == 1
     assert metadata_ticks.status_code == 200
     assert metadata_ticks.json()[0]["candidates_created_count"] == 1
+    assert manual_tick.status_code == 200
+    assert manual_tick.json()["trigger"] == "manual"
+    assert manual_tick.json()["status"] == "skipped"
     assert detail.status_code == 200
     assert detail.json()["last_auto_sync_status"] == "completed"
     assert detail.json()["last_auto_candidates_created"] == 1
