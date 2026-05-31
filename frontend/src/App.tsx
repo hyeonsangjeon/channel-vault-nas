@@ -43,7 +43,7 @@ import {
   Square,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   applyLibraryRescan,
   apiUrl,
@@ -147,7 +147,8 @@ const navItems: { key: TranslationKey; id: string }[] = [
 ];
 
 const qualityOptions = ["720p", "1080p", "best"];
-type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "error";
+type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
+type ChannelDetailTab = "overview" | "downloads" | "library" | "logs" | "policy";
 type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
@@ -172,6 +173,13 @@ const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey 
   { id: "failed", labelKey: "worker.history.filter.failed" },
   { id: "dry_run", labelKey: "worker.history.filter.dryRun" },
   { id: "live", labelKey: "worker.history.filter.live" },
+];
+const channelDetailTabs: { id: ChannelDetailTab; labelKey: TranslationKey; icon: typeof ShieldCheck }[] = [
+  { id: "overview", labelKey: "detail.tabs.overview", icon: ShieldCheck },
+  { id: "downloads", labelKey: "detail.tabs.downloads", icon: Download },
+  { id: "library", labelKey: "detail.tabs.library", icon: BookOpen },
+  { id: "logs", labelKey: "detail.tabs.logs", icon: History },
+  { id: "policy", labelKey: "detail.tabs.policy", icon: SlidersHorizontal },
 ];
 const schedulerTickStatusFilters: { id: SchedulerTickStatusFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "runtime.ticks.filter.all" },
@@ -351,6 +359,10 @@ function App() {
   const [runtimeApplyMessage, setRuntimeApplyMessage] = useState("");
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft>(() => defaultRuntimeDraft());
   const [runtimeClockNow, setRuntimeClockNow] = useState(() => Date.now());
+  const [activeChannelTab, setActiveChannelTab] = useState<ChannelDetailTab>("overview");
+  const [liveDownloadConfirmOpen, setLiveDownloadConfirmOpen] = useState(false);
+  const [liveDownloadStatus, setLiveDownloadStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const registeredChannelIdRef = useRef<number | null>(null);
 
   const activeProbe = registration?.probe ?? probe;
   const registeredChannelId = registration?.channel.id ?? activeProbe?.existing_channel_id ?? selectedChannelId;
@@ -571,6 +583,21 @@ function App() {
     () => downloadJobs.filter((job) => job.status === "candidate" || job.status === "queued"),
     [downloadJobs],
   );
+  const nextDownloadJobs = useMemo(
+    () => downloadJobs.filter((job) => job.status === "candidate" || job.status === "queued").slice(0, 5),
+    [downloadJobs],
+  );
+  const archiveSkipCount = Math.max(activeArchivedCount, downloadJobs.filter((job) => job.status === "completed").length);
+  const simpleFlowStats = {
+    seen: channelDetail?.video_count ?? channelVideos.length,
+    archived: archiveSkipCount,
+    fresh: Math.max(activeMissingCount, 0),
+    queued: downloadJobs.filter((job) => job.status === "queued").length,
+    running: downloadJobs.filter((job) => job.status === "running").length,
+  };
+  const liveRunLimit = Math.min(5, Math.max(workerPlan?.claimable_count ?? 0, nextDownloadJobs.length, activeMissingCount));
+  const liveDownloadBlocked =
+    !workerPlan?.enabled || Boolean(workerPlan?.locked_reason) || liveRunLimit === 0 || liveDownloadStatus === "running";
   const actionableQueueJobs = useMemo(() => downloadJobs.filter(isSelectableQueueJob), [downloadJobs]);
   const queueRadar = useMemo(
     () => ({
@@ -851,6 +878,10 @@ function App() {
   }, [metadataSchedulerStatus?.next_tick_at, runtimeGuideOpen, schedulerStatus?.next_tick_at]);
 
   useEffect(() => {
+    registeredChannelIdRef.current = registeredChannelId ?? null;
+  }, [registeredChannelId]);
+
+  useEffect(() => {
     setLaunchCommandCopyStatus("idle");
   }, [launchCommandManifest]);
 
@@ -922,6 +953,10 @@ function App() {
         setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 8));
         getDashboard().then(setDashboard).catch(() => undefined);
         getStorageScan().then(setStorageScan).catch(() => undefined);
+        const channelId = registeredChannelIdRef.current;
+        if (channelId) {
+          refreshChannelAfterEvent(channelId, event.type).catch(() => undefined);
+        }
       } catch {
         // Ignore malformed development events.
       }
@@ -1371,6 +1406,55 @@ function App() {
     }
   }
 
+  function handleOpenLiveDownloadConfirm() {
+    if (!registeredChannelId) return;
+    setActiveChannelTab("downloads");
+    setLiveDownloadStatus("idle");
+    setLiveDownloadConfirmOpen(true);
+  }
+
+  async function handleRunLiveDownloadPass() {
+    if (!registeredChannelId || liveDownloadBlocked) return;
+    setLiveDownloadStatus("running");
+    setWorkflowStatus("downloading");
+    setWorkflowMessage("");
+    try {
+      const quality = channelPolicy?.max_quality ?? maxQuality;
+      const candidateResult = await createDownloadCandidates(registeredChannelId, quality);
+      let jobs = await getDownloadJobs(registeredChannelId);
+      const candidateIds = jobs
+        .filter((job) => job.status === "candidate")
+        .slice(0, 5)
+        .map((job) => job.id);
+      if (candidateIds.length) {
+        await bulkUpdateDownloadJobs({ job_ids: candidateIds, action: "queue", priority: 85, quality });
+        jobs = await getDownloadJobs(registeredChannelId);
+      }
+      const queuedCount = jobs.filter((job) => job.status === "queued").length;
+      const limit = Math.min(5, Math.max(queuedCount, 1));
+      const result = await runDownloadWorkerOnce({
+        channel_id: registeredChannelId,
+        limit,
+        dry_run: false,
+      });
+      await loadChannelState(registeredChannelId);
+      setLiveDownloadStatus(result.failed > 0 ? "error" : "done");
+      setWorkflowStatus(result.failed > 0 ? "error" : "idle");
+      setWorkflowMessage(
+        t("worker.liveComplete")
+          .replace("{completed}", String(result.completed))
+          .replace("{failed}", String(result.failed))
+          .replace("{candidates}", String(candidateResult.candidates_created)),
+      );
+    } catch (error) {
+      setLiveDownloadStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    } finally {
+      setLiveDownloadConfirmOpen(false);
+    }
+  }
+
   async function copyTextToClipboard(value: string) {
     const copyWithField = () => {
       const field = document.createElement("textarea");
@@ -1782,6 +1866,7 @@ function App() {
   }
 
   function handleOpenStorageTriageView(target: "missing_media" | "partial_sidecars") {
+    setActiveChannelTab("library");
     setActiveLibraryPreset(null);
     setActiveSavedLibraryViewId(null);
     setLibraryQuery("");
@@ -1877,6 +1962,26 @@ function App() {
     setDownloadJobs(jobs);
     const activeIds = new Set(jobs.filter(isSelectableQueueJob).map((job) => job.id));
     setSelectedJobIds((current) => current.filter((id) => activeIds.has(id)));
+  }
+
+  async function refreshChannelAfterEvent(channelId: number, eventType: string) {
+    if (eventType === "download.progress" || eventType === "download.started" || eventType === "download.preflight") {
+      const [jobs, workerSnapshot] = await Promise.all([
+        getDownloadJobs(channelId),
+        getDownloadWorkerPlan(channelId),
+      ]);
+      applyDownloadJobs(jobs);
+      setWorkerPlan(workerSnapshot);
+      return;
+    }
+    if (
+      eventType.startsWith("download.") ||
+      eventType === "library.rescan.applied" ||
+      eventType === "sync.completed" ||
+      eventType === "download.bulk"
+    ) {
+      await loadChannelState(channelId);
+    }
   }
 
   async function loadChannelState(channelId: number) {
@@ -2298,6 +2403,70 @@ function App() {
                 {formatDateLabel(channelDetail?.last_synced_at)}
               </span>
             </div>
+            <div className="channel-start-flow" aria-label={t("detail.flow.title")}>
+              <article>
+                <span>{t("detail.flow.check")}</span>
+                <strong>{simpleFlowStats.seen}</strong>
+                <small>{formatDateTimeLabel(channelDetail?.last_synced_at, t("detail.syncOps.autoNoRun"))}</small>
+                <button
+                  disabled={workflowStatus === "syncing"}
+                  onClick={() => {
+                    setActiveChannelTab("overview");
+                    void handleManualSync();
+                  }}
+                  type="button"
+                >
+                  <RotateCcw size={13} />
+                  {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.flow.check")}
+                </button>
+              </article>
+              <article className="primary">
+                <span>{t("detail.flow.download")}</span>
+                <strong>{simpleFlowStats.queued || simpleFlowStats.fresh}</strong>
+                <small>
+                  {t("detail.flow.skipSummary")
+                    .replace("{archived}", String(simpleFlowStats.archived))
+                    .replace("{fresh}", String(simpleFlowStats.fresh))}
+                </small>
+                <button
+                  disabled={liveDownloadStatus === "running" || workflowStatus === "downloading"}
+                  onClick={handleOpenLiveDownloadConfirm}
+                  type="button"
+                >
+                  <Download size={13} />
+                  {workflowStatus === "downloading" ? t("detail.flow.downloading") : t("detail.flow.download")}
+                </button>
+              </article>
+              <article>
+                <span>{t("detail.flow.progress")}</span>
+                <strong>{simpleFlowStats.running}</strong>
+                <small>
+                  {t("detail.flow.queueSummary").replace("{queued}", String(simpleFlowStats.queued))}
+                </small>
+                <button onClick={() => setActiveChannelTab("downloads")} type="button">
+                  <History size={13} />
+                  {t("detail.flow.progress")}
+                </button>
+              </article>
+            </div>
+            <div className="channel-tab-rail" aria-label={t("detail.tabs.aria")}>
+              {channelDetailTabs.map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    className={activeChannelTab === tab.id ? "active" : ""}
+                    key={tab.id}
+                    onClick={() => setActiveChannelTab(tab.id)}
+                    type="button"
+                  >
+                    <TabIcon size={14} />
+                    {t(tab.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+            {activeChannelTab === "overview" ? (
+              <div className="channel-tab-content">
             <div className="sync-ops-grid">
               <article>
                 <span>{t("detail.syncOps.next")}</span>
@@ -2338,7 +2507,9 @@ function App() {
                 <small>{channelPolicy?.auto_download ? t("detail.syncOps.policyOn") : t("detail.syncOps.policyOff")}</small>
               </article>
             </div>
-            {syncJobs.length ? (
+              </div>
+            ) : null}
+            {activeChannelTab === "logs" && syncJobs.length ? (
               <div className="sync-job-ledger" aria-label={t("detail.syncJobs.title")}>
                 <div className="sync-job-ledger-head">
                   <span>
@@ -2373,7 +2544,10 @@ function App() {
                   ))}
                 </div>
               </div>
+            ) : activeChannelTab === "logs" ? (
+              <p className="empty-copy">{t("detail.syncJobs.empty")}</p>
             ) : null}
+            {activeChannelTab === "policy" ? (
             <div className="policy-console">
               <div className="policy-signal">
                 <SlidersHorizontal size={17} />
@@ -2412,6 +2586,8 @@ function App() {
                 </button>
               </div>
             </div>
+            ) : null}
+            {activeChannelTab === "overview" ? (
             <div className="detail-grid">
               <div className="timeline-panel">
                 <div className="section-title">
@@ -2524,10 +2700,11 @@ function App() {
                 </div>
               </div>
             </div>
+            ) : null}
           </section>
         ) : null}
 
-        {registeredChannelId ? (
+        {registeredChannelId && activeChannelTab === "downloads" ? (
           <section className="panel launch-control-panel">
             <div className="launch-hero">
               <div>
@@ -2835,6 +3012,15 @@ function App() {
                       <TimerReset size={13} />
                       {t("worker.runDry")}
                     </button>
+                    <button
+                      className="worker-run-button live-run-button"
+                      disabled={!workerPlan?.enabled || liveDownloadStatus === "running"}
+                      onClick={handleOpenLiveDownloadConfirm}
+                      type="button"
+                    >
+                      <Rocket size={13} />
+                      {liveDownloadStatus === "running" ? t("worker.liveRunning") : t("worker.runLive")}
+                    </button>
                     <span className={`worker-status ${workerPlan?.enabled ? "enabled" : "locked"}`}>
                       {workerPlan?.enabled ? t("worker.enabled") : t("worker.locked")}
                     </span>
@@ -2922,7 +3108,7 @@ function App() {
           </section>
         ) : null}
 
-        {registeredChannelId ? (
+        {registeredChannelId && activeChannelTab === "library" ? (
           <section className="panel library-index-panel">
             <div className="panel-header compact">
               <div>
@@ -3582,6 +3768,68 @@ function App() {
           </motion.div>
         </section>
       </section>
+      {liveDownloadConfirmOpen ? (
+        <div className="download-confirm-backdrop" onClick={() => setLiveDownloadConfirmOpen(false)} role="presentation">
+          <aside
+            aria-label={t("worker.liveConfirmTitle")}
+            className="download-confirm-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="download-confirm-head">
+              <div>
+                <p className="panel-kicker">archive.txt</p>
+                <h2>{t("worker.liveConfirmTitle")}</h2>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => setLiveDownloadConfirmOpen(false)}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="download-confirm-grid">
+              <article>
+                <span>{t("worker.liveConfirm.limit")}</span>
+                <strong>{liveRunLimit}</strong>
+              </article>
+              <article>
+                <span>{t("worker.liveConfirm.skipped")}</span>
+                <strong>{archiveSkipCount}</strong>
+              </article>
+              <article>
+                <span>{t("worker.liveConfirm.queued")}</span>
+                <strong>{simpleFlowStats.queued}</strong>
+              </article>
+            </div>
+            <div className="download-confirm-list">
+              {nextDownloadJobs.map((job) => (
+                <span key={job.id}>
+                  <CheckCircle2 size={13} />
+                  {job.video_title}
+                </span>
+              ))}
+              {nextDownloadJobs.length === 0 ? <p className="empty-copy">{t("worker.liveConfirm.empty")}</p> : null}
+            </div>
+            {workerPlan?.locked_reason ? <code className="worker-lock">{workerPlan.locked_reason}</code> : null}
+            <div className="download-confirm-actions">
+              <button className="command-button" onClick={() => setLiveDownloadConfirmOpen(false)} type="button">
+                {t("worker.liveCancel")}
+              </button>
+              <button
+                className="primary-action"
+                disabled={liveDownloadBlocked}
+                onClick={() => void handleRunLiveDownloadPass()}
+                type="button"
+              >
+                <Rocket size={16} />
+                {liveDownloadStatus === "running" ? t("worker.liveRunning") : t("worker.liveStart")}
+              </button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
       {runtimeGuideOpen ? (
         <div className="runtime-guide-backdrop" onClick={() => setRuntimeGuideOpen(false)} role="presentation">
           <aside

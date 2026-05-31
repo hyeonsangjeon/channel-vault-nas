@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.models.archive import (
@@ -253,6 +253,43 @@ async def test_archive_rescan_target_indexes_only_requested_video_folder(tmp_pat
     assert [video.external_id for video in videos] == ["target01"]
     assert len(media_files) == 1
     assert media_files[0].relative_path.endswith("Target clip [target01]/video.mp4")
+
+
+@pytest.mark.asyncio
+async def test_archive_rescan_target_accepts_worker_relative_path_with_root_prefix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        await session.commit()
+
+    archive_root = tmp_path / "downfolder"
+    target_dir = archive_root / "channels" / "signal [UC_SIGNAL]" / "2026" / "Target clip [target01]"
+    _write_sidecar_video(target_dir, video_id="target01", title="Target clip")
+    monkeypatch.chdir(tmp_path)
+
+    async with AsyncSessionLocal() as session:
+        result = await apply_rescan_target(session, archive_root, Path("downfolder") / target_dir.relative_to(archive_root))
+        await session.commit()
+
+    assert result.candidates_seen == 1
+    assert result.media_files_indexed == 1
+    assert result.warnings == []
+
+    async with AsyncSessionLocal() as session:
+        media_count = await session.scalar(select(func.count(MediaFile.id)))
+        channel = await session.scalar(select(Channel).where(Channel.external_id == "UC_SIGNAL"))
+
+    assert media_count == 1
+    assert channel is not None
+    assert channel.archived_count == 1
+    assert channel.missing_count == 0
 
 
 def _write_sidecar_video(video_dir: Path, *, video_id: str, title: str) -> None:
