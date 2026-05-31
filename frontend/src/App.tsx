@@ -399,10 +399,20 @@ function App() {
     [activeChannels, storageScan, t],
   );
   const storageVolume = storageScan?.volume ?? null;
+  const storageDrift = storageScan?.drift ?? {
+    unindexed_media_count: 0,
+    indexed_missing_count: 0,
+    unindexed_media: [],
+    indexed_missing: [],
+  };
   const storageArchivePercent =
     storageVolume && storageVolume.total_bytes > 0
       ? Math.min(100, Math.max(1, Math.round((storageVolume.archive_bytes / storageVolume.total_bytes) * 100)))
       : 0;
+  const storageExtensionMaxBytes = useMemo(
+    () => Math.max(1, ...(storageScan?.top_extensions.map((extension) => extension.bytes) ?? [0])),
+    [storageScan],
+  );
   const activeTimeline = useMemo<TimelineVideo[]>(
     () =>
       channelVideos.length
@@ -2615,6 +2625,12 @@ function App() {
                 <div>
                   <span>{t("storage.scan.root")}</span>
                   <code>{storageVolume.root}</code>
+                  {storageScan ? (
+                    <small>
+                      {t("storage.scan.scanned").replace("{time}", formatEventTime(storageScan.scanned_at))} ·{" "}
+                      {t("storage.scan.hostPressure").replace("{percent}", String(storageVolume.pressure_percent))}
+                    </small>
+                  ) : null}
                 </div>
                 <strong>{storageVolume.archive_label}</strong>
                 <div className="storage-volume-bar" aria-label={t("storage.scan.pressure")}>
@@ -2659,6 +2675,58 @@ function App() {
                   <span>{t("storage.scan.orphans")}</span>
                   <strong>{storageScan.orphan_sidecars.length}</strong>
                 </article>
+                <article>
+                  <span>{t("storage.scan.unindexed")}</span>
+                  <strong>{storageDrift.unindexed_media_count}</strong>
+                </article>
+                <article>
+                  <span>{t("storage.scan.indexedMissing")}</span>
+                  <strong>{storageDrift.indexed_missing_count}</strong>
+                </article>
+              </div>
+            ) : null}
+            {storageScan?.top_extensions.length ? (
+              <div className="storage-extension-rail" aria-label={t("storage.scan.extensions")}>
+                <div className="storage-extension-head">
+                  <span>{t("storage.scan.extensions")}</span>
+                  <strong>{storageScan.top_extensions[0].extension}</strong>
+                </div>
+                {storageScan.top_extensions.slice(0, 5).map((extension) => (
+                  <article key={extension.extension}>
+                    <div>
+                      <code>{extension.extension}</code>
+                      <span>
+                        {extension.count} · {extension.label}
+                      </span>
+                    </div>
+                    <i style={{ width: `${Math.max(8, Math.round((extension.bytes / storageExtensionMaxBytes) * 100))}%` }} />
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            {storageScan && (storageDrift.unindexed_media.length || storageDrift.indexed_missing.length) ? (
+              <div className="storage-drift-list" aria-label={t("storage.scan.drift")}>
+                {[...storageDrift.unindexed_media, ...storageDrift.indexed_missing].slice(0, 4).map((item) => (
+                  <article className={item.kind} key={`${item.kind}-${item.relative_path}`}>
+                    <span>
+                      {item.kind === "unindexed_media"
+                        ? t("storage.scan.unindexed")
+                        : t("storage.scan.indexedMissing")}
+                    </span>
+                    <code>{item.relative_path}</code>
+                    <em>{item.label}</em>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            {storageScan?.warnings.length ? (
+              <div className="storage-warning-list" aria-label={t("storage.scan.warnings")}>
+                {storageScan.warnings.slice(0, 3).map((warning) => (
+                  <span key={warning}>
+                    <AlertTriangle size={13} />
+                    {warning}
+                  </span>
+                ))}
               </div>
             ) : null}
             {storageScan?.orphan_sidecars.length ? (
@@ -3597,6 +3665,7 @@ function summarizeMetadataSyncTicks(ticks: MetadataSyncTick[]) {
 
 function restartAdapterLabelText(adapter: string, t: (key: TranslationKey) => string) {
   if (adapter === "supervised-hook") return t("runtime.restart.adapter.hook");
+  if (adapter === "supervisor") return t("runtime.restart.adapter.supervisor");
   if (adapter === "docker-compose") return t("runtime.restart.adapter.compose");
   if (adapter === "systemd") return t("runtime.restart.adapter.systemd");
   if (adapter === "local-dev") return t("runtime.restart.adapter.local");

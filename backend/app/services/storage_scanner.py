@@ -11,6 +11,8 @@ from pathlib import Path
 from app.config import settings
 from app.schemas.storage import (
     StorageChannelRead,
+    StorageDriftItemRead,
+    StorageDriftRead,
     StorageExtensionRead,
     StorageFolderNodeRead,
     StorageOrphanSidecarRead,
@@ -51,10 +53,11 @@ class ChannelStat:
         return self.video_folders
 
 
-def build_storage_scan(download_dir: str | Path) -> StorageScanRead:
+def build_storage_scan(download_dir: str | Path, indexed_media_paths: set[str] | None = None) -> StorageScanRead:
     """Scan the archive root and summarize real filesystem pressure."""
     root = Path(download_dir).expanduser().resolve()
     warnings: list[str] = []
+    indexed_paths = {path for path in (indexed_media_paths or set()) if path}
     if not root.exists():
         return StorageScanRead(
             scanned_at=datetime.now(UTC),
@@ -63,10 +66,12 @@ def build_storage_scan(download_dir: str | Path) -> StorageScanRead:
             top_extensions=[],
             orphan_sidecars=[],
             folder_tree=[],
+            drift=_drift_read(media_paths={}, indexed_paths=indexed_paths),
             warnings=["download root does not exist"],
         )
 
     files: list[tuple[Path, int]] = []
+    file_size_by_relative: dict[str, int] = {}
     dir_count = 0
     for path in root.rglob("*"):
         if path.is_dir():
@@ -80,11 +85,17 @@ def build_storage_scan(download_dir: str | Path) -> StorageScanRead:
             warnings.append(f"cannot stat {_relative(path, root)}: {exc}")
             continue
         files.append((path, size))
+        file_size_by_relative[_relative(path, root)] = size
         if len(files) >= settings.storage_scan_max_files:
             warnings.append(f"scan stopped after {settings.storage_scan_max_files} files")
             break
 
     media_dirs = {path.parent for path, _size in files if path.suffix.lower() in MEDIA_EXTENSIONS}
+    media_paths = {
+        _relative(path, root): file_size_by_relative[_relative(path, root)]
+        for path, _size in files
+        if path.suffix.lower() in MEDIA_EXTENSIONS
+    }
     channel_stats: dict[str, ChannelStat] = defaultdict(ChannelStat)
     extension_stats: Counter[str] = Counter()
     extension_bytes: Counter[str] = Counter()
@@ -131,6 +142,7 @@ def build_storage_scan(download_dir: str | Path) -> StorageScanRead:
         top_extensions=_extension_reads(extension_stats=extension_stats, extension_bytes=extension_bytes),
         orphan_sidecars=orphan_sidecars,
         folder_tree=_folder_reads(folder_stats),
+        drift=_drift_read(media_paths=media_paths, indexed_paths=indexed_paths),
         warnings=warnings,
     )
 
@@ -235,6 +247,33 @@ def _folder_reads(folder_stats: dict[str, FolderStat]) -> list[StorageFolderNode
     ]
     rows.sort(key=lambda row: (row.depth, row.relative_path.lower()))
     return rows[: settings.storage_scan_max_folders]
+
+
+def _drift_read(*, media_paths: dict[str, int], indexed_paths: set[str]) -> StorageDriftRead:
+    unindexed = sorted(set(media_paths) - indexed_paths)
+    indexed_missing = sorted(indexed_paths - set(media_paths))
+    return StorageDriftRead(
+        unindexed_media_count=len(unindexed),
+        indexed_missing_count=len(indexed_missing),
+        unindexed_media=[
+            StorageDriftItemRead(
+                relative_path=relative_path,
+                kind="unindexed_media",
+                label=_format_bytes(media_paths[relative_path]),
+                reason="media file exists on disk but is not indexed in SQLite",
+            )
+            for relative_path in unindexed[: settings.storage_scan_max_orphans]
+        ],
+        indexed_missing=[
+            StorageDriftItemRead(
+                relative_path=relative_path,
+                kind="indexed_missing",
+                label="0 MB",
+                reason="SQLite media index points to a file missing on disk",
+            )
+            for relative_path in indexed_missing[: settings.storage_scan_max_orphans]
+        ],
+    )
 
 
 def _is_sidecar(path: Path) -> bool:

@@ -95,7 +95,9 @@ def test_storage_scan_summarizes_real_archive_and_orphan_sidecars(tmp_path: Path
     orphan_dir.mkdir(parents=True)
     (orphan_dir / "video.ko.srt").write_text("subtitle", encoding="utf-8")
 
-    scan = build_storage_scan(tmp_path)
+    indexed_path = "channels/signal [UC_SIGNAL]/2026/Signal clip [sig01]/video.mp4"
+    missing_index_path = "channels/signal [UC_SIGNAL]/2026/missing-from-disk/video.mp4"
+    scan = build_storage_scan(tmp_path, indexed_media_paths={indexed_path, missing_index_path})
 
     assert scan.volume.exists is True
     assert scan.volume.file_count == 3
@@ -107,6 +109,13 @@ def test_storage_scan_summarizes_real_archive_and_orphan_sidecars(tmp_path: Path
     assert scan.top_extensions[0].count >= 1
     assert scan.orphan_sidecars[0].kind == "subtitle"
     assert any(node.relative_path == "channels" for node in scan.folder_tree)
+    assert scan.drift.unindexed_media_count == 0
+    assert scan.drift.indexed_missing_count == 1
+    assert scan.drift.indexed_missing[0].relative_path == missing_index_path
+
+    unindexed_scan = build_storage_scan(tmp_path, indexed_media_paths=set())
+    assert unindexed_scan.drift.unindexed_media_count == 1
+    assert unindexed_scan.drift.unindexed_media[0].relative_path == indexed_path
 
 
 @pytest.mark.asyncio

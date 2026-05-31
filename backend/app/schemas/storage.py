@@ -68,6 +68,24 @@ class StorageFolderNodeRead(BaseModel):
     file_count: int
 
 
+class StorageDriftItemRead(BaseModel):
+    """A filesystem/database mismatch found during a storage scan."""
+
+    relative_path: str
+    kind: str
+    label: str
+    reason: str
+
+
+class StorageDriftRead(BaseModel):
+    """Media index drift between SQLite and the archive filesystem."""
+
+    unindexed_media_count: int
+    indexed_missing_count: int
+    unindexed_media: list[StorageDriftItemRead]
+    indexed_missing: list[StorageDriftItemRead]
+
+
 class StorageScanRead(BaseModel):
     """Filesystem scan result for NAS operator views."""
 
@@ -77,4 +95,5 @@ class StorageScanRead(BaseModel):
     top_extensions: list[StorageExtensionRead]
     orphan_sidecars: list[StorageOrphanSidecarRead]
     folder_tree: list[StorageFolderNodeRead]
+    drift: StorageDriftRead
     warnings: list[str]

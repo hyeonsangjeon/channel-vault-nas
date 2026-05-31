@@ -3729,7 +3729,9 @@ button {
 .storage-volume span,
 .storage-volume small,
 .storage-cell small,
-.storage-scan-grid span {
+.storage-scan-grid span,
+.storage-extension-head span,
+.storage-extension-rail article span {
   color: var(--faint);
   font-size: 0.68rem;
 }
@@ -3793,7 +3795,7 @@ button {
 
 .storage-scan-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
@@ -3811,6 +3813,117 @@ button {
   margin-top: 3px;
   color: var(--text);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.storage-extension-rail {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.09), rgba(244, 114, 182, 0.08)),
+    rgba(255, 255, 255, 0.025);
+}
+
+.storage-extension-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.storage-extension-head strong {
+  color: var(--color-storage);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.storage-extension-rail article {
+  display: grid;
+  gap: 5px;
+}
+
+.storage-extension-rail article div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.storage-extension-rail code {
+  color: #e0f2fe;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.storage-extension-rail i {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-info), var(--color-storage));
+  box-shadow: 0 0 18px rgba(244, 114, 182, 0.2);
+}
+
+.storage-warning-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.storage-drift-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.storage-drift-list article {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.32fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  border-radius: 9px;
+  padding: 8px;
+  background: rgba(56, 189, 248, 0.055);
+}
+
+.storage-drift-list article.indexed_missing {
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.055);
+}
+
+.storage-drift-list span,
+.storage-drift-list em {
+  color: var(--faint);
+  font-size: 0.67rem;
+}
+
+.storage-drift-list code {
+  min-width: 0;
+  color: #dff6ff;
+  font-size: 0.66rem;
+  overflow-wrap: anywhere;
+}
+
+.storage-drift-list em {
+  color: var(--color-info);
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.storage-warning-list span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 9px;
+  padding: 8px 9px;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.06);
+  font-size: 0.7rem;
+  line-height: 1.35;
 }
 
 .storage-orphan-list {
@@ -4268,6 +4381,10 @@ button {
   .scheduler-tick-drawer {
     width: 100vw;
     padding: 16px;
+  }
+
+  .storage-drift-list article {
+    grid-template-columns: 1fr;
   }
 
   .library-detail-drawer {

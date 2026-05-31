@@ -1,5 +1,7 @@
 """Tests for health and dashboard smoke endpoints."""
 
+from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
@@ -102,6 +104,44 @@ async def test_runtime_restart_hook_adapter_executes_when_configured(monkeypatch
     assert data["requested"] is True
     assert data["exit_code"] == 0
     assert data["stdout"] == "restarted"
+
+
+@pytest.mark.asyncio
+async def test_runtime_restart_adapter_generates_docker_compose_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.config.settings.restart_hook_command", "")
+    monkeypatch.setattr("app.config.settings.restart_adapter", "auto")
+    monkeypatch.setattr("app.config.settings.restart_adapter_execute", False)
+    monkeypatch.setattr("app.config.settings.restart_service_name", "api")
+    monkeypatch.setattr("app.services.runtime_settings._detect_compose_file", lambda: Path("/srv/cvn/compose.yaml"))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings/runtime/restart")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["adapter"] == "docker-compose"
+    assert data["manual_required"] is True
+    assert data["compose_file"] == "/srv/cvn/compose.yaml"
+    assert data["command"] == "docker compose -f /srv/cvn/compose.yaml restart api"
+
+
+@pytest.mark.asyncio
+async def test_runtime_restart_adapter_supports_supervisor_services(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.config.settings.restart_hook_command", "")
+    monkeypatch.setattr("app.config.settings.restart_adapter", "supervisor")
+    monkeypatch.setattr("app.config.settings.restart_adapter_execute", True)
+    monkeypatch.setattr("app.config.settings.restart_service_name", "channel-vault")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings/runtime/restart")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["adapter"] == "supervisor"
+    assert data["environment"] == "supervised"
+    assert data["executable"] is True
+    assert data["manual_required"] is False
+    assert data["command"] == "supervisorctl restart channel-vault"
 
 
 @pytest.mark.asyncio
