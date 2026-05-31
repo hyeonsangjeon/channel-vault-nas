@@ -33,6 +33,7 @@ async function openKoreanVault(page: Page) {
   await expect(page.locator(".runtime-card").filter({ hasText: "300s 간격" })).toContainText("스케줄러 비활성");
   await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("메타데이터 스케줄러 비활성");
   await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("due 채널");
+  await expect(page.getByLabel("Due 채널 목록")).toContainText("@signalvaultlab");
   await expect(page.getByRole("button", { name: "지금 metadata tick" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "yt-dlp" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "ffprobe" })).toBeVisible();

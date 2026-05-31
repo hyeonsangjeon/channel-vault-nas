@@ -1,5 +1,6 @@
 """Tests for health and dashboard smoke endpoints."""
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -66,7 +67,14 @@ async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> N
     run_migrations()
     await init_db()
     async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
         await session.execute(delete(DownloadSchedulerTick))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
         await session.commit()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -81,12 +89,51 @@ async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> N
     assert data["scheduler_status"]["worker_enabled"] is False
     assert data["metadata_scheduler_status"]["due_channel_count"] == 0
     assert data["metadata_scheduler_status"]["next_due_at"] is None
+    assert data["metadata_scheduler_status"]["due_channels"] == []
     assert data["pending_restart"] is False
     assert data["scheduler_ticks"] == []
     assert data["restart_adapter"]["manual_required"] is True
     assert data["restart_adapter"]["command"]
     assert {binary["name"] for binary in data["binaries"]} == {"yt-dlp", "ffprobe"}
     assert "secret" not in data
+
+
+@pytest.mark.asyncio
+async def test_runtime_settings_lists_metadata_sync_channel_watchlist() -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        channel = Channel(
+            source_type="channel",
+            source_url="https://youtube.com/@watchlist",
+            external_id="UCwatchlist",
+            handle="@watchlist",
+            title="Watchlist Lab",
+            status="active",
+            last_synced_at=datetime.now(UTC) - timedelta(minutes=30),
+            sync_interval_minutes=360,
+        )
+        session.add(channel)
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings/runtime")
+
+    data = response.json()
+    watchlist = data["metadata_scheduler_status"]["due_channels"]
+    assert response.status_code == 200
+    assert data["metadata_scheduler_status"]["due_channel_count"] == 0
+    assert data["metadata_scheduler_status"]["next_due_at"] is not None
+    assert watchlist[0]["handle"] == "@watchlist"
+    assert watchlist[0]["is_due"] is False
 
 
 @pytest.mark.asyncio

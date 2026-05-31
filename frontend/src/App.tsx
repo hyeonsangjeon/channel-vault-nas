@@ -705,6 +705,7 @@ function App() {
   const metadataSchedulerNextDueLabel = metadataSchedulerStatus
     ? formatDateTimeLabel(metadataSchedulerStatus.next_due_at, t("runtime.scheduler.none"))
     : t("runtime.checking");
+  const metadataDueChannels = metadataSchedulerStatus?.due_channels ?? [];
   const runtimePendingOverrides = runtimeSettings?.pending_overrides.filter((item) => item.pending_restart) ?? [];
   const runtimeDraftIntervalNumber = Number(runtimeDraft.schedulerIntervalSeconds);
   const runtimeDraftLimitNumber = Number(runtimeDraft.schedulerLimit);
@@ -1968,6 +1969,16 @@ function App() {
                   </span>
                   <em>{t("runtime.metadataScheduler.nextDue")} · {metadataSchedulerNextDueLabel}</em>
                 </div>
+                {metadataDueChannels.length ? (
+                  <div className="metadata-due-channel-list" aria-label={t("runtime.metadataScheduler.dueChannels")}>
+                    {metadataDueChannels.slice(0, 3).map((channel) => (
+                      <span className={channel.is_due ? "due" : ""} key={channel.id}>
+                        <strong>{channel.handle ?? channel.title}</strong>
+                        <em>{channel.is_due ? t("runtime.scheduler.due") : `${channel.sync_interval_minutes}m`}</em>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <button
                   className="runtime-inline-action"
                   disabled={metadataRunStatus === "running" || metadataSchedulerStatus?.state === "running"}
@@ -3436,6 +3447,11 @@ function App() {
                 <em>{t("runtime.scheduler.next")} · {metadataSchedulerNextTickLabel}</em>
                 <em>{t("runtime.scheduler.last")} · {metadataSchedulerLastTickLabel}</em>
                 <em>{metadataSchedulerDueLabel}</em>
+                {metadataDueChannels[0] ? (
+                  <em>
+                    {t("runtime.metadataScheduler.dueChannels")} · {metadataDueChannels[0].handle ?? metadataDueChannels[0].title}
+                  </em>
+                ) : null}
               </article>
               <article>
                 <Rocket size={16} />

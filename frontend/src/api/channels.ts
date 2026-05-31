@@ -510,6 +510,15 @@ export type RuntimeSettings = {
     limit: number;
     due_channel_count: number;
     next_due_at: string | null;
+    due_channels: {
+      id: number;
+      title: string;
+      handle: string | null;
+      sync_interval_minutes: number;
+      last_synced_at: string | null;
+      next_due_at: string;
+      is_due: boolean;
+    }[];
     last_started_at: string | null;
     last_completed_at: string | null;
     last_error: string | null;
