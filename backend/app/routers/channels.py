@@ -17,6 +17,7 @@ from app.schemas.jobs import (
     ChannelDetail,
     ChannelPolicyRead,
     ChannelPolicyUpdate,
+    ChannelSettingsUpdate,
     ChannelSyncRequest,
     ChannelSyncResult,
     ChannelVideoRead,
@@ -43,6 +44,7 @@ from app.services.channel_sync import (
     get_channel_detail,
     list_channel_videos,
     run_channel_sync,
+    update_channel_settings,
 )
 from app.services.download_queue import create_channel_download_candidates
 from app.services.mock_archive import (
@@ -102,6 +104,19 @@ async def probe_channel(
 async def get_channel(channel_id: int, db: DbSession) -> ChannelDetail:
     """Return post-registration channel detail."""
     detail = await get_channel_detail(db, channel_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return detail
+
+
+@router.patch("/{channel_id:int}", response_model=ChannelDetail)
+async def patch_channel(
+    channel_id: int,
+    payload: ChannelSettingsUpdate,
+    db: DbSession,
+) -> ChannelDetail:
+    """Update editable channel scheduling settings."""
+    detail = await update_channel_settings(db=db, channel_id=channel_id, payload=payload)
     if detail is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return detail

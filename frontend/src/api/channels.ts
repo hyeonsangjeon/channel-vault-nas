@@ -99,6 +99,10 @@ export type ChannelDetail = RegisteredChannel & {
   updated_at: string;
 };
 
+export type ChannelSettingsUpdate = {
+  sync_interval_minutes?: number;
+};
+
 export type ChannelVideo = {
   id: number;
   channel_id: number;
@@ -682,6 +686,10 @@ export async function registerChannel(payload: ChannelRegistrationPayload): Prom
 
 export async function getChannel(channelId: number): Promise<ChannelDetail> {
   return getJson(`/api/channels/${channelId}`);
+}
+
+export async function updateChannel(channelId: number, payload: ChannelSettingsUpdate): Promise<ChannelDetail> {
+  return patchJson(`/api/channels/${channelId}`, payload);
 }
 
 export async function getChannelVideos(channelId: number): Promise<ChannelVideo[]> {

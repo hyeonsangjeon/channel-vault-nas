@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.archive import Channel, MediaFile, SyncJob, Video
 from app.schemas.jobs import (
     ChannelDetail,
+    ChannelSettingsUpdate,
     ChannelSyncRequest,
     ChannelSyncResult,
     ChannelVideoRead,
@@ -38,6 +39,35 @@ async def get_channel_detail(db: AsyncSession, channel_id: int) -> ChannelDetail
         .limit(1)
     )
     return to_channel_detail(channel, latest_auto_sync=latest_auto_sync)
+
+
+async def update_channel_settings(
+    *,
+    db: AsyncSession,
+    channel_id: int,
+    payload: ChannelSettingsUpdate,
+) -> ChannelDetail | None:
+    """Patch editable channel scheduling fields."""
+    channel = await db.get(Channel, channel_id)
+    if channel is None:
+        return None
+
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+    if "sync_interval_minutes" in updates:
+        channel.sync_interval_minutes = updates["sync_interval_minutes"]
+    channel.updated_at = datetime.now(UTC)
+    await db.flush()
+    next_sync_due_at = _next_sync_due_at(channel)
+    await event_bus.publish(
+        "channel.settings.updated",
+        {
+            "channel_id": channel.id,
+            "channel_title": channel.title,
+            "sync_interval_minutes": channel.sync_interval_minutes,
+            "next_sync_due_at": next_sync_due_at.isoformat() if next_sync_due_at else None,
+        },
+    )
+    return await get_channel_detail(db, channel_id)
 
 
 async def list_channel_videos(db: AsyncSession, channel_id: int) -> list[ChannelVideoRead] | None:

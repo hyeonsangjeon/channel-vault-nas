@@ -76,6 +76,7 @@ import {
   saveLibraryView,
   stopDownloadJob,
   syncChannel,
+  updateChannel,
   updateChannelPolicy,
   updateRuntimeSettings,
   WS_EVENTS_URL,
@@ -259,6 +260,8 @@ function App() {
   const [channelDetail, setChannelDetail] = useState<ChannelDetail | null>(null);
   const [channelPolicy, setChannelPolicy] = useState<ChannelPolicy | null>(null);
   const [channelVideos, setChannelVideos] = useState<ChannelVideo[]>([]);
+  const [syncIntervalDraft, setSyncIntervalDraft] = useState("360");
+  const [syncIntervalStatus, setSyncIntervalStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [events, setEvents] = useState<ArchiveEvent[]>([]);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
@@ -447,6 +450,8 @@ function App() {
   const cadenceAverageLabel = channelDetail?.avg_upload_interval_days
     ? `${t("metrics.uploadCadence.label")}: ${channelDetail.avg_upload_interval_days}d`
     : t("cadence.next");
+  const syncIntervalNumber = Number(syncIntervalDraft);
+  const syncIntervalValid = Number.isInteger(syncIntervalNumber) && syncIntervalNumber >= 5 && syncIntervalNumber <= 10_080;
   const activeQueue = useMemo(
     () => (registeredChannelId ? buildQueueLanes(downloadJobs, workflowStatus === "syncing") : mockQueue),
     [downloadJobs, registeredChannelId, workflowStatus],
@@ -715,6 +720,12 @@ function App() {
   }, [runtimeSettings]);
 
   useEffect(() => {
+    if (!channelDetail) return;
+    setSyncIntervalDraft(String(channelDetail.sync_interval_minutes));
+    setSyncIntervalStatus("idle");
+  }, [channelDetail?.id, channelDetail?.sync_interval_minutes]);
+
+  useEffect(() => {
     localStorage.setItem(savedLibraryViewsStorageKey, JSON.stringify(savedLibraryViews));
   }, [savedLibraryViews]);
 
@@ -899,6 +910,21 @@ function App() {
           : t("sync.completed").replace("{count}", String(result.videos_created)),
       );
     } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleUpdateSyncInterval() {
+    if (!registeredChannelId || !syncIntervalValid) return;
+    setSyncIntervalStatus("saving");
+    try {
+      const detail = await updateChannel(registeredChannelId, { sync_interval_minutes: syncIntervalNumber });
+      setChannelDetail(detail);
+      setSyncIntervalStatus("saved");
+      setWorkflowMessage(t("detail.syncOps.intervalSaved").replace("{minutes}", String(detail.sync_interval_minutes)));
+    } catch (error) {
+      setSyncIntervalStatus("error");
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
     }
@@ -1901,6 +1927,24 @@ function App() {
                     String(channelDetail?.sync_interval_minutes ?? 0),
                   )}
                 </small>
+                <div className="sync-cadence-control">
+                  <input
+                    aria-label={t("detail.syncOps.intervalInput")}
+                    max={10080}
+                    min={5}
+                    onChange={(event) => setSyncIntervalDraft(event.target.value)}
+                    type="number"
+                    value={syncIntervalDraft}
+                  />
+                  <button
+                    disabled={!syncIntervalValid || syncIntervalStatus === "saving"}
+                    onClick={() => void handleUpdateSyncInterval()}
+                    type="button"
+                  >
+                    <TimerReset size={13} />
+                    {syncIntervalStatus === "saving" ? t("detail.syncOps.intervalSaving") : t("detail.syncOps.intervalSave")}
+                  </button>
+                </div>
               </article>
               <article>
                 <span>{t("detail.syncOps.lastAuto")}</span>
@@ -3850,6 +3894,7 @@ function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
     const count = typeof event.data.media_files_indexed === "number" ? event.data.media_files_indexed : 0;
     return t("event.library.rescan").replace("{count}", String(count));
   }
+  if (event.type === "channel.settings.updated") return t("event.channel.settings");
   if (event.type === "policy.updated") return t("event.policy.updated");
   return event.type;
 }

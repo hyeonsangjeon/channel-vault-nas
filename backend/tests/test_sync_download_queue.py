@@ -94,6 +94,7 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         monkeypatch.setattr("app.services.channel_sync.probe_channel_source", fake_sync_probe)
         synced = await client.post(f"/api/channels/{channel_id}/sync", json={"max_quality": "720p"})
         detail = await client.get(f"/api/channels/{channel_id}")
+        channel_settings = await client.patch(f"/api/channels/{channel_id}", json={"sync_interval_minutes": 120})
         videos = await client.get(f"/api/channels/{channel_id}/videos")
         candidates = await client.post(
             f"/api/channels/{channel_id}/downloads/candidates",
@@ -189,6 +190,9 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert detail.json()["video_count"] == 2
     assert detail.json()["latest_video_published_at"] is not None
     assert detail.json()["typical_upload_dow"] == datetime.fromtimestamp(1653041065, tz=UTC).weekday()
+    assert channel_settings.status_code == 200
+    assert channel_settings.json()["sync_interval_minutes"] == 120
+    assert channel_settings.json()["next_sync_due_at"] is not None
 
     assert videos.status_code == 200
     assert [video["external_id"] for video in videos.json()] == ["n5soSphTPnI", "6lXl1hkEgcA"]

@@ -73,6 +73,12 @@ class ChannelDetail(BaseModel):
     updated_at: datetime
 
 
+class ChannelSettingsUpdate(BaseModel):
+    """Editable channel runtime scheduling fields."""
+
+    sync_interval_minutes: int | None = Field(default=None, ge=5, le=10_080)
+
+
 class ChannelPolicyRead(BaseModel):
     """Persisted per-channel archive policy."""
 
