@@ -443,5 +443,13 @@
   "detail.syncOps.autoRunning": "running",
   "detail.syncOps.policyOn": "auto-download policy is on",
   "detail.syncOps.policyOff": "auto-download policy is off",
-  "event.sync.scheduler": "Metadata tick · synced {synced}, candidates {candidates}"
+  "event.sync.scheduler": "Metadata tick · synced {synced}, candidates {candidates}",
+  "runtime.metadataTicks.open": "Metadata log",
+  "runtime.metadataTicks.drawerTitle": "Metadata tick log",
+  "runtime.metadataTicks.drawerSubtitle": "Filter channel metadata sync ticks by status, duration, interval, and channel limit.",
+  "runtime.metadataTicks.intervalFilter": "metadata interval seconds",
+  "runtime.metadataTicks.limitFilter": "channel limit",
+  "runtime.metadataTicks.interval": "Interval",
+  "runtime.metadataTicks.limit": "Limit",
+  "runtime.metadataTicks.seen": "Videos seen"
 }

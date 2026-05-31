@@ -443,5 +443,13 @@
   "detail.syncOps.autoRunning": "実行中",
   "detail.syncOps.policyOn": "auto-download ポリシー有効",
   "detail.syncOps.policyOff": "auto-download ポリシー無効",
-  "event.sync.scheduler": "Metadata tick · sync {synced}, 候補 {candidates}"
+  "event.sync.scheduler": "Metadata tick · sync {synced}, 候補 {candidates}",
+  "runtime.metadataTicks.open": "Metadata ログ",
+  "runtime.metadataTicks.drawerTitle": "Metadata tick ログ",
+  "runtime.metadataTicks.drawerSubtitle": "状態、duration、interval、チャンネル limit で metadata sync tick をフィルタリングします。",
+  "runtime.metadataTicks.intervalFilter": "metadata interval seconds",
+  "runtime.metadataTicks.limitFilter": "チャンネル limit",
+  "runtime.metadataTicks.interval": "Interval",
+  "runtime.metadataTicks.limit": "Limit",
+  "runtime.metadataTicks.seen": "検出動画"
 }

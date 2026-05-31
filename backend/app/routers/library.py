@@ -12,6 +12,8 @@ from app.schemas.library import (
     LibraryFile,
     LibraryItem,
     LibrarySnapshot,
+    LibraryViewRead,
+    LibraryViewWrite,
     RescanApplyResult,
     RescanPlan,
 )
@@ -22,6 +24,7 @@ from app.services.library_index import (
     get_library_item,
     list_library_files,
 )
+from app.services.library_views import delete_library_view, list_library_views, save_library_view
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -48,6 +51,27 @@ async def get_library(
         codec=codec,
         missing_sidecar=missing_sidecar,
     )
+
+
+@router.get("/views", response_model=list[LibraryViewRead])
+async def get_saved_library_views(db: DbSession, limit: int = 20) -> list[LibraryViewRead]:
+    """Return persisted reusable library filter views."""
+    return await list_library_views(db=db, limit=limit)
+
+
+@router.post("/views", response_model=LibraryViewRead)
+async def post_saved_library_view(payload: LibraryViewWrite, db: DbSession) -> LibraryViewRead:
+    """Create or update a reusable library filter view."""
+    return await save_library_view(db=db, payload=payload)
+
+
+@router.delete("/views/{view_id:int}")
+async def delete_saved_library_view(view_id: int, db: DbSession) -> dict[str, bool]:
+    """Delete a reusable library filter view."""
+    deleted = await delete_library_view(db=db, view_id=view_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Library view not found.")
+    return {"deleted": True}
 
 
 @router.get("/{video_id:int}", response_model=LibraryItem)

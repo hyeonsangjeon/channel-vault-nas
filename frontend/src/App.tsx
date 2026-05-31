@@ -50,6 +50,7 @@ import {
   bulkUpdateDownloadJobs,
   createDownloadCandidates,
   cancelDownloadJob,
+  deleteLibraryView,
   enqueueVideoDownload,
   getChannel,
   getChannelPolicy,
@@ -60,6 +61,8 @@ import {
   getDownloadWorkerRuns,
   getLibrary,
   getLibraryFiles,
+  getLibraryViews,
+  getMetadataSyncTicks,
   getQueuePreflight,
   getRecentEvents,
   getRuntimeSettings,
@@ -70,6 +73,7 @@ import {
   requestRuntimeRestart,
   retryDownloadJob,
   runDownloadWorkerOnce,
+  saveLibraryView,
   stopDownloadJob,
   syncChannel,
   updateChannelPolicy,
@@ -89,11 +93,13 @@ import {
   type DownloadWorkerRunFilters,
   type LibraryItem,
   type LibraryFile,
+  type LibrarySavedView,
   type LibrarySnapshot,
   type QueuePreflightPlan,
   type RescanApplyResult,
   type RuntimeSettings,
   type RuntimeSettingsUpdate,
+  type MetadataSyncTickFilters,
   type MetadataSyncTick,
   type SchedulerTick,
   type SchedulerTickFilters,
@@ -288,6 +294,12 @@ function App() {
   const [schedulerDurationFilter, setSchedulerDurationFilter] = useState<SchedulerDurationFilter>("all");
   const [schedulerIntervalFilter, setSchedulerIntervalFilter] = useState("");
   const [schedulerLimitFilter, setSchedulerLimitFilter] = useState("");
+  const [metadataTickDrawerOpen, setMetadataTickDrawerOpen] = useState(false);
+  const [metadataTickRows, setMetadataTickRows] = useState<MetadataSyncTick[]>([]);
+  const [metadataTickStatusFilter, setMetadataTickStatusFilter] = useState<SchedulerTickStatusFilter>("all");
+  const [metadataDurationFilter, setMetadataDurationFilter] = useState<SchedulerDurationFilter>("all");
+  const [metadataIntervalFilter, setMetadataIntervalFilter] = useState("");
+  const [metadataLimitFilter, setMetadataLimitFilter] = useState("");
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -667,6 +679,7 @@ function App() {
     () => summarizeMetadataSyncTicks(runtimeSettings?.metadata_sync_ticks ?? []),
     [runtimeSettings?.metadata_sync_ticks],
   );
+  const metadataDrawerSummary = useMemo(() => summarizeMetadataSyncTicks(metadataTickRows), [metadataTickRows]);
   const latestMetadataSyncTick = runtimeSettings?.metadata_sync_ticks[0] ?? null;
   const savedLibraryViewName =
     libraryViewNameDraft.trim() || defaultLibraryViewName(libraryIntegrityFilter, librarySidecarFilter, libraryCodecFilter, libraryQuery, t);
@@ -694,6 +707,22 @@ function App() {
   useEffect(() => {
     localStorage.setItem(savedLibraryViewsStorageKey, JSON.stringify(savedLibraryViews));
   }, [savedLibraryViews]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLibraryViews() {
+      try {
+        const views = await getLibraryViews();
+        if (!cancelled) setSavedLibraryViews(views.map(toSavedLibraryView));
+      } catch {
+        // Local saved views remain available as an offline fallback.
+      }
+    }
+    void loadLibraryViews();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1320,6 +1349,67 @@ function App() {
     }
   }
 
+  async function refreshMetadataTicks(
+    statusFilter: SchedulerTickStatusFilter = metadataTickStatusFilter,
+    durationFilter: SchedulerDurationFilter = metadataDurationFilter,
+    intervalFilter: string = metadataIntervalFilter,
+    limitFilter: string = metadataLimitFilter,
+  ) {
+    const filters = metadataTickQuery(statusFilter, durationFilter, intervalFilter, limitFilter);
+    const ticks = await getMetadataSyncTicks(48, filters);
+    setMetadataTickRows(ticks);
+  }
+
+  async function handleOpenMetadataTicks() {
+    setMetadataTickRows(runtimeSettings?.metadata_sync_ticks ?? []);
+    setMetadataTickDrawerOpen(true);
+    try {
+      await refreshMetadataTicks();
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleMetadataTickStatus(filter: SchedulerTickStatusFilter) {
+    setMetadataTickStatusFilter(filter);
+    try {
+      await refreshMetadataTicks(filter);
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleMetadataDurationFilter(filter: SchedulerDurationFilter) {
+    setMetadataDurationFilter(filter);
+    try {
+      await refreshMetadataTicks(metadataTickStatusFilter, filter);
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleMetadataNumericFilter(kind: "interval" | "limit", value: string) {
+    if (kind === "interval") {
+      setMetadataIntervalFilter(value);
+    } else {
+      setMetadataLimitFilter(value);
+    }
+    try {
+      await refreshMetadataTicks(
+        metadataTickStatusFilter,
+        metadataDurationFilter,
+        kind === "interval" ? value : metadataIntervalFilter,
+        kind === "limit" ? value : metadataLimitFilter,
+      );
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
   async function handleOpenLibraryDetail(item: LibraryItem) {
     setSelectedLibraryItem(item);
     setLibraryDetailStatus("loading");
@@ -1354,11 +1444,11 @@ function App() {
     setLibrarySidecarFilter(filter);
   }
 
-  function handleSaveLibraryView() {
+  async function handleSaveLibraryView() {
     const name = savedLibraryViewName.trim();
     if (!name) return;
     const nextView: SavedLibraryView = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name,
       query: libraryQuery,
       integrity: libraryIntegrityFilter,
@@ -1368,7 +1458,22 @@ function App() {
     };
     setSavedLibraryViews((current) => [nextView, ...current.filter((view) => view.name !== name)].slice(0, 10));
     setLibraryViewNameDraft("");
-    setWorkflowMessage(t("library.saved.saved"));
+    try {
+      const saved = await saveLibraryView({
+        name,
+        query: libraryQuery,
+        integrity: libraryIntegrityFilter,
+        sidecar: librarySidecarFilter,
+        codec: libraryCodecFilter,
+      });
+      const persistedView = toSavedLibraryView(saved);
+      setSavedLibraryViews((current) => [persistedView, ...current.filter((view) => view.name !== name)].slice(0, 10));
+      setWorkflowStatus("idle");
+      setWorkflowMessage(t("library.saved.saved"));
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
   }
 
   function handleApplySavedLibraryView(view: SavedLibraryView) {
@@ -1379,8 +1484,16 @@ function App() {
     setLibraryCodecFilter(view.codec);
   }
 
-  function handleDeleteSavedLibraryView(viewId: string) {
+  async function handleDeleteSavedLibraryView(viewId: string) {
     setSavedLibraryViews((current) => current.filter((view) => view.id !== viewId));
+    const persistedId = Number(viewId);
+    if (!Number.isInteger(persistedId)) return;
+    try {
+      await deleteLibraryView(persistedId);
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
   }
 
   function handleToggleJobSelection(jobId: number) {
@@ -2250,7 +2363,7 @@ function App() {
                   value={libraryViewNameDraft}
                 />
               </label>
-              <button className="library-save-view" onClick={handleSaveLibraryView} type="button">
+              <button className="library-save-view" onClick={() => void handleSaveLibraryView()} type="button">
                 <Save size={13} />
                 {t("library.saved.save")}
               </button>
@@ -2261,7 +2374,7 @@ function App() {
                   </button>
                   <button
                     aria-label={t("library.saved.delete")}
-                    onClick={() => handleDeleteSavedLibraryView(view.id)}
+                    onClick={() => void handleDeleteSavedLibraryView(view.id)}
                     title={t("library.saved.delete")}
                     type="button"
                   >
@@ -2886,11 +2999,17 @@ function App() {
                   <strong>{t("runtime.metadataTicks.title")}</strong>
                   <span>{t("runtime.metadataTicks.subtitle")}</span>
                 </div>
-                {latestMetadataSyncTick ? (
-                  <em className={`runtime-mini-badge ${latestMetadataSyncTick.status}`}>
-                    {schedulerTickStatusLabel(latestMetadataSyncTick.status, t)}
-                  </em>
-                ) : null}
+                <div className="runtime-heading-actions">
+                  {latestMetadataSyncTick ? (
+                    <em className={`runtime-mini-badge ${latestMetadataSyncTick.status}`}>
+                      {schedulerTickStatusLabel(latestMetadataSyncTick.status, t)}
+                    </em>
+                  ) : null}
+                  <button className="runtime-apply-button" onClick={() => void handleOpenMetadataTicks()} type="button">
+                    <History size={14} />
+                    {t("runtime.metadataTicks.open")}
+                  </button>
+                </div>
               </div>
               {(runtimeSettings?.metadata_sync_ticks ?? []).length ? (
                 <div className="scheduler-tick-summary metadata-tick-summary">
@@ -3038,6 +3157,154 @@ function App() {
                 </article>
               ))}
               {schedulerTickRows.length === 0 ? <p className="empty-copy">{t("runtime.ticks.empty")}</p> : null}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+      {metadataTickDrawerOpen ? (
+        <div className="scheduler-tick-backdrop" onClick={() => setMetadataTickDrawerOpen(false)} role="presentation">
+          <aside
+            aria-label={t("runtime.metadataTicks.drawerTitle")}
+            className="scheduler-tick-drawer metadata-tick-drawer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="worker-history-header">
+              <div>
+                <p className="panel-kicker">{t("runtime.metadataScheduler")}</p>
+                <h2>{t("runtime.metadataTicks.drawerTitle")}</h2>
+                <span>{t("runtime.metadataTicks.drawerSubtitle")}</span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => setMetadataTickDrawerOpen(false)}
+                title={t("actions.close")}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="scheduler-tick-filters">
+              <div className="worker-history-filters">
+                <ListFilter size={14} />
+                {schedulerTickStatusFilters.map((filter) => (
+                  <button
+                    className={metadataTickStatusFilter === filter.id ? "active" : ""}
+                    key={filter.id}
+                    onClick={() => void handleMetadataTickStatus(filter.id)}
+                    type="button"
+                  >
+                    {t(filter.labelKey)}
+                  </button>
+                ))}
+                <button
+                  className={metadataDurationFilter === "slow" ? "active" : ""}
+                  onClick={() => void handleMetadataDurationFilter(metadataDurationFilter === "slow" ? "all" : "slow")}
+                  type="button"
+                >
+                  <TimerReset size={13} />
+                  {t("runtime.ticks.slowOnly")}
+                </button>
+              </div>
+              <div className="scheduler-numeric-filters">
+                <label>
+                  <span>{t("runtime.metadataTicks.intervalFilter")}</span>
+                  <input
+                    min={30}
+                    onChange={(event) => void handleMetadataNumericFilter("interval", event.target.value)}
+                    placeholder={String(runtimeSettings?.metadata_sync_scheduler_interval_seconds ?? 900)}
+                    type="number"
+                    value={metadataIntervalFilter}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.metadataTicks.limitFilter")}</span>
+                  <input
+                    min={1}
+                    onChange={(event) => void handleMetadataNumericFilter("limit", event.target.value)}
+                    placeholder={String(runtimeSettings?.metadata_sync_scheduler_limit ?? 2)}
+                    type="number"
+                    value={metadataLimitFilter}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="worker-history-summary scheduler-tick-summary-grid metadata-tick-summary-grid">
+              <article>
+                <span>{t("runtime.ticks.filter.all")}</span>
+                <strong>{metadataTickRows.length}</strong>
+              </article>
+              <article>
+                <span>{t("runtime.metadataTicks.synced")}</span>
+                <strong>{metadataDrawerSummary.synced}</strong>
+              </article>
+              <article>
+                <span>{t("runtime.metadataTicks.videos")}</span>
+                <strong>{metadataDrawerSummary.videos}</strong>
+              </article>
+              <article>
+                <span>{t("runtime.metadataTicks.candidates")}</span>
+                <strong>{metadataDrawerSummary.candidates}</strong>
+              </article>
+            </div>
+
+            <div className="scheduler-tick-list expanded metadata-tick-list">
+              {metadataTickRows.map((tick) => (
+                <article className={tick.status} key={tick.id}>
+                  <div>
+                    <span>{schedulerTickStatusLabel(tick.status, t)}</span>
+                    <strong>
+                      {tick.synced_count}/{tick.videos_created_count}/{tick.candidates_created_count}
+                    </strong>
+                    <small>
+                      {formatEventTime(tick.created_at)}
+                      {tick.duration_seconds !== null ? ` · ${formatDuration(tick.duration_seconds)}` : ""}
+                    </small>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.due")}</dt>
+                      <dd>{tick.due_channel_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.synced")}</dt>
+                      <dd>{tick.synced_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.ticks.failed")}</dt>
+                      <dd>{tick.failed_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.seen")}</dt>
+                      <dd>{tick.videos_seen_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.videos")}</dt>
+                      <dd>{tick.videos_created_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.candidates")}</dt>
+                      <dd>{tick.candidates_created_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.interval")}</dt>
+                      <dd>{tick.interval_seconds}s</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataTicks.limit")}</dt>
+                      <dd>{tick.limit}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.metadataScheduler")}</dt>
+                      <dd>{tick.scheduler_enabled ? t("runtime.enabled") : t("runtime.disabled")}</dd>
+                    </div>
+                  </dl>
+                  {tick.skipped_reason ?? tick.error_message ? <code>{tick.skipped_reason ?? tick.error_message}</code> : null}
+                </article>
+              ))}
+              {metadataTickRows.length === 0 ? <p className="empty-copy">{t("runtime.metadataTicks.empty")}</p> : null}
             </div>
           </aside>
         </div>
@@ -3252,6 +3519,32 @@ function loadSavedLibraryViews(): SavedLibraryView[] {
   }
 }
 
+function toSavedLibraryView(view: LibrarySavedView): SavedLibraryView {
+  return {
+    id: String(view.id),
+    name: view.name,
+    query: view.query,
+    integrity: normalizeLibraryIntegrity(view.integrity),
+    sidecar: normalizeLibrarySidecar(view.sidecar),
+    codec: view.codec,
+    createdAt: view.created_at,
+  };
+}
+
+function normalizeLibraryIntegrity(value: string): LibraryIntegrityFilter {
+  if (value === "complete" || value === "partial_sidecars" || value === "missing_media" || value === "media_only") {
+    return value;
+  }
+  return "all";
+}
+
+function normalizeLibrarySidecar(value: string): LibrarySidecarFilter {
+  if (value === "any" || value === "subtitles" || value === "thumbnail" || value === "nfo") {
+    return value;
+  }
+  return "all";
+}
+
 function schedulerTickQuery(
   statusFilter: SchedulerTickStatusFilter,
   durationFilter: SchedulerDurationFilter,
@@ -3265,6 +3558,22 @@ function schedulerTickQuery(
   if (Number.isInteger(interval) && interval >= 5) filters.interval_seconds = interval;
   const workerLimit = Number(limitFilter);
   if (Number.isInteger(workerLimit) && workerLimit >= 1) filters.worker_limit = workerLimit;
+  return filters;
+}
+
+function metadataTickQuery(
+  statusFilter: SchedulerTickStatusFilter,
+  durationFilter: SchedulerDurationFilter,
+  intervalFilter: string,
+  limitFilter: string,
+): MetadataSyncTickFilters {
+  const filters: MetadataSyncTickFilters = {};
+  if (statusFilter !== "all") filters.status = statusFilter;
+  if (durationFilter === "slow") filters.min_duration_seconds = 10;
+  const interval = Number(intervalFilter);
+  if (Number.isInteger(interval) && interval >= 30) filters.interval_seconds = interval;
+  const schedulerLimit = Number(limitFilter);
+  if (Number.isInteger(schedulerLimit) && schedulerLimit >= 1) filters.scheduler_limit = schedulerLimit;
   return filters;
 }
 

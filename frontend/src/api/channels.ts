@@ -376,6 +376,25 @@ export type LibraryFilters = {
   missing_sidecar?: string;
 };
 
+export type LibrarySavedView = {
+  id: number;
+  name: string;
+  query: string;
+  integrity: string;
+  sidecar: string;
+  codec: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LibrarySavedViewPayload = {
+  name: string;
+  query: string;
+  integrity: string;
+  sidecar: string;
+  codec: string;
+};
+
 export type LibrarySidecar = {
   kind: string;
   relative_path: string;
@@ -748,6 +767,19 @@ export async function getLibrary(channelId?: number, query?: string, filters: Li
   if (filters.missing_sidecar) params.set("missing_sidecar", filters.missing_sidecar);
   const suffix = params.toString() ? `?${params}` : "";
   return getJson(`/api/library${suffix}`);
+}
+
+export async function getLibraryViews(): Promise<LibrarySavedView[]> {
+  return getJson("/api/library/views");
+}
+
+export async function saveLibraryView(payload: LibrarySavedViewPayload): Promise<LibrarySavedView> {
+  return postJson("/api/library/views", payload);
+}
+
+export async function deleteLibraryView(viewId: number): Promise<{ deleted: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/api/library/views/${viewId}`, { method: "DELETE" });
+  return readJsonResponse<{ deleted: boolean }>(response);
 }
 
 export async function getLibraryFiles(videoId: number): Promise<LibraryFile[]> {

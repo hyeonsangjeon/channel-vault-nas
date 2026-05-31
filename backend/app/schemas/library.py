@@ -1,6 +1,8 @@
-"""Library recovery and rescan schemas."""
+"""Library recovery, views, and rescan schemas."""
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class RescanCandidate(BaseModel):
@@ -92,6 +94,29 @@ class LibrarySnapshot(BaseModel):
     queued: int
     total_bytes: int
     total_label: str
+
+
+class LibraryViewWrite(BaseModel):
+    """Payload for a reusable saved library filter view."""
+
+    name: str = Field(min_length=1, max_length=160)
+    query: str = Field(default="", max_length=500)
+    integrity: str = Field(default="all", max_length=40)
+    sidecar: str = Field(default="all", max_length=40)
+    codec: str = Field(default="", max_length=200)
+
+
+class LibraryViewRead(BaseModel):
+    """Persisted saved library filter view."""
+
+    id: int
+    name: str
+    query: str
+    integrity: str
+    sidecar: str
+    codec: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class LibrarySidecar(BaseModel):

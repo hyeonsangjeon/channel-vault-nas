@@ -234,6 +234,25 @@ class DownloadSchedulerTick(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class LibraryView(Base):
+    """User-saved reusable library filter view."""
+
+    __tablename__ = "library_views"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), unique=True)
+    query: Mapped[str] = mapped_column(Text, default="")
+    integrity_filter: Mapped[str] = mapped_column(String(40), default="all")
+    sidecar_filter: Mapped[str] = mapped_column(String(40), default="all")
+    codec_filter: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
 class MediaFile(Base):
     """Stored media or sidecar file created by the archive pipeline."""
 

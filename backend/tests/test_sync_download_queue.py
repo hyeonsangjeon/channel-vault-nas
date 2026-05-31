@@ -14,6 +14,7 @@ from app.models.archive import (
     ChannelPolicy,
     DownloadJob,
     DownloadWorkerRun,
+    LibraryView,
     MediaFile,
     MetadataSyncTick,
     SyncJob,
@@ -35,6 +36,7 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(MetadataSyncTick))
         await session.execute(delete(SyncJob))
+        await session.execute(delete(LibraryView))
         await session.execute(delete(ChannelPolicy))
         await session.execute(delete(MediaFile))
         await session.execute(delete(Video))
@@ -145,6 +147,29 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         library_item = await client.get(f"/api/library/{first_video_id}")
         library_files = await client.get(f"/api/library/{first_video_id}/files")
         library_stream = await client.get(f"/api/library/{first_video_id}/stream")
+        saved_view = await client.post(
+            "/api/library/views",
+            json={
+                "name": "무자막 h264",
+                "query": "BERT",
+                "integrity": "partial_sidecars",
+                "sidecar": "subtitles",
+                "codec": "h264 1080p",
+            },
+        )
+        saved_view_updated = await client.post(
+            "/api/library/views",
+            json={
+                "name": "무자막 h264",
+                "query": "BERT",
+                "integrity": "partial_sidecars",
+                "sidecar": "any",
+                "codec": "h264 1080p",
+            },
+        )
+        saved_views = await client.get("/api/library/views")
+        deleted_view = await client.delete(f"/api/library/views/{saved_view.json()['id']}")
+        saved_views_after_delete = await client.get("/api/library/views")
         policy = await client.patch(
             f"/api/channels/{channel_id}/policy",
             json={"max_quality": "best", "auto_download": True, "subtitle_languages": ["ko", "en", "ja"]},
@@ -229,6 +254,18 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert library_files.json()[0]["info_json_exists"] is False
     assert {sidecar["kind"] for sidecar in library_files.json()[0]["sidecars"]} == {"info_json", "thumbnail", "nfo"}
     assert library_stream.status_code == 404
+    assert saved_view.status_code == 200
+    assert saved_view.json()["name"] == "무자막 h264"
+    assert saved_view.json()["sidecar"] == "subtitles"
+    assert saved_view_updated.status_code == 200
+    assert saved_view_updated.json()["id"] == saved_view.json()["id"]
+    assert saved_view_updated.json()["sidecar"] == "any"
+    assert saved_views.status_code == 200
+    assert len(saved_views.json()) == 1
+    assert deleted_view.status_code == 200
+    assert deleted_view.json()["deleted"] is True
+    assert saved_views_after_delete.status_code == 200
+    assert saved_views_after_delete.json() == []
     assert policy.status_code == 200
     assert policy.json()["max_quality"] == "best"
     assert policy.json()["auto_download"] is True
@@ -268,6 +305,7 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(MetadataSyncTick))
         await session.execute(delete(SyncJob))
+        await session.execute(delete(LibraryView))
         await session.execute(delete(ChannelPolicy))
         await session.execute(delete(MediaFile))
         await session.execute(delete(Video))

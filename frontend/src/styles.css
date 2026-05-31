@@ -537,6 +537,13 @@ button {
   background: rgba(52, 211, 153, 0.08);
 }
 
+.runtime-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .runtime-guide-backdrop {
   position: fixed;
   inset: 0;
@@ -2372,6 +2379,13 @@ button {
   box-shadow: -24px 0 70px rgba(0, 0, 0, 0.42);
 }
 
+.metadata-tick-drawer {
+  background:
+    linear-gradient(145deg, rgba(52, 211, 153, 0.1), transparent 35%),
+    linear-gradient(215deg, rgba(56, 189, 248, 0.12), transparent 44%),
+    #080c13;
+}
+
 .worker-history-header {
   display: flex;
   align-items: flex-start;
@@ -2608,6 +2622,10 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
+}
+
+.metadata-tick-list.expanded dl {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .scheduler-tick-list.expanded dl div {
