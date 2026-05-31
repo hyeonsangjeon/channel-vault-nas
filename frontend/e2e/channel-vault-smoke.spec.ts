@@ -164,6 +164,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(schedulerDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   await schedulerDrawer.getByRole("button", { name: "필터 초기화" }).click();
   await expect(schedulerDrawer.locator(".worker-history-filters").getByRole("button", { name: "전체" })).toHaveClass(/active/);
+  await expect(schedulerDrawer.locator(".scheduler-tick-list.expanded")).toContainText("#");
+  await expect(schedulerDrawer.locator(".scheduler-tick-list.expanded")).toContainText("다음 tick");
   await page.screenshot({ path: testInfo.outputPath("scheduler-tick-drawer.png"), fullPage: true });
   await schedulerDrawer.getByRole("button", { name: "닫기" }).click();
   await runtimeGuide.getByRole("button", { name: "Metadata 로그" }).click();
@@ -176,6 +178,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(metadataDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   await metadataDrawer.getByRole("button", { name: "필터 초기화" }).click();
   await expect(metadataDrawer.locator(".worker-history-filters").getByRole("button", { name: "전체" })).toHaveClass(/active/);
+  await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("#");
+  await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("다음 tick");
   await page.screenshot({ path: testInfo.outputPath("metadata-tick-drawer.png"), fullPage: true });
   await metadataDrawer.getByRole("button", { name: "닫기" }).click();
   await runtimeGuide.getByRole("button", { name: "매니페스트 복사" }).click();
