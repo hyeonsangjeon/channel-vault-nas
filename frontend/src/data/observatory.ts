@@ -3,10 +3,12 @@ import type { TranslationKey } from "../i18n";
 export type MetricTone = "good" | "info" | "active" | "protected" | "warn" | "bad";
 
 export type ArchiveMetric = {
-  labelKey: TranslationKey;
+  labelKey?: TranslationKey;
+  label?: string;
   value?: string;
   valueKey?: TranslationKey;
-  detailKey: TranslationKey;
+  detailKey?: TranslationKey;
+  detail?: string;
   tone: MetricTone;
 };
 
@@ -78,7 +80,7 @@ export const mockMetrics: ArchiveMetric[] = [
 ];
 
 export const mockChannels: ChannelNode[] = [
-  { id: "c1", title: "Deep Lab", health: 98, storageGb: 410, newVideos: 3, failedJobs: 0, group: "science" },
+  { id: "c1", title: "wingnut987S", health: 100, storageGb: 0, newVideos: 17, failedJobs: 0, group: "aws" },
   { id: "c2", title: "Signal Kitchen", health: 93, storageGb: 260, newVideos: 4, failedJobs: 1, group: "craft" },
   { id: "c3", title: "Market Notes", health: 86, storageGb: 195, newVideos: 2, failedJobs: 1, group: "analysis" },
   { id: "c4", title: "Archive Radio", health: 97, storageGb: 155, newVideos: 1, failedJobs: 0, group: "audio" },
@@ -113,31 +115,31 @@ export const mockActivity: ActivityItem[] = [
 ];
 
 export const backupStats: BackupStat[] = [
-  { labelKey: "backup.total.label", value: "428", detailKey: "backup.total.detail" },
-  { labelKey: "backup.archived.label", value: "412", detailKey: "backup.archived.detail" },
-  { labelKey: "backup.missing.label", value: "13", detailKey: "backup.missing.detail" },
-  { labelKey: "backup.removedSaved.label", value: "3", detailKey: "backup.removedSaved.detail" },
+  { labelKey: "backup.total.label", value: "17", detailKey: "backup.total.detail" },
+  { labelKey: "backup.archived.label", value: "0", detailKey: "backup.archived.detail" },
+  { labelKey: "backup.missing.label", value: "17", detailKey: "backup.missing.detail" },
+  { labelKey: "backup.removedSaved.label", value: "0", detailKey: "backup.removedSaved.detail" },
 ];
 
 export const uploadRhythm: UploadRhythmDay[] = [
-  { labelKey: "day.mon", count: 8, intensity: 0.42 },
-  { labelKey: "day.tue", count: 13, intensity: 0.58 },
-  { labelKey: "day.wed", count: 7, intensity: 0.36 },
-  { labelKey: "day.thu", count: 28, intensity: 0.95 },
-  { labelKey: "day.fri", count: 21, intensity: 0.74 },
-  { labelKey: "day.sat", count: 5, intensity: 0.28 },
-  { labelKey: "day.sun", count: 3, intensity: 0.18 },
+  { labelKey: "day.mon", count: 1, intensity: 0.25 },
+  { labelKey: "day.tue", count: 3, intensity: 0.55 },
+  { labelKey: "day.wed", count: 2, intensity: 0.4 },
+  { labelKey: "day.thu", count: 4, intensity: 0.75 },
+  { labelKey: "day.fri", count: 4, intensity: 0.75 },
+  { labelKey: "day.sat", count: 2, intensity: 0.4 },
+  { labelKey: "day.sun", count: 1, intensity: 0.25 },
 ];
 
 export const folderPreview: FolderPreviewItem[] = [
   { depth: 0, name: "/downfolder", kind: "root" },
   { depth: 1, name: "channels", kind: "channel" },
-  { depth: 2, name: "@deeplab [UC8_DEMO]", kind: "channel" },
+  { depth: 2, name: "@wingnut987s4 [UCmLADXQtWVuzOnOK5TNrWaw]", kind: "channel" },
   { depth: 3, name: "channel.nfo", kind: "file" },
   { depth: 3, name: "_channel.info.json", kind: "file" },
   { depth: 3, name: "poster.jpg", kind: "file" },
-  { depth: 3, name: "2026", kind: "year" },
-  { depth: 4, name: "2026-05-29 - signal memory [a8k9Qw]", kind: "month" },
+  { depth: 3, name: "2022", kind: "year" },
+  { depth: 4, name: "2022-05-20 - HEAVY BAG DRILLS [6lXl1hkEgcA]", kind: "month" },
   { depth: 5, name: "video.mp4", kind: "file" },
   { depth: 5, name: "video.info.json", kind: "file" },
   { depth: 5, name: "video.ko.srt", kind: "file" },

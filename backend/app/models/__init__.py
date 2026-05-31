@@ -1,5 +1,13 @@
 """ORM models."""
 
-from app.models.archive import Channel, MediaFile, Video
+from app.models.archive import (
+    Channel,
+    ChannelPolicy,
+    DownloadJob,
+    DownloadWorkerRun,
+    MediaFile,
+    SyncJob,
+    Video,
+)
 
-__all__ = ["Channel", "MediaFile", "Video"]
+__all__ = ["Channel", "ChannelPolicy", "DownloadJob", "DownloadWorkerRun", "MediaFile", "SyncJob", "Video"]
