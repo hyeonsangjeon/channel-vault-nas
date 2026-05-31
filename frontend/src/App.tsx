@@ -4005,7 +4005,9 @@ function App() {
               {schedulerTickRows.map((tick) => (
                 <article className={tick.status} key={tick.id}>
                   <div>
-                    <span>{schedulerTickStatusLabel(tick.status, t)}</span>
+                    <span>
+                      {schedulerTickStatusLabel(tick.status, t)} #{tick.id}
+                    </span>
                     <strong>
                       {tick.started_count}/{tick.completed_count}/{tick.failed_count}
                     </strong>
@@ -4022,6 +4024,10 @@ function App() {
                     <div>
                       <dt>{t("runtime.ticks.limit")}</dt>
                       <dd>{tick.limit}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.scheduler.next")}</dt>
+                      <dd>{formatDateTimeLabel(tick.next_tick_at, t("runtime.scheduler.none"))}</dd>
                     </div>
                     <div>
                       <dt>{t("runtime.worker")}</dt>
@@ -4148,7 +4154,9 @@ function App() {
               {metadataTickRows.map((tick) => (
                 <article className={tick.status} key={tick.id}>
                   <div>
-                    <span>{schedulerTickStatusLabel(tick.status, t)}</span>
+                    <span>
+                      {schedulerTickStatusLabel(tick.status, t)} #{tick.id}
+                    </span>
                     <strong>
                       {tick.synced_count}/{tick.videos_created_count}/{tick.candidates_created_count}
                     </strong>
@@ -4189,6 +4197,10 @@ function App() {
                     <div>
                       <dt>{t("runtime.metadataTicks.limit")}</dt>
                       <dd>{tick.limit}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.scheduler.next")}</dt>
+                      <dd>{formatDateTimeLabel(tick.next_tick_at, t("runtime.scheduler.none"))}</dd>
                     </div>
                     <div>
                       <dt>{t("runtime.metadataScheduler")}</dt>
