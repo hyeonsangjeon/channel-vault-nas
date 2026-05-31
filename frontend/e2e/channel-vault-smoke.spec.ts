@@ -32,6 +32,7 @@ async function openKoreanVault(page: Page) {
   await expect(page.getByText("런타임 설정")).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "300s 간격" })).toContainText("스케줄러 비활성");
   await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("메타데이터 스케줄러 비활성");
+  await expect(page.getByRole("button", { name: "지금 metadata tick" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "yt-dlp" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "ffprobe" })).toBeVisible();
   await expect(page.getByText("아카이브 런치 컨트롤")).toBeVisible();

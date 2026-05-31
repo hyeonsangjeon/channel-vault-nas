@@ -514,6 +514,27 @@ button {
   overflow-wrap: anywhere;
 }
 
+.runtime-inline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 8px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  color: #dff6ff;
+  background: rgba(56, 189, 248, 0.08);
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.runtime-inline-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .runtime-mini-badge {
   align-self: flex-start;
   border: 1px solid rgba(56, 189, 248, 0.22);

@@ -74,6 +74,7 @@ import {
   requestRuntimeRestart,
   retryDownloadJob,
   runDownloadWorkerOnce,
+  runMetadataSyncSchedulerOnce,
   saveLibraryView,
   stopDownloadJob,
   syncChannel,
@@ -317,6 +318,7 @@ function App() {
   const [metadataDurationFilter, setMetadataDurationFilter] = useState<SchedulerDurationFilter>("all");
   const [metadataIntervalFilter, setMetadataIntervalFilter] = useState("");
   const [metadataLimitFilter, setMetadataLimitFilter] = useState("");
+  const [metadataRunStatus, setMetadataRunStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -1482,6 +1484,35 @@ function App() {
     }
   }
 
+  async function handleRunMetadataSchedulerOnce() {
+    setMetadataRunStatus("running");
+    setWorkflowMessage("");
+    try {
+      const tick = await runMetadataSyncSchedulerOnce();
+      const [runtimeSnapshot, ticks] = await Promise.all([
+        getRuntimeSettings(),
+        getMetadataSyncTicks(48, metadataTickQuery(metadataTickStatusFilter, metadataDurationFilter, metadataIntervalFilter, metadataLimitFilter)),
+      ]);
+      setRuntimeSettings(runtimeSnapshot);
+      setMetadataTickRows(ticks);
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      setMetadataRunStatus("done");
+      setWorkflowStatus(tick.status === "failed" ? "error" : "idle");
+      setWorkflowMessage(
+        t("runtime.metadataScheduler.runDone")
+          .replace("{status}", schedulerTickStatusLabel(tick.status, t))
+          .replace("{synced}", String(tick.synced_count))
+          .replace("{candidates}", String(tick.candidates_created_count)),
+      );
+    } catch (error) {
+      setMetadataRunStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
   async function handleOpenLibraryDetail(item: LibraryItem) {
     setSelectedLibraryItem(item);
     setLibraryDetailStatus("loading");
@@ -1783,6 +1814,17 @@ function App() {
                   <em>{t("runtime.scheduler.next")} · {metadataSchedulerNextTickLabel}</em>
                   <em>{t("runtime.scheduler.last")} · {metadataSchedulerLastTickLabel}</em>
                 </div>
+                <button
+                  className="runtime-inline-action"
+                  disabled={metadataRunStatus === "running" || metadataSchedulerStatus?.state === "running"}
+                  onClick={() => void handleRunMetadataSchedulerOnce()}
+                  type="button"
+                >
+                  <TimerReset size={13} />
+                  {metadataRunStatus === "running"
+                    ? t("runtime.metadataScheduler.runRunning")
+                    : t("runtime.metadataScheduler.runNow")}
+                </button>
               </div>
             </article>
             <article className={`runtime-card ${ytdlpBinary?.available ? "good" : "warn"}`}>
