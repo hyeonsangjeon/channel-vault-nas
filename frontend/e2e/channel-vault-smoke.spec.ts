@@ -253,6 +253,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.locator(".command-lines code").filter({ hasText: "yt-dlp" }).first()).toBeVisible();
   await expect(page.locator(".preflight-pill.ready").first()).toBeVisible();
   await expect(page.getByLabel("프리플라이트 런웨이")).toContainText("DB만 무장");
+  await expect(page.getByLabel("선택 작업 요약")).toContainText("선택 용량");
   const preflightFilter = page.getByLabel("프리플라이트 필터");
   await expect(preflightFilter).toContainText("미점검");
   await preflightFilter.getByRole("button", { name: /준비됨/ }).click();

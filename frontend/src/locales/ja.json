@@ -277,6 +277,8 @@
   "launch.runway.free": "NAS 空き",
   "launch.runway.mode": "モード",
   "launch.runway.dbOnly": "DB のみ",
+  "launch.selection.title": "選択ジョブ概要",
+  "launch.selection.bytes": "選択サイズ",
   "worker.title": "ワーカー管制室",
   "worker.locked": "ロック中",
   "worker.enabled": "有効",

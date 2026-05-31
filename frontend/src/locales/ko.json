@@ -277,6 +277,8 @@
   "launch.runway.free": "NAS 여유",
   "launch.runway.mode": "모드",
   "launch.runway.dbOnly": "DB만 무장",
+  "launch.selection.title": "선택 작업 요약",
+  "launch.selection.bytes": "선택 용량",
   "worker.title": "워커 관제실",
   "worker.locked": "잠김",
   "worker.enabled": "무장됨",

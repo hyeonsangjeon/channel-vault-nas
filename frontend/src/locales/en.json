@@ -277,6 +277,8 @@
   "launch.runway.free": "NAS free",
   "launch.runway.mode": "Mode",
   "launch.runway.dbOnly": "DB only",
+  "launch.selection.title": "Selected job summary",
+  "launch.selection.bytes": "Selected size",
   "worker.title": "Worker control room",
   "worker.locked": "locked",
   "worker.enabled": "armed",
