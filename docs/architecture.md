@@ -365,6 +365,7 @@ GET    /api/library/{video_id}/stream
 GET    /api/library/{video_id}/file
 
 GET    /api/settings/runtime
+PATCH  /api/settings/runtime
 GET    /api/settings
 PATCH  /api/settings
 
@@ -433,12 +434,16 @@ Start simple with in-process asyncio tasks:
 - `DownloadWorkerScheduler`: optional FastAPI-lifespan task that runs bounded
   worker passes on an interval only when both scheduler and real transfer flags
   are enabled; it reuses the same pause-aware worker claim query.
+- `DownloadSchedulerTick`: append-only scheduler tick telemetry persisted in
+  SQLite with status, skipped/error context, run counts, duration, and next tick
+  timing for process-restart-safe operator review.
 - `RuntimeSettings`: non-secret operator snapshot for worker/scheduler flags,
   scheduler cadence/limit, archive paths, and local `yt-dlp`/`ffprobe` command
   health. It also includes in-process scheduler telemetry so the UI can show
   whether the scheduler is off, worker-locked, armed, waiting, running, or
-  recently failed, next/last tick timing, and feeds a frontend env manifest
-  drawer with exact `.env` lines and copy feedback for arming the local NAS
+  recently failed, next/last tick timing, recent persisted tick logs, and feeds
+  a frontend env manifest drawer with exact `.env` lines, managed `.env.runtime`
+  apply, restart-required state, and copy feedback for arming the local NAS
   worker loop.
 
 This mirrors the existing `DownloadManager` pattern, but splits sync and download

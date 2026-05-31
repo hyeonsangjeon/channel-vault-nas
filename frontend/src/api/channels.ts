@@ -413,6 +413,10 @@ export type RuntimeSettings = {
   download_worker_scheduler_limit: number;
   download_dir: string;
   metadata_dir: string;
+  managed_env_file: string;
+  pending_restart: boolean;
+  pending_overrides: RuntimeEnvOverride[];
+  restart_command: string;
   scheduler_status: {
     state: "off" | "locked" | "armed" | "waiting" | "running" | "failed" | string;
     enabled: boolean;
@@ -426,7 +430,53 @@ export type RuntimeSettings = {
     last_result_status: string | null;
     next_tick_at: string | null;
   };
+  scheduler_ticks: SchedulerTick[];
   binaries: BinaryHealth[];
+};
+
+export type RuntimeEnvOverride = {
+  key: string;
+  value: string;
+  active_value: string | null;
+  pending_restart: boolean;
+};
+
+export type SchedulerTick = {
+  id: number;
+  trigger: string;
+  status: "running" | "completed" | "failed" | "skipped" | string;
+  scheduler_enabled: boolean;
+  worker_enabled: boolean;
+  interval_seconds: number;
+  limit: number;
+  started_count: number;
+  completed_count: number;
+  failed_count: number;
+  skipped_reason: string | null;
+  error_message: string | null;
+  duration_seconds: number | null;
+  next_tick_at: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type RuntimeSettingsUpdate = {
+  download_worker_enabled?: boolean;
+  download_worker_scheduler_enabled?: boolean;
+  download_worker_scheduler_interval_seconds?: number;
+  download_worker_scheduler_limit?: number;
+  ytdlp_binary?: string;
+  ffprobe_binary?: string;
+};
+
+export type RuntimeSettingsApplyResult = {
+  applied: boolean;
+  restart_required: boolean;
+  changed_keys: string[];
+  managed_env_file: string;
+  restart_command: string;
+  runtime: RuntimeSettings;
 };
 
 export type RescanApplyResult = {
@@ -558,6 +608,10 @@ export async function getLibraryFiles(videoId: number): Promise<LibraryFile[]> {
 
 export async function getRuntimeSettings(): Promise<RuntimeSettings> {
   return getJson("/api/settings/runtime");
+}
+
+export async function updateRuntimeSettings(payload: RuntimeSettingsUpdate): Promise<RuntimeSettingsApplyResult> {
+  return patchJson("/api/settings/runtime", payload);
 }
 
 export async function applyLibraryRescan(): Promise<RescanApplyResult> {

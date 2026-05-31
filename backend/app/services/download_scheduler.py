@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.config import settings
 from app.database import AsyncSessionLocal
+from app.models.archive import DownloadSchedulerTick
 from app.schemas.jobs import DownloadWorkerRunRequest, DownloadWorkerRunResult
 from app.schemas.settings import SchedulerRuntimeStatus
 from app.services.download_worker import run_download_worker_once
@@ -101,8 +102,36 @@ class DownloadWorkerScheduler:
 
 async def run_download_worker_scheduler_tick() -> DownloadWorkerRunResult | None:
     """Run one scheduled media worker pass when scheduling and transfer are enabled."""
-    if not settings.download_worker_scheduler_enabled or not settings.download_worker_enabled:
-        return None
+    started_at = datetime.now(UTC)
+    tick_id: int | None = None
+    async with AsyncSessionLocal() as session:
+        tick = DownloadSchedulerTick(
+            trigger="scheduler",
+            status="running",
+            scheduler_enabled=settings.download_worker_scheduler_enabled,
+            worker_enabled=settings.download_worker_enabled,
+            interval_seconds=settings.download_worker_scheduler_interval_seconds,
+            limit=settings.download_worker_scheduler_limit,
+            started_at=started_at,
+            created_at=started_at,
+        )
+        session.add(tick)
+        await session.commit()
+        await session.refresh(tick)
+        tick_id = tick.id
+
+        if not settings.download_worker_scheduler_enabled or not settings.download_worker_enabled:
+            now = datetime.now(UTC)
+            tick.status = "skipped"
+            tick.skipped_reason = (
+                "scheduler disabled"
+                if not settings.download_worker_scheduler_enabled
+                else "download worker disabled"
+            )
+            tick.completed_at = now
+            await session.commit()
+            return None
+
     scheduler_state.mark_started()
     try:
         async with AsyncSessionLocal() as session:
@@ -117,9 +146,46 @@ async def run_download_worker_scheduler_tick() -> DownloadWorkerRunResult | None
             await session.commit()
     except Exception as exc:
         scheduler_state.mark_failed(exc)
+        await _mark_scheduler_tick_failed(tick_id=tick_id, exc=exc)
         raise
     scheduler_state.mark_completed(result)
+    await _mark_scheduler_tick_completed(tick_id=tick_id, result=result)
     return result
+
+
+async def _mark_scheduler_tick_completed(*, tick_id: int | None, result: DownloadWorkerRunResult) -> None:
+    if tick_id is None:
+        return
+    async with AsyncSessionLocal() as session:
+        tick = await session.get(DownloadSchedulerTick, tick_id)
+        if tick is None:
+            return
+        tick.status = "failed" if result.failed else "completed"
+        tick.started_count = result.started
+        tick.completed_count = result.completed
+        tick.failed_count = result.failed
+        tick.skipped_reason = result.skipped_reason
+        tick.completed_at = datetime.now(UTC)
+        tick.next_tick_at = (
+            datetime.now(UTC) + timedelta(seconds=max(5, settings.download_worker_scheduler_interval_seconds))
+            if settings.download_worker_scheduler_enabled
+            else None
+        )
+        await session.commit()
+
+
+async def _mark_scheduler_tick_failed(*, tick_id: int | None, exc: Exception) -> None:
+    if tick_id is None:
+        return
+    async with AsyncSessionLocal() as session:
+        tick = await session.get(DownloadSchedulerTick, tick_id)
+        if tick is None:
+            return
+        tick.status = "failed"
+        tick.failed_count = max(1, tick.failed_count)
+        tick.error_message = str(exc)
+        tick.completed_at = datetime.now(UTC)
+        await session.commit()
 
 
 def get_download_worker_scheduler_status() -> SchedulerRuntimeStatus:

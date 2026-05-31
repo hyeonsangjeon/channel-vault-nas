@@ -18,6 +18,7 @@ from app.schemas.jobs import (
     QueuePreflightPlan,
     SyncJobRead,
 )
+from app.schemas.settings import SchedulerTickRead
 from app.services.channel_sync import list_sync_jobs
 from app.services.download_queue import (
     DownloadJobNotFoundError,
@@ -33,6 +34,7 @@ from app.services.download_worker import (
     run_download_worker_once,
     stop_running_download_job,
 )
+from app.services.runtime_settings import list_scheduler_ticks
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -84,6 +86,16 @@ async def get_download_worker_runs(
         failed_only=failed_only,
         limit=limit,
     )
+
+
+@router.get("/downloads/scheduler/ticks", response_model=list[SchedulerTickRead])
+async def get_download_scheduler_ticks(
+    db: DbSession,
+    status: str | None = None,
+    limit: int = 12,
+) -> list[SchedulerTickRead]:
+    """Return recent persisted scheduler tick telemetry."""
+    return await list_scheduler_ticks(db=db, status=status, limit=limit)
 
 
 @router.post("/downloads/worker/run-once", response_model=DownloadWorkerRunResult)

@@ -1,16 +1,19 @@
 """Application configuration."""
 
 import secrets
+from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
     """Settings loaded from environment variables or a local .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(BACKEND_ROOT / ".env"), str(BACKEND_ROOT / ".env.runtime"), ".env", ".env.runtime"),
         env_prefix="CVN_",
         extra="ignore",
     )
@@ -27,6 +30,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./metadata/app.db"
     download_dir: str = "./downfolder"
     metadata_dir: str = "./metadata"
+    runtime_env_file: str = ".env.runtime"
     db_backup_on_startup: bool = True
     db_backup_keep: int = 5
     db_migrate_on_startup: bool = True

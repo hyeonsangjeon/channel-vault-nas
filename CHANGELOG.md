@@ -108,6 +108,12 @@ Principle: product specs are shared; working traces are private.
 - Added next/last scheduler tick labels to the runtime console and env guide so
   operators can see when the bounded worker loop is due and what the previous
   pass reported.
+- Added a managed runtime apply flow that writes non-secret worker, scheduler,
+  cadence/limit, and media binary overrides to `.env.runtime`, surfaces
+  restart-required state, and provides a restart command copy action.
+- Added persistent `download_scheduler_ticks` rows plus recent tick log UI so
+  scheduler pass status, skipped/failed reasons, and started/completed/failed
+  counts survive backend process restarts.
 - Added planned archive-folder paths to queue rows so Launch Control can show
   where each pending video will land before transfer starts.
 - Added a second Alembic migration for queue preflight columns and hardened

@@ -141,6 +141,10 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(runtimeGuide).toBeVisible();
   await expect(runtimeGuide.locator("strong", { hasText: "CVN_DOWNLOAD_WORKER_ENABLED" })).toBeVisible();
   await expect(runtimeGuide.getByText("다음 tick")).toBeVisible();
+  await expect(runtimeGuide.getByText("런타임 적용")).toBeVisible();
+  await expect(runtimeGuide.getByText("Scheduler tick 로그")).toBeVisible();
+  await runtimeGuide.getByRole("button", { name: "적용 대기 저장" }).click();
+  await expect(runtimeGuide.getByText(/env 저장됨/)).toBeVisible();
   await runtimeGuide.getByRole("button", { name: "매니페스트 복사" }).click();
   await expect(runtimeGuide.getByText("복사됨")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("runtime-env-guide.png"), fullPage: true });

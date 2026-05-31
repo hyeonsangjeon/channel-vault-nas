@@ -13,6 +13,7 @@ from app.models.archive import (
     Channel,
     ChannelPolicy,
     DownloadJob,
+    DownloadSchedulerTick,
     DownloadWorkerRun,
     MediaFile,
     SyncJob,
@@ -421,6 +422,37 @@ async def test_worker_scheduler_tick_respects_paused_channel_policy(monkeypatch:
     assert worker_run is not None
     assert worker_run.status == "completed"
     assert worker_run.started_count == 0
+    async with AsyncSessionLocal() as session:
+        scheduler_tick = await session.scalar(
+            select(DownloadSchedulerTick).order_by(DownloadSchedulerTick.created_at.desc())
+        )
+
+    assert scheduler_tick is not None
+    assert scheduler_tick.status == "completed"
+    assert scheduler_tick.started_count == 0
+    assert scheduler_tick.completed_count == 0
+
+
+@pytest.mark.asyncio
+async def test_worker_scheduler_tick_persists_locked_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+    monkeypatch.setattr(settings, "download_worker_enabled", False)
+    monkeypatch.setattr(settings, "download_worker_scheduler_enabled", True)
+
+    result = await run_download_worker_scheduler_tick()
+
+    assert result is None
+    async with AsyncSessionLocal() as session:
+        scheduler_tick = await session.scalar(
+            select(DownloadSchedulerTick).order_by(DownloadSchedulerTick.created_at.desc())
+        )
+
+    assert scheduler_tick is not None
+    assert scheduler_tick.status == "skipped"
+    assert scheduler_tick.skipped_reason == "download worker disabled"
+    assert scheduler_tick.worker_enabled is False
 
 
 async def _create_queued_worker_job(session) -> tuple[Channel, Video, DownloadJob]:
@@ -485,6 +517,7 @@ async def _create_queued_worker_job(session) -> tuple[Channel, Video, DownloadJo
 async def _clear_db() -> None:
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadSchedulerTick))
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(SyncJob))
         await session.execute(delete(ChannelPolicy))
