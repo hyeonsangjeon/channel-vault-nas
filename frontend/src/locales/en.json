@@ -474,6 +474,7 @@
   "library.saved.title": "Saved views",
   "library.saved.name": "Saved view name",
   "library.saved.save": "Save view",
+  "library.saved.overwrite": "Overwrite",
   "library.saved.delete": "Delete saved view",
   "library.saved.saved": "Library view saved",
   "library.saved.defaultName": "current library view",
