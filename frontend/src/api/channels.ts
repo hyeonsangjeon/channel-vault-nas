@@ -86,6 +86,11 @@ export type ChannelDetail = RegisteredChannel & {
   thumbnail_url: string | null;
   removed_saved_count: number;
   last_synced_at: string | null;
+  sync_interval_minutes: number;
+  next_sync_due_at: string | null;
+  last_auto_synced_at: string | null;
+  last_auto_sync_status: string | null;
+  last_auto_candidates_created: number;
   first_video_published_at: string | null;
   latest_video_published_at: string | null;
   avg_upload_interval_days: number | null;
@@ -142,11 +147,13 @@ export type SyncJob = {
   id: number;
   channel_id: number;
   channel_title: string;
+  trigger: string;
   status: "running" | "completed" | "failed" | string;
   started_at: string;
   completed_at: string | null;
   videos_seen: number;
   videos_created: number;
+  candidates_created: number;
   error_message: string | null;
   created_at: string;
 };
@@ -156,6 +163,7 @@ export type ChannelSyncResult = {
   channel: RegisteredChannel;
   videos_seen: number;
   videos_created: number;
+  candidates_created: number;
 };
 
 export type DownloadJob = {
@@ -411,6 +419,9 @@ export type RuntimeSettings = {
   download_worker_scheduler_enabled: boolean;
   download_worker_scheduler_interval_seconds: number;
   download_worker_scheduler_limit: number;
+  metadata_sync_scheduler_enabled: boolean;
+  metadata_sync_scheduler_interval_seconds: number;
+  metadata_sync_scheduler_limit: number;
   download_dir: string;
   metadata_dir: string;
   managed_env_file: string;
@@ -431,7 +442,20 @@ export type RuntimeSettings = {
     last_result_status: string | null;
     next_tick_at: string | null;
   };
+  metadata_scheduler_status: {
+    state: "off" | "armed" | "waiting" | "running" | "failed" | string;
+    enabled: boolean;
+    running: boolean;
+    interval_seconds: number;
+    limit: number;
+    last_started_at: string | null;
+    last_completed_at: string | null;
+    last_error: string | null;
+    last_result_status: string | null;
+    next_tick_at: string | null;
+  };
   scheduler_ticks: SchedulerTick[];
+  metadata_sync_ticks: MetadataSyncTick[];
   binaries: BinaryHealth[];
 };
 
@@ -474,11 +498,36 @@ export type SchedulerTick = {
   created_at: string;
 };
 
+export type MetadataSyncTick = {
+  id: number;
+  trigger: string;
+  status: "running" | "completed" | "failed" | "skipped" | string;
+  scheduler_enabled: boolean;
+  interval_seconds: number;
+  limit: number;
+  due_channel_count: number;
+  synced_count: number;
+  failed_count: number;
+  videos_seen_count: number;
+  videos_created_count: number;
+  candidates_created_count: number;
+  skipped_reason: string | null;
+  error_message: string | null;
+  duration_seconds: number | null;
+  next_tick_at: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+};
+
 export type RuntimeSettingsUpdate = {
   download_worker_enabled?: boolean;
   download_worker_scheduler_enabled?: boolean;
   download_worker_scheduler_interval_seconds?: number;
   download_worker_scheduler_limit?: number;
+  metadata_sync_scheduler_enabled?: boolean;
+  metadata_sync_scheduler_interval_seconds?: number;
+  metadata_sync_scheduler_limit?: number;
   ytdlp_binary?: string;
   ffprobe_binary?: string;
 };
@@ -506,6 +555,13 @@ export type SchedulerTickFilters = {
   min_duration_seconds?: number;
   interval_seconds?: number;
   worker_limit?: number;
+};
+
+export type MetadataSyncTickFilters = {
+  status?: string;
+  min_duration_seconds?: number;
+  interval_seconds?: number;
+  scheduler_limit?: number;
 };
 
 export type RescanApplyResult = {
@@ -724,6 +780,25 @@ export async function getSchedulerTicks(limit = 24, filters: SchedulerTickFilter
     params.set("worker_limit", String(filters.worker_limit));
   }
   return getJson(`/api/jobs/downloads/scheduler/ticks?${params}`);
+}
+
+export async function getMetadataSyncTicks(
+  limit = 24,
+  filters: MetadataSyncTickFilters = {},
+): Promise<MetadataSyncTick[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (filters.status) params.set("status", filters.status);
+  if (typeof filters.min_duration_seconds === "number") {
+    params.set("min_duration_seconds", String(filters.min_duration_seconds));
+  }
+  if (typeof filters.interval_seconds === "number") {
+    params.set("interval_seconds", String(filters.interval_seconds));
+  }
+  if (typeof filters.scheduler_limit === "number") {
+    params.set("scheduler_limit", String(filters.scheduler_limit));
+  }
+  return getJson(`/api/jobs/sync/scheduler/ticks?${params}`);
 }
 
 export async function getStorageScan(): Promise<StorageScan> {

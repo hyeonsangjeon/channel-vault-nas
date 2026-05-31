@@ -125,11 +125,13 @@ class SyncJob(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"), index=True)
+    trigger: Mapped[str] = mapped_column(String(32), default="manual", index=True)
     status: Mapped[str] = mapped_column(String(32), default="running", index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     videos_seen: Mapped[int] = mapped_column(Integer, default=0)
     videos_created: Mapped[int] = mapped_column(Integer, default=0)
+    candidates_created: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -182,6 +184,31 @@ class DownloadWorkerRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     channel: Mapped[Channel | None] = relationship(back_populates="worker_runs")
+
+
+class MetadataSyncTick(Base):
+    """Persistent telemetry for one metadata scheduler pass."""
+
+    __tablename__ = "metadata_sync_ticks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trigger: Mapped[str] = mapped_column(String(32), default="scheduler")
+    status: Mapped[str] = mapped_column(String(32), default="running", index=True)
+    scheduler_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=900)
+    limit: Mapped[int] = mapped_column(Integer, default=2)
+    due_channel_count: Mapped[int] = mapped_column(Integer, default=0)
+    synced_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    videos_seen_count: Mapped[int] = mapped_column(Integer, default=0)
+    videos_created_count: Mapped[int] = mapped_column(Integer, default=0)
+    candidates_created_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_reason: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    next_tick_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class DownloadSchedulerTick(Base):

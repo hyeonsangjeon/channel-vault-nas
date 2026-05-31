@@ -7,6 +7,7 @@ from app.models.archive import (
     DownloadSchedulerTick,
     DownloadWorkerRun,
     MediaFile,
+    MetadataSyncTick,
     SyncJob,
     Video,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "DownloadSchedulerTick",
     "DownloadWorkerRun",
     "MediaFile",
+    "MetadataSyncTick",
     "SyncJob",
     "Video",
 ]

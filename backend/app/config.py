@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     download_worker_scheduler_enabled: bool = False
     download_worker_scheduler_interval_seconds: int = 300
     download_worker_scheduler_limit: int = 1
+    metadata_sync_scheduler_enabled: bool = False
+    metadata_sync_scheduler_interval_seconds: int = 900
+    metadata_sync_scheduler_limit: int = 2
+    metadata_sync_auto_candidates_limit: int = 50
     restart_adapter: str = "auto"
     restart_adapter_execute: bool = False
     restart_hook_command: str = ""

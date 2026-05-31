@@ -22,6 +22,7 @@ from app.routers import (
 )
 from app.routers import settings as settings_router
 from app.services.download_scheduler import download_worker_scheduler
+from app.services.metadata_scheduler import metadata_sync_scheduler
 from app.services.storage_guard import backup_sqlite_database
 
 
@@ -40,10 +41,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.db_migrate_on_startup:
         run_migrations()
     await init_db()
+    metadata_sync_scheduler.start()
     download_worker_scheduler.start()
     try:
         yield
     finally:
+        await metadata_sync_scheduler.stop()
         await download_worker_scheduler.stop()
 
 

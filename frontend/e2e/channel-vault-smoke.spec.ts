@@ -30,7 +30,8 @@ async function openKoreanVault(page: Page) {
   await page.goto("/");
   await expect(page.getByText("Signal Lab").first()).toBeVisible();
   await expect(page.getByText("런타임 설정")).toBeVisible();
-  await expect(page.locator(".runtime-card").filter({ hasText: "스케줄러" })).toContainText("스케줄러 비활성");
+  await expect(page.locator(".runtime-card").filter({ hasText: "300s 간격" })).toContainText("스케줄러 비활성");
+  await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("메타데이터 스케줄러 비활성");
   await expect(page.locator(".runtime-card").filter({ hasText: "yt-dlp" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "ffprobe" })).toBeVisible();
   await expect(page.getByText("아카이브 런치 컨트롤")).toBeVisible();
@@ -140,9 +141,11 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const runtimeGuide = page.getByLabel("런타임 env 매니페스트");
   await expect(runtimeGuide).toBeVisible();
   await expect(runtimeGuide.locator("strong", { hasText: "CVN_DOWNLOAD_WORKER_ENABLED" })).toBeVisible();
-  await expect(runtimeGuide.getByText("다음 tick")).toBeVisible();
+  await expect(runtimeGuide.locator("strong", { hasText: "CVN_METADATA_SYNC_SCHEDULER_ENABLED" })).toBeVisible();
+  await expect(runtimeGuide.getByText("다음 tick").first()).toBeVisible();
   await expect(runtimeGuide.getByText("런타임 적용")).toBeVisible();
   await expect(runtimeGuide.getByText("Scheduler tick 로그")).toBeVisible();
+  await expect(runtimeGuide.getByText("Metadata tick 로그")).toBeVisible();
   await expect(runtimeGuide.getByText("수동 재시작")).toBeVisible();
   await expect(runtimeGuide.getByRole("button", { name: "재시작 요청" })).toBeDisabled();
   await runtimeGuide.getByRole("button", { name: "적용 대기 저장" }).click();
@@ -160,6 +163,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(runtimeGuide.getByText("복사됨")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("runtime-env-guide.png"), fullPage: true });
   await page.getByRole("button", { name: "닫기" }).click();
+  await expect(page.getByText("다음 sync 예정")).toBeVisible();
+  await expect(page.getByText("마지막 자동 sync")).toBeVisible();
+  await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
   await expect(page.getByText("아카이브 루트").first()).toBeVisible();
   await expect(page.getByText("실제 저장소 트리").first()).toBeVisible();
   await expect(page.locator(".storage-orphan-list").first()).toContainText("video.ko.srt");

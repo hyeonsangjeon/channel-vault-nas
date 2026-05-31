@@ -1,11 +1,12 @@
-"""Manual sync and download queue API tests."""
+"""Manual sync, scheduled metadata sync, and download queue API tests."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
+from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.main import app
 from app.models.archive import (
@@ -14,10 +15,13 @@ from app.models.archive import (
     DownloadJob,
     DownloadWorkerRun,
     MediaFile,
+    MetadataSyncTick,
     SyncJob,
     Video,
 )
 from app.schemas.source import ChannelProbeRequest
+from app.services.download_worker import build_download_worker_plan
+from app.services.metadata_scheduler import find_due_sync_channels, run_metadata_sync_scheduler_tick
 from app.services.source_normalizer import normalize_source_input
 from app.services.ytdlp_probe import build_probe_result
 
@@ -29,6 +33,7 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
         await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(MetadataSyncTick))
         await session.execute(delete(SyncJob))
         await session.execute(delete(ChannelPolicy))
         await session.execute(delete(MediaFile))
@@ -250,6 +255,158 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
 
     assert download_job_count == 2
     assert sync_job_count == 1
+
+
+@pytest.mark.asyncio
+async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_worker_paused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(MetadataSyncTick))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        await session.commit()
+
+    monkeypatch.setattr(settings, "metadata_sync_scheduler_enabled", True)
+    monkeypatch.setattr(settings, "metadata_sync_scheduler_interval_seconds", 60)
+    monkeypatch.setattr(settings, "metadata_sync_scheduler_limit", 5)
+    monkeypatch.setattr(settings, "metadata_sync_auto_candidates_limit", 10)
+    monkeypatch.setattr(settings, "download_worker_enabled", True)
+
+    async def fake_initial_probe(payload: ChannelProbeRequest):
+        return _probe_result(
+            payload,
+            entries=[
+                {
+                    "id": "oldArchive01",
+                    "title": "Already mirrored briefing",
+                    "url": "https://www.youtube.com/watch?v=oldArchive01",
+                    "duration": 300,
+                    "timestamp": 1772107200,
+                    "upload_date": "20260228",
+                }
+            ],
+        )
+
+    async def fake_scheduler_probe(payload: ChannelProbeRequest):
+        return _probe_result(
+            payload,
+            entries=[
+                {
+                    "id": "newArchive02",
+                    "title": "Scheduler found this first",
+                    "url": "https://www.youtube.com/watch?v=newArchive02",
+                    "duration": 420,
+                    "timestamp": 1772193600,
+                    "upload_date": "20260301",
+                },
+                {
+                    "id": "oldArchive01",
+                    "title": "Already mirrored briefing",
+                    "url": "https://www.youtube.com/watch?v=oldArchive01",
+                    "duration": 300,
+                    "timestamp": 1772107200,
+                    "upload_date": "20260228",
+                },
+            ],
+        )
+
+    monkeypatch.setattr("app.services.channel_registration.probe_channel_source", fake_initial_probe)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        created = await client.post(
+            "/api/channels",
+            json={
+                "value": "https://youtube.com/@wingnut987s4",
+                "auto_download": True,
+                "max_quality": "1080p",
+            },
+        )
+        channel_id = created.json()["channel"]["id"]
+
+        async with AsyncSessionLocal() as session:
+            channel = await session.get(Channel, channel_id)
+            assert channel is not None
+            channel.last_synced_at = datetime.now(UTC) - timedelta(minutes=30)
+            channel.sync_interval_minutes = 5
+            channel.archived_count = 1
+            policy = await session.scalar(select(ChannelPolicy).where(ChannelPolicy.channel_id == channel_id))
+            assert policy is not None
+            policy.auto_download = True
+            policy.worker_paused = True
+            policy.worker_pause_reason = "operator maintenance"
+            old_video = await session.scalar(select(Video).where(Video.channel_id == channel_id))
+            assert old_video is not None
+            session.add(
+                MediaFile(
+                    video_id=old_video.id,
+                    relative_path="channels/@wingnut987s4 [UCmLADXQtWVuzOnOK5TNrWaw]/2026/"
+                    "2026-02-28 - Already mirrored briefing [oldArchive01]/video.mp4",
+                    filename="video.mp4",
+                    size_bytes=120_000_000,
+                    container="mp4",
+                    video_codec="h264",
+                    audio_codec="aac",
+                    fps=30.0,
+                    width=1920,
+                    height=1080,
+                    duration_seconds=300,
+                )
+            )
+            due_before = await find_due_sync_channels(db=session, now=datetime.now(UTC), limit=10)
+            await session.commit()
+
+        monkeypatch.setattr("app.services.channel_sync.probe_channel_source", fake_scheduler_probe)
+        tick = await run_metadata_sync_scheduler_tick()
+        metadata_ticks = await client.get("/api/jobs/sync/scheduler/ticks?limit=5")
+        detail = await client.get(f"/api/channels/{channel_id}")
+
+    assert created.status_code == 200
+    assert [channel.id for channel in due_before] == [channel_id]
+    assert tick.status == "completed"
+    assert tick.due_channel_count == 1
+    assert tick.synced_count == 1
+    assert tick.failed_count == 0
+    assert tick.videos_seen_count == 2
+    assert tick.videos_created_count == 1
+    assert tick.candidates_created_count == 1
+    assert metadata_ticks.status_code == 200
+    assert metadata_ticks.json()[0]["candidates_created_count"] == 1
+    assert detail.status_code == 200
+    assert detail.json()["last_auto_sync_status"] == "completed"
+    assert detail.json()["last_auto_candidates_created"] == 1
+    assert detail.json()["next_sync_due_at"] is not None
+
+    async with AsyncSessionLocal() as session:
+        download_jobs = (await session.execute(select(DownloadJob))).scalars().all()
+        sync_job = await session.scalar(select(SyncJob).order_by(SyncJob.created_at.desc()))
+        videos = (await session.execute(select(Video).order_by(Video.published_at.desc()))).scalars().all()
+        due_after = await find_due_sync_channels(db=session, now=datetime.now(UTC), limit=10)
+        assert len(download_jobs) == 1
+        assert download_jobs[0].status == "candidate"
+        assert download_jobs[0].quality == "1080p"
+        assert sync_job is not None
+        assert sync_job.trigger == "scheduler"
+        assert sync_job.candidates_created == 1
+        assert [video.external_id for video in videos] == ["newArchive02", "oldArchive01"]
+        assert due_after == []
+
+        download_jobs[0].status = "queued"
+        await session.commit()
+        worker_plan = await build_download_worker_plan(db=session, channel_id=channel_id, limit=5)
+
+    assert worker_plan.queued_count == 1
+    assert worker_plan.claimable_count == 0
+    assert worker_plan.locked_reason is not None
+    assert "Worker is paused" in worker_plan.locked_reason
 
 
 def _probe_result(payload: ChannelProbeRequest, entries: list[dict]):

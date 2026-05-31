@@ -18,7 +18,7 @@ from app.schemas.jobs import (
     QueuePreflightPlan,
     SyncJobRead,
 )
-from app.schemas.settings import SchedulerTickRead
+from app.schemas.settings import MetadataSyncTickRead, SchedulerTickRead
 from app.services.channel_sync import list_sync_jobs
 from app.services.download_queue import (
     DownloadJobNotFoundError,
@@ -34,6 +34,7 @@ from app.services.download_worker import (
     run_download_worker_once,
     stop_running_download_job,
 )
+from app.services.metadata_scheduler import list_metadata_sync_ticks
 from app.services.runtime_settings import list_scheduler_ticks
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -104,6 +105,26 @@ async def get_download_scheduler_ticks(
         min_duration_seconds=min_duration_seconds,
         interval_seconds=interval_seconds,
         worker_limit=worker_limit,
+        limit=limit,
+    )
+
+
+@router.get("/sync/scheduler/ticks", response_model=list[MetadataSyncTickRead])
+async def get_metadata_sync_scheduler_ticks(
+    db: DbSession,
+    status: str | None = None,
+    min_duration_seconds: int | None = None,
+    interval_seconds: int | None = None,
+    scheduler_limit: int | None = None,
+    limit: int = 12,
+) -> list[MetadataSyncTickRead]:
+    """Return recent persisted metadata sync scheduler telemetry."""
+    return await list_metadata_sync_ticks(
+        db=db,
+        status=status,
+        min_duration_seconds=min_duration_seconds,
+        interval_seconds=interval_seconds,
+        scheduler_limit=scheduler_limit,
         limit=limit,
     )
 

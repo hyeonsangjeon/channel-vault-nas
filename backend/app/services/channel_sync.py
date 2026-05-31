@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +30,14 @@ async def get_channel_detail(db: AsyncSession, channel_id: int) -> ChannelDetail
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
-    return to_channel_detail(channel)
+    latest_auto_sync = await db.scalar(
+        select(SyncJob)
+        .where(SyncJob.channel_id == channel_id)
+        .where(SyncJob.trigger == "scheduler")
+        .order_by(SyncJob.created_at.desc(), SyncJob.id.desc())
+        .limit(1)
+    )
+    return to_channel_detail(channel, latest_auto_sync=latest_auto_sync)
 
 
 async def list_channel_videos(db: AsyncSession, channel_id: int) -> list[ChannelVideoRead] | None:
@@ -58,6 +65,7 @@ async def run_channel_sync(
     db: AsyncSession,
     channel_id: int,
     payload: ChannelSyncRequest,
+    trigger: str = "manual",
 ) -> ChannelSyncResult:
     """Synchronously run one channel metadata refresh and record its job row."""
     channel = await db.get(Channel, channel_id)
@@ -65,7 +73,7 @@ async def run_channel_sync(
         raise ChannelNotFoundError(f"Channel {channel_id} was not found.")
 
     now = datetime.now(UTC)
-    job = SyncJob(channel_id=channel.id, status="running", started_at=now, created_at=now)
+    job = SyncJob(channel_id=channel.id, trigger=trigger, status="running", started_at=now, created_at=now)
     db.add(job)
     await db.flush()
     await event_bus.publish(
@@ -116,6 +124,7 @@ async def run_channel_sync(
         channel=_to_registered_channel(channel),
         videos_seen=job.videos_seen,
         videos_created=job.videos_created,
+        candidates_created=job.candidates_created,
     )
 
 
@@ -125,7 +134,7 @@ async def list_sync_jobs(db: AsyncSession, limit: int = 50) -> list[SyncJobRead]
     return [to_sync_job(job, channel) for job, channel in result.all()]
 
 
-def to_channel_detail(channel: Channel) -> ChannelDetail:
+def to_channel_detail(channel: Channel, *, latest_auto_sync: SyncJob | None = None) -> ChannelDetail:
     """Convert an ORM channel into the detail API shape."""
     return ChannelDetail(
         id=channel.id,
@@ -141,6 +150,11 @@ def to_channel_detail(channel: Channel) -> ChannelDetail:
         missing_count=channel.missing_count,
         removed_saved_count=channel.removed_saved_count,
         last_synced_at=channel.last_synced_at,
+        sync_interval_minutes=channel.sync_interval_minutes,
+        next_sync_due_at=_next_sync_due_at(channel),
+        last_auto_synced_at=latest_auto_sync.completed_at if latest_auto_sync else None,
+        last_auto_sync_status=latest_auto_sync.status if latest_auto_sync else None,
+        last_auto_candidates_created=latest_auto_sync.candidates_created if latest_auto_sync else 0,
         first_video_published_at=channel.first_video_published_at,
         latest_video_published_at=channel.latest_video_published_at,
         avg_upload_interval_days=channel.avg_upload_interval_days,
@@ -176,11 +190,13 @@ def to_sync_job(job: SyncJob, channel: Channel) -> SyncJobRead:
         id=job.id,
         channel_id=job.channel_id,
         channel_title=channel.title,
+        trigger=job.trigger,
         status=job.status,
         started_at=job.started_at,
         completed_at=job.completed_at,
         videos_seen=job.videos_seen,
         videos_created=job.videos_created,
+        candidates_created=job.candidates_created,
         error_message=job.error_message,
         created_at=job.created_at,
     )
@@ -194,3 +210,15 @@ def _to_registered_channel(channel: Channel):
     from app.services.channel_registration import _to_registered_channel as convert
 
     return convert(channel)
+
+
+def _next_sync_due_at(channel: Channel) -> datetime | None:
+    if channel.status != "active":
+        return None
+    interval = max(1, channel.sync_interval_minutes)
+    if channel.last_synced_at is None:
+        return datetime.now(UTC)
+    base = channel.last_synced_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=UTC)
+    return base + timedelta(minutes=interval)

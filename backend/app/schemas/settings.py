@@ -30,6 +30,21 @@ class SchedulerRuntimeStatus(BaseModel):
     next_tick_at: datetime | None
 
 
+class MetadataSyncSchedulerStatus(BaseModel):
+    """In-process metadata scheduler status for operator review."""
+
+    state: str
+    enabled: bool
+    running: bool
+    interval_seconds: int
+    limit: int
+    last_started_at: datetime | None
+    last_completed_at: datetime | None
+    last_error: str | None
+    last_result_status: str | None
+    next_tick_at: datetime | None
+
+
 class SchedulerTickRead(BaseModel):
     """Persisted scheduler tick log row."""
 
@@ -43,6 +58,30 @@ class SchedulerTickRead(BaseModel):
     started_count: int
     completed_count: int
     failed_count: int
+    skipped_reason: str | None
+    error_message: str | None
+    duration_seconds: int | None
+    next_tick_at: datetime | None
+    started_at: datetime
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class MetadataSyncTickRead(BaseModel):
+    """Persisted metadata scheduler tick log row."""
+
+    id: int
+    trigger: str
+    status: str
+    scheduler_enabled: bool
+    interval_seconds: int
+    limit: int
+    due_channel_count: int
+    synced_count: int
+    failed_count: int
+    videos_seen_count: int
+    videos_created_count: int
+    candidates_created_count: int
     skipped_reason: str | None
     error_message: str | None
     duration_seconds: int | None
@@ -82,6 +121,9 @@ class RuntimeSettingsRead(BaseModel):
     download_worker_scheduler_enabled: bool
     download_worker_scheduler_interval_seconds: int
     download_worker_scheduler_limit: int
+    metadata_sync_scheduler_enabled: bool
+    metadata_sync_scheduler_interval_seconds: int
+    metadata_sync_scheduler_limit: int
     download_dir: str
     metadata_dir: str
     managed_env_file: str
@@ -90,7 +132,9 @@ class RuntimeSettingsRead(BaseModel):
     restart_command: str
     restart_adapter: RuntimeRestartAdapter
     scheduler_status: SchedulerRuntimeStatus
+    metadata_scheduler_status: MetadataSyncSchedulerStatus
     scheduler_ticks: list[SchedulerTickRead]
+    metadata_sync_ticks: list[MetadataSyncTickRead]
     binaries: list[BinaryHealth]
 
 
@@ -101,6 +145,9 @@ class RuntimeSettingsUpdate(BaseModel):
     download_worker_scheduler_enabled: bool | None = None
     download_worker_scheduler_interval_seconds: int | None = Field(default=None, ge=5, le=86_400)
     download_worker_scheduler_limit: int | None = Field(default=None, ge=1, le=20)
+    metadata_sync_scheduler_enabled: bool | None = None
+    metadata_sync_scheduler_interval_seconds: int | None = Field(default=None, ge=30, le=86_400)
+    metadata_sync_scheduler_limit: int | None = Field(default=None, ge=1, le=20)
     ytdlp_binary: str | None = Field(default=None, min_length=1, max_length=500)
     ffprobe_binary: str | None = Field(default=None, min_length=1, max_length=500)
 
