@@ -31,6 +31,7 @@ from app.services.download_worker import (
     run_download_worker_once,
     stop_running_download_job,
 )
+from app.services.runtime_settings import list_scheduler_ticks
 
 
 @pytest.mark.asyncio
@@ -440,6 +441,8 @@ async def test_worker_scheduler_tick_persists_locked_skip(monkeypatch: pytest.Mo
     await _clear_db()
     monkeypatch.setattr(settings, "download_worker_enabled", False)
     monkeypatch.setattr(settings, "download_worker_scheduler_enabled", True)
+    monkeypatch.setattr(settings, "download_worker_scheduler_interval_seconds", 45)
+    monkeypatch.setattr(settings, "download_worker_scheduler_limit", 2)
 
     result = await run_download_worker_scheduler_tick()
 
@@ -453,6 +456,21 @@ async def test_worker_scheduler_tick_persists_locked_skip(monkeypatch: pytest.Mo
     assert scheduler_tick.status == "skipped"
     assert scheduler_tick.skipped_reason == "download worker disabled"
     assert scheduler_tick.worker_enabled is False
+    async with AsyncSessionLocal() as session:
+        filtered_ticks = await list_scheduler_ticks(
+            db=session,
+            status="skipped",
+            interval_seconds=45,
+            worker_limit=2,
+            limit=5,
+        )
+        completed_ticks = await list_scheduler_ticks(db=session, status="completed", limit=5)
+
+    assert filtered_ticks
+    assert filtered_ticks[0].status == "skipped"
+    assert filtered_ticks[0].interval_seconds == 45
+    assert filtered_ticks[0].limit == 2
+    assert completed_ticks == []
 
 
 async def _create_queued_worker_job(session) -> tuple[Channel, Video, DownloadJob]:
