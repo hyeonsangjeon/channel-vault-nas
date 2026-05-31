@@ -261,6 +261,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
 
   await page.getByRole("button", { name: "프리플라이트" }).click();
   await expect(page.locator(".command-lines code").filter({ hasText: "yt-dlp" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "명령 복사" }).click();
+  await expect(page.getByRole("button", { name: "복사됨" })).toBeVisible();
   await expect(page.locator(".preflight-pill.ready").first()).toBeVisible();
   await expect(page.getByLabel("프리플라이트 런웨이")).toContainText("DB만 무장");
   await expect(page.getByLabel("선택 작업 요약")).toContainText("선택 용량");

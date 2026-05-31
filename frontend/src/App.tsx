@@ -342,6 +342,7 @@ function App() {
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartStatus, setRuntimeRestartStatus] = useState<"idle" | "requesting" | "requested" | "manual" | "error">("idle");
   const [runtimeRestartMessage, setRuntimeRestartMessage] = useState("");
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
@@ -642,6 +643,7 @@ function App() {
   const launchEstimateLabel = selectedJobs.length ? selectedBytesLabel : launchableBytesLabel;
   const preflightReadyCount = preflightPlan?.ready_job_ids.length ?? 0;
   const preflightReviewCount = preflightPlan?.review_job_ids.length ?? 0;
+  const launchCommandManifest = useMemo(() => preflightPlan?.command_preview.join("\n") ?? "", [preflightPlan]);
   const launchRunwayFreeLabel = storageVolume?.free_label ?? "0 MB";
   const allVisibleJobsSelected =
     visibleActionableJobs.length > 0 && visibleActionableJobs.every((job) => selectedJobIds.includes(job.id));
@@ -1394,6 +1396,17 @@ function App() {
     } catch {
       setRuntimeGuideCopyStatus("error");
       window.setTimeout(() => setRuntimeGuideCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleCopyLaunchCommands() {
+    try {
+      await copyTextToClipboard(launchCommandManifest);
+      setLaunchCommandCopyStatus("copied");
+      window.setTimeout(() => setLaunchCommandCopyStatus("idle"), 1800);
+    } catch {
+      setLaunchCommandCopyStatus("error");
+      window.setTimeout(() => setLaunchCommandCopyStatus("idle"), 2200);
     }
   }
 
@@ -2713,9 +2726,23 @@ function App() {
                 </div>
 
                 <div className="command-preview">
-                  <div className="section-title">
-                    <Rocket size={16} />
-                    <strong>{t("launch.commandPreview")}</strong>
+                  <div className="section-title command-preview-head">
+                    <span>
+                      <Rocket size={16} />
+                      <strong>{t("launch.commandPreview")}</strong>
+                    </span>
+                    <button
+                      disabled={!launchCommandManifest}
+                      onClick={() => void handleCopyLaunchCommands()}
+                      type="button"
+                    >
+                      <ClipboardList size={13} />
+                      {launchCommandCopyStatus === "copied"
+                        ? t("launch.commandCopied")
+                        : launchCommandCopyStatus === "error"
+                          ? t("launch.commandCopyError")
+                          : t("launch.commandCopy")}
+                    </button>
                   </div>
                   <div className="command-lines">
                     {(preflightPlan?.command_preview.length ? preflightPlan.command_preview : [t("launch.commandEmpty")]).map((line) => (
