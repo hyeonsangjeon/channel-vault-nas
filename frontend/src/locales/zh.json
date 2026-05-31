@@ -441,6 +441,7 @@
   "runtime.ticks.copyJson": "Copy JSON",
   "runtime.ticks.copyCopied": "JSON copied",
   "runtime.ticks.copyError": "Copy failed",
+  "runtime.ticks.resetFilters": "Reset filters",
   "runtime.ticks.slow": "slow",
   "runtime.ticks.slowOnly": "Slow only",
   "runtime.ticks.intervalFilter": "interval seconds",
