@@ -2639,6 +2639,51 @@ button {
   background: rgba(245, 158, 11, 0.08);
 }
 
+.launch-selection-panel {
+  min-width: 0;
+  border: 1px solid rgba(52, 211, 153, 0.14);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.08), rgba(56, 189, 248, 0.055)),
+    rgba(5, 8, 14, 0.54);
+}
+
+.launch-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.launch-selection-grid article {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.launch-selection-grid span {
+  display: block;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launch-selection-grid strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .command-preview {
   min-width: 0;
   border: 1px solid rgba(56, 189, 248, 0.18);
@@ -5340,6 +5385,7 @@ button {
   .runtime-guide-state,
   .launch-grid,
   .launch-preflight-runway,
+  .launch-selection-grid,
   .library-summary,
   .library-shelf,
   .rescan-result,

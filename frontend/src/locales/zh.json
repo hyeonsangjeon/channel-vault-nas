@@ -277,6 +277,8 @@
   "launch.runway.free": "NAS 可用",
   "launch.runway.mode": "模式",
   "launch.runway.dbOnly": "仅 DB",
+  "launch.selection.title": "所选任务摘要",
+  "launch.selection.bytes": "所选容量",
   "worker.title": "Worker 控制室",
   "worker.locked": "已锁定",
   "worker.enabled": "已武装",

@@ -617,6 +617,9 @@ function App() {
     [actionableQueueJobs, selectedJobIds],
   );
   const selectedRetryableCount = selectedJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length;
+  const selectedCandidateCount = selectedJobs.filter((job) => job.status === "candidate").length;
+  const selectedQueuedCount = selectedJobs.filter((job) => job.status === "queued").length;
+  const selectedReviewCount = selectedJobs.filter((job) => job.preflight_status === "review").length;
   const selectedBytesLabel = useMemo(
     () => formatBytes(selectedJobs.reduce((sum, job) => sum + (job.estimated_bytes ?? 0), 0)),
     [selectedJobs],
@@ -2626,6 +2629,39 @@ function App() {
               </div>
 
               <div className="launch-side-stack">
+                <div className="launch-selection-panel" aria-label={t("launch.selection.title")}>
+                  <div className="section-title">
+                    <CheckCircle2 size={16} />
+                    <strong>{t("launch.selection.title")}</strong>
+                  </div>
+                  <div className="launch-selection-grid">
+                    <article>
+                      <span>{t("launch.selected")}</span>
+                      <strong>{selectedJobIds.length}</strong>
+                    </article>
+                    <article>
+                      <span>{t("launch.selection.bytes")}</span>
+                      <strong>{selectedBytesLabel}</strong>
+                    </article>
+                    <article>
+                      <span>{t("launch.candidates")}</span>
+                      <strong>{selectedCandidateCount}</strong>
+                    </article>
+                    <article>
+                      <span>{t("launch.queued")}</span>
+                      <strong>{selectedQueuedCount}</strong>
+                    </article>
+                    <article>
+                      <span>{t("launch.signal.retry")}</span>
+                      <strong>{selectedRetryableCount}</strong>
+                    </article>
+                    <article>
+                      <span>{t("launch.signal.review")}</span>
+                      <strong>{selectedReviewCount}</strong>
+                    </article>
+                  </div>
+                </div>
+
                 <div className="command-preview">
                   <div className="section-title">
                     <Rocket size={16} />
