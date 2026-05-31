@@ -579,6 +579,9 @@ function App() {
     [launchableJobs],
   );
   const launchEstimateLabel = selectedJobs.length ? selectedBytesLabel : launchableBytesLabel;
+  const preflightReadyCount = preflightPlan?.ready_job_ids.length ?? 0;
+  const preflightReviewCount = preflightPlan ? Math.max(0, preflightPlan.job_count - preflightReadyCount) : 0;
+  const launchRunwayFreeLabel = storageVolume?.free_label ?? "0 MB";
   const allVisibleJobsSelected =
     visibleActionableJobs.length > 0 && visibleActionableJobs.every((job) => selectedJobIds.includes(job.id));
   const visibleLibraryItems = useMemo(() => {
@@ -2465,6 +2468,32 @@ function App() {
                     {warning}
                   </span>
                 ))}
+              </div>
+            ) : null}
+
+            {preflightPlan ? (
+              <div className="launch-preflight-runway" aria-label={t("launch.runway.title")}>
+                <div>
+                  <ClipboardList size={15} />
+                  <span>{t("launch.runway.title")}</span>
+                  <strong>{preflightPlan.estimated_label}</strong>
+                </div>
+                <article>
+                  <span>{t("launch.runway.ready")}</span>
+                  <strong>{preflightReadyCount}</strong>
+                </article>
+                <article>
+                  <span>{t("launch.runway.review")}</span>
+                  <strong>{preflightReviewCount}</strong>
+                </article>
+                <article>
+                  <span>{t("launch.runway.free")}</span>
+                  <strong>{launchRunwayFreeLabel}</strong>
+                </article>
+                <article>
+                  <span>{t("launch.runway.mode")}</span>
+                  <strong>{t("launch.runway.dbOnly")}</strong>
+                </article>
               </div>
             ) : null}
 
