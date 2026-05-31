@@ -650,6 +650,12 @@ function App() {
   const metadataSchedulerLastTickLabel = metadataSchedulerStatus
     ? metadataSchedulerLastTick(metadataSchedulerStatus, t)
     : t("runtime.checking");
+  const metadataSchedulerDueLabel = metadataSchedulerStatus
+    ? t("runtime.metadataScheduler.due").replace("{count}", String(metadataSchedulerStatus.due_channel_count))
+    : t("runtime.checking");
+  const metadataSchedulerNextDueLabel = metadataSchedulerStatus
+    ? formatDateTimeLabel(metadataSchedulerStatus.next_due_at, t("runtime.scheduler.none"))
+    : t("runtime.checking");
   const runtimePendingOverrides = runtimeSettings?.pending_overrides.filter((item) => item.pending_restart) ?? [];
   const runtimeDraftIntervalNumber = Number(runtimeDraft.schedulerIntervalSeconds);
   const runtimeDraftLimitNumber = Number(runtimeDraft.schedulerLimit);
@@ -1896,6 +1902,13 @@ function App() {
                 <div className="runtime-tick-row">
                   <em>{t("runtime.scheduler.next")} · {metadataSchedulerNextTickLabel}</em>
                   <em>{t("runtime.scheduler.last")} · {metadataSchedulerLastTickLabel}</em>
+                </div>
+                <div className="metadata-due-strip" aria-label={t("runtime.metadataScheduler.dueLabel")}>
+                  <span>
+                    <Zap size={12} />
+                    {metadataSchedulerDueLabel}
+                  </span>
+                  <em>{t("runtime.metadataScheduler.nextDue")} · {metadataSchedulerNextDueLabel}</em>
                 </div>
                 <button
                   className="runtime-inline-action"
@@ -3279,6 +3292,7 @@ function App() {
                 <small>{metadataSchedulerDetailLabel}</small>
                 <em>{t("runtime.scheduler.next")} · {metadataSchedulerNextTickLabel}</em>
                 <em>{t("runtime.scheduler.last")} · {metadataSchedulerLastTickLabel}</em>
+                <em>{metadataSchedulerDueLabel}</em>
               </article>
               <article>
                 <Rocket size={16} />

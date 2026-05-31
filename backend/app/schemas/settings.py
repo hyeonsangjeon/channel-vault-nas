@@ -38,6 +38,8 @@ class MetadataSyncSchedulerStatus(BaseModel):
     running: bool
     interval_seconds: int
     limit: int
+    due_channel_count: int = 0
+    next_due_at: datetime | None = None
     last_started_at: datetime | None
     last_completed_at: datetime | None
     last_error: str | None

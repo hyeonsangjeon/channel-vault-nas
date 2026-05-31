@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shlex
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from shutil import which
 
@@ -14,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BACKEND_ROOT, settings
-from app.models.archive import DownloadSchedulerTick
+from app.models.archive import Channel, DownloadSchedulerTick
 from app.schemas.settings import (
     BinaryHealth,
     RuntimeEnvOverride,
@@ -74,6 +75,13 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
                 "next_tick_at": metadata_scheduler_status.next_tick_at or latest_metadata_tick.next_tick_at,
             }
         )
+    due_channel_count, next_due_at = await _metadata_scheduler_due_summary(db)
+    metadata_scheduler_status = metadata_scheduler_status.model_copy(
+        update={
+            "due_channel_count": due_channel_count,
+            "next_due_at": next_due_at,
+        }
+    )
 
     pending_overrides = _pending_overrides()
     return RuntimeSettingsRead(
@@ -250,6 +258,30 @@ async def request_runtime_restart(payload: RuntimeRestartRequest) -> RuntimeRest
         stdout=_trim_command_output(stdout.decode(errors="replace")),
         stderr=_trim_command_output(stderr.decode(errors="replace")),
     )
+
+
+async def _metadata_scheduler_due_summary(db: AsyncSession) -> tuple[int, datetime | None]:
+    """Return due-channel count and the next channel-level due time."""
+    now = datetime.now(UTC)
+    rows = (await db.execute(select(Channel).where(Channel.status == "active"))).scalars().all()
+    due_count = 0
+    next_due_at: datetime | None = None
+    for channel in rows:
+        due_at = _channel_next_sync_due_at(channel, now)
+        if due_at <= now:
+            due_count += 1
+        if next_due_at is None or due_at < next_due_at:
+            next_due_at = due_at
+    return due_count, next_due_at
+
+
+def _channel_next_sync_due_at(channel: Channel, now: datetime) -> datetime:
+    if channel.last_synced_at is None:
+        return now
+    base = channel.last_synced_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=UTC)
+    return base + timedelta(minutes=max(1, channel.sync_interval_minutes))
 
 
 async def apply_runtime_settings(
