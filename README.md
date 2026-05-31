@@ -173,7 +173,11 @@ recently failed, and whether local `yt-dlp` and `ffprobe` commands resolve on
 the NAS host. The same surface shows next/last scheduler tick labels for quick
 operator debugging. Its Env guide drawer converts that live snapshot into the
 exact `.env` lines needed to arm the worker/scheduler and override `yt-dlp` or
-`ffprobe` binary paths, then lets the operator copy the manifest in one click.
+`ffprobe` binary paths, lets the operator save those non-secret overrides into
+the managed `.env.runtime` file, and marks the backend restart requirement
+until the running process matches the saved env. The drawer also shows the
+recent persistent scheduler tick log from SQLite; each scheduled pass records
+whether it completed, failed, or was skipped because the worker remained locked.
 
 The selected channel also exposes a Vault Library shelf backed by SQLite:
 videos, indexed media files, queue state, media byte totals, and sidecar

@@ -8,6 +8,7 @@ const e2eRoot = process.env.CVN_E2E_ROOT ?? join(tmpdir(), "channel-vault-nas-e2
 const databasePath = join(e2eRoot, "metadata", "app.db");
 const archiveDir = join(e2eRoot, "archive");
 const metadataDir = join(e2eRoot, "metadata");
+const runtimeEnvFile = join(e2eRoot, "runtime.env");
 const backendUrl = `http://127.0.0.1:${backendPort}`;
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const pythonBin = process.env.CVN_E2E_PYTHON ?? "../backend/.venv/bin/python";
@@ -18,11 +19,13 @@ function sh(value: string) {
 
 const backendCommand = [
   `PYTHON_BIN=${sh(pythonBin)}`,
+  `rm -f ${sh(runtimeEnvFile)}`,
   `CVN_E2E_DB_PATH=${sh(databasePath)} CVN_E2E_ARCHIVE_DIR=${sh(archiveDir)} "$PYTHON_BIN" ../backend/scripts/seed_e2e.py`,
   `cd ../backend && ${[
     `CVN_DATABASE_URL=${sh(`sqlite+aiosqlite:///${databasePath}`)}`,
     `CVN_DOWNLOAD_DIR=${sh(archiveDir)}`,
     `CVN_METADATA_DIR=${sh(metadataDir)}`,
+    `CVN_RUNTIME_ENV_FILE=${sh(runtimeEnvFile)}`,
     "CVN_DB_BACKUP_ON_STARTUP=false",
     "CVN_DB_MIGRATE_ON_STARTUP=false",
     `CVN_CORS_ORIGINS=${sh(JSON.stringify([frontendUrl, `http://localhost:${frontendPort}`]))}`,

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class BinaryHealth(BaseModel):
@@ -30,6 +30,37 @@ class SchedulerRuntimeStatus(BaseModel):
     next_tick_at: datetime | None
 
 
+class SchedulerTickRead(BaseModel):
+    """Persisted scheduler tick log row."""
+
+    id: int
+    trigger: str
+    status: str
+    scheduler_enabled: bool
+    worker_enabled: bool
+    interval_seconds: int
+    limit: int
+    started_count: int
+    completed_count: int
+    failed_count: int
+    skipped_reason: str | None
+    error_message: str | None
+    duration_seconds: int | None
+    next_tick_at: datetime | None
+    started_at: datetime
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class RuntimeEnvOverride(BaseModel):
+    """Managed runtime env override persisted for the next restart."""
+
+    key: str
+    value: str
+    active_value: str | None
+    pending_restart: bool
+
+
 class RuntimeSettingsRead(BaseModel):
     """Operator-facing runtime settings snapshot."""
 
@@ -39,5 +70,43 @@ class RuntimeSettingsRead(BaseModel):
     download_worker_scheduler_limit: int
     download_dir: str
     metadata_dir: str
+    managed_env_file: str
+    pending_restart: bool
+    pending_overrides: list[RuntimeEnvOverride]
+    restart_command: str
     scheduler_status: SchedulerRuntimeStatus
+    scheduler_ticks: list[SchedulerTickRead]
     binaries: list[BinaryHealth]
+
+
+class RuntimeSettingsUpdate(BaseModel):
+    """Editable non-secret runtime settings written to the managed env file."""
+
+    download_worker_enabled: bool | None = None
+    download_worker_scheduler_enabled: bool | None = None
+    download_worker_scheduler_interval_seconds: int | None = Field(default=None, ge=5, le=86_400)
+    download_worker_scheduler_limit: int | None = Field(default=None, ge=1, le=20)
+    ytdlp_binary: str | None = Field(default=None, min_length=1, max_length=500)
+    ffprobe_binary: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @field_validator("ytdlp_binary", "ffprobe_binary")
+    @classmethod
+    def clean_binary_command(cls, value: str | None) -> str | None:
+        """Reject values that cannot safely be represented in a dotenv line."""
+        if value is None:
+            return value
+        cleaned = value.strip()
+        if not cleaned or "\n" in cleaned or "\r" in cleaned:
+            raise ValueError("binary command must be a single non-empty line")
+        return cleaned
+
+
+class RuntimeSettingsApplyResult(BaseModel):
+    """Result of writing runtime env overrides."""
+
+    applied: bool
+    restart_required: bool
+    changed_keys: list[str]
+    managed_env_file: str
+    restart_command: str
+    runtime: RuntimeSettingsRead

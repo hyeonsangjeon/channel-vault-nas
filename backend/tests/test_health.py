@@ -10,6 +10,7 @@ from app.models.archive import (
     Channel,
     ChannelPolicy,
     DownloadJob,
+    DownloadSchedulerTick,
     DownloadWorkerRun,
     MediaFile,
     SyncJob,
@@ -35,6 +36,7 @@ async def test_dashboard_snapshot_endpoint() -> None:
     await init_db()
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadSchedulerTick))
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(SyncJob))
         await session.execute(delete(ChannelPolicy))
@@ -59,6 +61,11 @@ async def test_dashboard_snapshot_endpoint() -> None:
 
 @pytest.mark.asyncio
 async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadSchedulerTick))
+        await session.commit()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/settings/runtime")
@@ -70,8 +77,41 @@ async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> N
     assert data["download_worker_scheduler_interval_seconds"] >= 5
     assert data["scheduler_status"]["state"] == "off"
     assert data["scheduler_status"]["worker_enabled"] is False
+    assert data["pending_restart"] is False
+    assert data["scheduler_ticks"] == []
     assert {binary["name"] for binary in data["binaries"]} == {"yt-dlp", "ffprobe"}
     assert "secret" not in data
+
+
+@pytest.mark.asyncio
+async def test_runtime_settings_apply_writes_managed_env(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    monkeypatch.setattr("app.config.settings.runtime_env_file", str(tmp_path / ".env.runtime"))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.patch(
+            "/api/settings/runtime",
+            json={
+                "download_worker_enabled": True,
+                "download_worker_scheduler_interval_seconds": 120,
+                "ytdlp_binary": "yt-dlp",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["applied"] is True
+    assert data["restart_required"] is True
+    assert "CVN_DOWNLOAD_WORKER_ENABLED" in data["changed_keys"]
+    env_text = (tmp_path / ".env.runtime").read_text(encoding="utf-8")
+    assert "CVN_DOWNLOAD_WORKER_ENABLED=true" in env_text
+    assert "CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS=120" in env_text
+    assert data["runtime"]["pending_restart"] is True
+    assert any(item["key"] == "CVN_DOWNLOAD_WORKER_ENABLED" for item in data["runtime"]["pending_overrides"])
 
 
 @pytest.mark.asyncio

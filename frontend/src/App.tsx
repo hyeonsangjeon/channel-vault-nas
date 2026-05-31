@@ -66,6 +66,7 @@ import {
   stopDownloadJob,
   syncChannel,
   updateChannelPolicy,
+  updateRuntimeSettings,
   WS_EVENTS_URL,
   type ArchiveEvent,
   type ChannelPolicy,
@@ -85,6 +86,7 @@ import {
   type QueuePreflightPlan,
   type RescanApplyResult,
   type RuntimeSettings,
+  type RuntimeSettingsUpdate,
 } from "./api/channels";
 import { ChannelConstellation } from "./components/ChannelConstellation";
 import { MetricTile } from "./components/MetricTile";
@@ -196,6 +198,15 @@ type TimelineVideo = {
   info_json_path: string | null;
 };
 
+type RuntimeDraft = {
+  downloadWorkerEnabled: boolean;
+  schedulerEnabled: boolean;
+  schedulerIntervalSeconds: string;
+  schedulerLimit: string;
+  ytdlpBinary: string;
+  ffprobeBinary: string;
+};
+
 function App() {
   const { language, setLanguage, t } = useI18n();
   const [sourceValue, setSourceValue] = useState("https://www.youtube.com/@wingnut987s4");
@@ -237,6 +248,10 @@ function App() {
   const [workerHistoryFilter, setWorkerHistoryFilter] = useState<WorkerHistoryFilter>("all");
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
+  const [runtimeApplyMessage, setRuntimeApplyMessage] = useState("");
+  const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft>(() => defaultRuntimeDraft());
   const [runtimeClockNow, setRuntimeClockNow] = useState(() => Date.now());
 
   const activeProbe = registration?.probe ?? probe;
@@ -464,6 +479,17 @@ function App() {
   const schedulerDetailLabel = schedulerStatus ? schedulerStateDetail(schedulerStatus, t) : t("runtime.checking");
   const schedulerNextTickLabel = schedulerStatus ? schedulerNextTick(schedulerStatus, t, runtimeClockNow) : t("runtime.checking");
   const schedulerLastTickLabel = schedulerStatus ? schedulerLastTick(schedulerStatus, t) : t("runtime.checking");
+  const runtimePendingOverrides = runtimeSettings?.pending_overrides.filter((item) => item.pending_restart) ?? [];
+  const runtimeDraftIntervalNumber = Number(runtimeDraft.schedulerIntervalSeconds);
+  const runtimeDraftLimitNumber = Number(runtimeDraft.schedulerLimit);
+  const runtimeDraftValid =
+    Number.isInteger(runtimeDraftIntervalNumber) &&
+    runtimeDraftIntervalNumber >= 5 &&
+    Number.isInteger(runtimeDraftLimitNumber) &&
+    runtimeDraftLimitNumber >= 1 &&
+    runtimeDraftLimitNumber <= 20 &&
+    runtimeDraft.ytdlpBinary.trim().length > 0 &&
+    runtimeDraft.ffprobeBinary.trim().length > 0;
   const binaryStateLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
     !binary ? t("runtime.checking") : binary.available ? t("runtime.available") : t("runtime.missing");
   const binaryDetailLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
@@ -473,41 +499,41 @@ function App() {
       {
         key: "CVN_DOWNLOAD_WORKER_ENABLED",
         value: String(runtimeSettings?.download_worker_enabled ?? false),
-        recommended: "true",
-        tone: runtimeSettings?.download_worker_enabled ? "good" : "warn",
+        recommended: String(runtimeDraft.downloadWorkerEnabled),
+        tone: runtimeDraft.downloadWorkerEnabled ? "good" : "warn",
       },
       {
         key: "CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED",
         value: String(runtimeSettings?.download_worker_scheduler_enabled ?? false),
-        recommended: "true",
-        tone: runtimeSettings?.download_worker_scheduler_enabled ? "good" : "warn",
+        recommended: String(runtimeDraft.schedulerEnabled),
+        tone: runtimeDraft.schedulerEnabled ? "good" : "warn",
       },
       {
         key: "CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS",
         value: String(runtimeSettings?.download_worker_scheduler_interval_seconds ?? 300),
-        recommended: "300",
+        recommended: runtimeDraft.schedulerIntervalSeconds || "300",
         tone: "idle",
       },
       {
         key: "CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT",
         value: String(runtimeSettings?.download_worker_scheduler_limit ?? 1),
-        recommended: "1",
+        recommended: runtimeDraft.schedulerLimit || "1",
         tone: "idle",
       },
       {
         key: "CVN_YTDLP_BINARY",
         value: ytdlpBinary?.command ?? "yt-dlp",
-        recommended: "yt-dlp",
+        recommended: runtimeDraft.ytdlpBinary || "yt-dlp",
         tone: ytdlpBinary?.available ? "good" : "warn",
       },
       {
         key: "CVN_FFPROBE_BINARY",
         value: ffprobeBinary?.command ?? "ffprobe",
-        recommended: "ffprobe",
+        recommended: runtimeDraft.ffprobeBinary || "ffprobe",
         tone: ffprobeBinary?.available ? "good" : "warn",
       },
     ],
-    [ffprobeBinary, runtimeSettings, ytdlpBinary],
+    [ffprobeBinary, runtimeDraft, runtimeSettings, ytdlpBinary],
   );
   const runtimeEnvManifest = useMemo(
     () => runtimeEnvRows.map((row) => `${row.key}=${row.recommended}`).join("\n"),
@@ -528,6 +554,11 @@ function App() {
     const timer = window.setInterval(() => setRuntimeClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [runtimeGuideOpen, schedulerStatus?.next_tick_at]);
+
+  useEffect(() => {
+    if (!runtimeSettings) return;
+    setRuntimeDraft(runtimeDraftFromSettings(runtimeSettings));
+  }, [runtimeSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -958,10 +989,10 @@ function App() {
     }
   }
 
-  async function handleCopyRuntimeEnv() {
+  async function copyTextToClipboard(value: string) {
     const copyWithField = () => {
       const field = document.createElement("textarea");
-      field.value = runtimeEnvManifest;
+      field.value = value;
       field.setAttribute("readonly", "true");
       field.style.position = "fixed";
       field.style.opacity = "0";
@@ -977,18 +1008,69 @@ function App() {
     try {
       if (navigator.clipboard?.writeText) {
         try {
-          await navigator.clipboard.writeText(runtimeEnvManifest);
+          await navigator.clipboard.writeText(value);
         } catch {
           copyWithField();
         }
       } else {
         copyWithField();
       }
+    } catch {
+      throw new Error("Clipboard copy failed");
+    }
+  }
+
+  async function handleCopyRuntimeEnv() {
+    try {
+      await copyTextToClipboard(runtimeEnvManifest);
       setRuntimeGuideCopyStatus("copied");
       window.setTimeout(() => setRuntimeGuideCopyStatus("idle"), 1800);
     } catch {
       setRuntimeGuideCopyStatus("error");
       window.setTimeout(() => setRuntimeGuideCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleCopyRestartCommand() {
+    try {
+      await copyTextToClipboard(runtimeSettings?.restart_command ?? "");
+      setRuntimeRestartCopyStatus("copied");
+      window.setTimeout(() => setRuntimeRestartCopyStatus("idle"), 1800);
+    } catch {
+      setRuntimeRestartCopyStatus("error");
+      window.setTimeout(() => setRuntimeRestartCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleApplyRuntimeSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!runtimeDraftValid) {
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(t("runtime.apply.invalid"));
+      return;
+    }
+    setRuntimeApplyStatus("applying");
+    setRuntimeApplyMessage("");
+    const payload: RuntimeSettingsUpdate = {
+      download_worker_enabled: runtimeDraft.downloadWorkerEnabled,
+      download_worker_scheduler_enabled: runtimeDraft.schedulerEnabled,
+      download_worker_scheduler_interval_seconds: runtimeDraftIntervalNumber,
+      download_worker_scheduler_limit: runtimeDraftLimitNumber,
+      ytdlp_binary: runtimeDraft.ytdlpBinary.trim(),
+      ffprobe_binary: runtimeDraft.ffprobeBinary.trim(),
+    };
+    try {
+      const result = await updateRuntimeSettings(payload);
+      setRuntimeSettings(result.runtime);
+      setRuntimeApplyStatus("saved");
+      setRuntimeApplyMessage(
+        result.restart_required
+          ? t("runtime.apply.savedRestart").replace("{count}", String(result.changed_keys.length))
+          : t("runtime.apply.savedClean").replace("{count}", String(result.changed_keys.length)),
+      );
+    } catch (error) {
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(error instanceof Error ? error.message : t("runtime.apply.error"));
     }
   }
 
@@ -1198,6 +1280,9 @@ function App() {
                 className="runtime-guide-button"
                 onClick={() => {
                   setRuntimeGuideCopyStatus("idle");
+                  setRuntimeRestartCopyStatus("idle");
+                  setRuntimeApplyStatus("idle");
+                  setRuntimeApplyMessage("");
                   setRuntimeGuideOpen(true);
                 }}
                 type="button"
@@ -1205,9 +1290,13 @@ function App() {
                 <FileText size={14} />
                 {t("runtime.guide.open")}
               </button>
-              <span className={`runtime-heartbeat ${runtimeSettings ? "good" : "warn"}`}>
+              <span className={`runtime-heartbeat ${runtimeSettings?.pending_restart ? "warn" : runtimeSettings ? "good" : "warn"}`}>
                 <span />
-                {runtimeSettings ? t("runtime.snapshot") : t("runtime.checking")}
+                {runtimeSettings?.pending_restart
+                  ? t("runtime.restart.pending")
+                  : runtimeSettings
+                    ? t("runtime.snapshot")
+                    : t("runtime.checking")}
               </span>
             </div>
           </div>
@@ -2171,6 +2260,23 @@ function App() {
               </div>
             ) : null}
 
+            <div className={`runtime-restart-banner ${runtimeSettings?.pending_restart ? "warn" : "good"}`}>
+              {runtimeSettings?.pending_restart ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}
+              <div>
+                <strong>{runtimeSettings?.pending_restart ? t("runtime.restart.pending") : t("runtime.restart.clean")}</strong>
+                <span>{runtimeSettings?.managed_env_file ?? ".env.runtime"}</span>
+              </div>
+              {runtimeSettings?.pending_restart ? (
+                <button className="runtime-copy-button" onClick={() => void handleCopyRestartCommand()} type="button">
+                  <ClipboardList size={14} />
+                  {runtimeRestartCopyStatus === "copied" ? t("runtime.restart.copied") : t("runtime.restart.copy")}
+                </button>
+              ) : null}
+            </div>
+            {runtimeRestartCopyStatus === "error" ? (
+              <div className="runtime-copy-status error">{t("runtime.restart.copyError")}</div>
+            ) : null}
+
             <div className="runtime-guide-state">
               <article>
                 <Clock3 size={16} />
@@ -2187,6 +2293,84 @@ function App() {
                 <small>{runtimeSettings?.download_worker_enabled ? t("runtime.worker.liveDetail") : t("runtime.worker.lockedDetail")}</small>
               </article>
             </div>
+
+            <form className="runtime-apply-panel" onSubmit={(event) => void handleApplyRuntimeSettings(event)}>
+              <div className="runtime-apply-heading">
+                <div>
+                  <strong>{t("runtime.apply.title")}</strong>
+                  <span>{t("runtime.apply.subtitle")}</span>
+                </div>
+                <button className="runtime-apply-button" disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid} type="submit">
+                  <Settings size={14} />
+                  {runtimeApplyStatus === "applying" ? t("runtime.apply.saving") : t("runtime.apply.save")}
+                </button>
+              </div>
+              <div className="runtime-switch-grid">
+                <label className="runtime-switch-row">
+                  <span>{t("runtime.apply.worker")}</span>
+                  <input
+                    checked={runtimeDraft.downloadWorkerEnabled}
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, downloadWorkerEnabled: event.target.checked }))}
+                    type="checkbox"
+                  />
+                </label>
+                <label className="runtime-switch-row">
+                  <span>{t("runtime.apply.scheduler")}</span>
+                  <input
+                    checked={runtimeDraft.schedulerEnabled}
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, schedulerEnabled: event.target.checked }))}
+                    type="checkbox"
+                  />
+                </label>
+              </div>
+              <div className="runtime-field-grid">
+                <label>
+                  <span>{t("runtime.apply.interval")}</span>
+                  <input
+                    min={5}
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, schedulerIntervalSeconds: event.target.value }))}
+                    type="number"
+                    value={runtimeDraft.schedulerIntervalSeconds}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.apply.limit")}</span>
+                  <input
+                    max={20}
+                    min={1}
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: event.target.value }))}
+                    type="number"
+                    value={runtimeDraft.schedulerLimit}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.apply.ytdlp")}</span>
+                  <input
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, ytdlpBinary: event.target.value }))}
+                    value={runtimeDraft.ytdlpBinary}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.apply.ffprobe")}</span>
+                  <input
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, ffprobeBinary: event.target.value }))}
+                    value={runtimeDraft.ffprobeBinary}
+                  />
+                </label>
+              </div>
+              {runtimePendingOverrides.length ? (
+                <div className="runtime-pending-list">
+                  {runtimePendingOverrides.map((item) => (
+                    <span key={item.key}>{item.key}</span>
+                  ))}
+                </div>
+              ) : null}
+              {runtimeApplyMessage ? (
+                <div className={`runtime-copy-status ${runtimeApplyStatus === "error" ? "error" : "copied"}`}>
+                  {runtimeApplyMessage}
+                </div>
+              ) : null}
+            </form>
 
             <div className="runtime-env-list">
               {runtimeEnvRows.map((row) => (
@@ -2210,6 +2394,34 @@ function App() {
                   </div>
                 </article>
               ))}
+            </div>
+
+            <div className="scheduler-tick-log">
+              <div className="runtime-apply-heading">
+                <div>
+                  <strong>{t("runtime.ticks.title")}</strong>
+                  <span>{t("runtime.ticks.subtitle")}</span>
+                </div>
+              </div>
+              {(runtimeSettings?.scheduler_ticks ?? []).length ? (
+                <div className="scheduler-tick-list">
+                  {runtimeSettings?.scheduler_ticks.map((tick) => (
+                    <article className={tick.status} key={tick.id}>
+                      <span>{schedulerTickStatusLabel(tick.status, t)}</span>
+                      <strong>
+                        {tick.started_count}/{tick.completed_count}/{tick.failed_count}
+                      </strong>
+                      <small>
+                        {formatEventTime(tick.created_at)}
+                        {tick.duration_seconds !== null ? ` · ${formatDuration(tick.duration_seconds)}` : ""}
+                      </small>
+                      {tick.skipped_reason ?? tick.error_message ? <em>{tick.skipped_reason ?? tick.error_message}</em> : null}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-copy">{t("runtime.ticks.empty")}</p>
+              )}
             </div>
           </aside>
         </div>
@@ -2683,6 +2895,41 @@ function schedulerStateDetail(status: RuntimeSettings["scheduler_status"], t: (k
   return t("runtime.scheduler.detail.off");
 }
 
+function defaultRuntimeDraft(): RuntimeDraft {
+  return {
+    downloadWorkerEnabled: false,
+    schedulerEnabled: false,
+    schedulerIntervalSeconds: "300",
+    schedulerLimit: "1",
+    ytdlpBinary: "yt-dlp",
+    ffprobeBinary: "ffprobe",
+  };
+}
+
+function runtimeDraftFromSettings(runtime: RuntimeSettings): RuntimeDraft {
+  const overrides = new Map(runtime.pending_overrides.map((item) => [item.key, item.value]));
+  const binary = (name: string, fallback: string) => runtime.binaries.find((item) => item.name === name)?.command ?? fallback;
+  return {
+    downloadWorkerEnabled: parseRuntimeBool(overrides.get("CVN_DOWNLOAD_WORKER_ENABLED"), runtime.download_worker_enabled),
+    schedulerEnabled: parseRuntimeBool(
+      overrides.get("CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED"),
+      runtime.download_worker_scheduler_enabled,
+    ),
+    schedulerIntervalSeconds:
+      overrides.get("CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS") ??
+      String(runtime.download_worker_scheduler_interval_seconds),
+    schedulerLimit:
+      overrides.get("CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT") ?? String(runtime.download_worker_scheduler_limit),
+    ytdlpBinary: overrides.get("CVN_YTDLP_BINARY") ?? binary("yt-dlp", "yt-dlp"),
+    ffprobeBinary: overrides.get("CVN_FFPROBE_BINARY") ?? binary("ffprobe", "ffprobe"),
+  };
+}
+
+function parseRuntimeBool(value: string | undefined, fallback: boolean) {
+  if (value === undefined) return fallback;
+  return value.toLowerCase() === "true";
+}
+
 function schedulerNextTick(status: RuntimeSettings["scheduler_status"], t: (key: TranslationKey) => string, nowMs: number) {
   if (status.running) return t("runtime.scheduler.runningNow");
   if (!status.next_tick_at) return t("runtime.scheduler.none");
@@ -2704,6 +2951,13 @@ function schedulerLastTick(status: RuntimeSettings["scheduler_status"], t: (key:
         ? t("runtime.scheduler.result.completed")
         : schedulerStateLabel(status.state, t);
   return `${result} · ${formatEventTime(timestamp)}`;
+}
+
+function schedulerTickStatusLabel(status: string, t: (key: TranslationKey) => string) {
+  if (status === "completed") return t("runtime.ticks.completed");
+  if (status === "failed") return t("runtime.ticks.failed");
+  if (status === "skipped") return t("runtime.ticks.skipped");
+  return t("runtime.ticks.running");
 }
 
 function mediaProfileLabel(item: LibraryItem) {

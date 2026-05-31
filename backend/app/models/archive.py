@@ -184,6 +184,29 @@ class DownloadWorkerRun(Base):
     channel: Mapped[Channel | None] = relationship(back_populates="worker_runs")
 
 
+class DownloadSchedulerTick(Base):
+    """Persistent telemetry for one scheduled worker tick."""
+
+    __tablename__ = "download_scheduler_ticks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trigger: Mapped[str] = mapped_column(String(32), default="scheduler")
+    status: Mapped[str] = mapped_column(String(32), default="running", index=True)
+    scheduler_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    worker_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    limit: Mapped[int] = mapped_column(Integer, default=1)
+    started_count: Mapped[int] = mapped_column(Integer, default=0)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_reason: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    next_tick_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class MediaFile(Base):
     """Stored media or sidecar file created by the archive pipeline."""
 
