@@ -4108,6 +4108,79 @@ button {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
+.storage-recovery-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(2, 6, 12, 0.25);
+}
+
+.storage-recovery-strip.needs-action {
+  border-color: rgba(245, 158, 11, 0.23);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(20, 184, 166, 0.05)),
+    rgba(2, 6, 12, 0.25);
+}
+
+.storage-recovery-strip.clean {
+  border-color: rgba(52, 211, 153, 0.18);
+}
+
+.storage-recovery-strip > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.storage-recovery-strip svg {
+  flex: 0 0 auto;
+  color: var(--color-storage);
+}
+
+.storage-recovery-strip strong,
+.storage-recovery-strip span {
+  display: block;
+}
+
+.storage-recovery-strip strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.storage-recovery-strip span {
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+}
+
+.storage-recovery-strip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #d1fae5;
+  background: rgba(52, 211, 153, 0.08);
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.storage-recovery-strip button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .storage-extension-rail {
   display: grid;
   gap: 8px;
@@ -4683,6 +4756,14 @@ button {
 
   .storage-drift-list article {
     grid-template-columns: 1fr;
+  }
+
+  .storage-recovery-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .storage-recovery-strip button {
+    width: 100%;
   }
 
   .library-detail-drawer {
