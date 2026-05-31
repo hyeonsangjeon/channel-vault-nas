@@ -2601,6 +2601,7 @@ function App() {
                 {filteredLaunchJobs.slice(0, 8).map((job) => {
                   const selected = selectedJobIds.includes(job.id);
                   const actionable = isSelectableQueueJob(job);
+                  const signals = launchJobSignals(job, t);
                   return (
                     <article className={`launch-job ${job.status} ${selected ? "selected" : ""} ${actionable ? "" : "locked"}`} key={job.id}>
                       <button
@@ -2616,6 +2617,15 @@ function App() {
                         <strong>{job.video_title}</strong>
                         <span>{job.video_external_id} · {job.quality} · P{job.priority}</span>
                         {job.archive_path ? <small>{compactArchivePath(job.archive_path)}</small> : null}
+                        {signals.length ? (
+                          <div className="launch-job-signals" aria-label={t("launch.signal.title")}>
+                            {signals.map((signal) => (
+                              <em className={`launch-job-signal ${signal.tone}`} key={signal.key}>
+                                {signal.label}
+                              </em>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="launch-job-meta">
                         <em className={`queue-status-pill ${job.status}`}>{queueJobStatusLabel(job.status, t)}</em>
@@ -4592,6 +4602,26 @@ function queueJobStatusLabel(status: string, t: (key: TranslationKey) => string)
   if (status === "failed") return t("queue.failed");
   if (status === "cancelled") return t("queue.cancelled");
   return status;
+}
+
+function launchJobSignals(job: DownloadJob, t: (key: TranslationKey) => string) {
+  const signals: { key: string; label: string; tone: string }[] = [];
+  if (job.preflight_status === "review") {
+    signals.push({ key: "review", label: t("launch.signal.review"), tone: "warn" });
+  }
+  if (job.status === "failed" || job.status === "cancelled") {
+    signals.push({ key: "retry", label: t("launch.signal.retry"), tone: "danger" });
+  }
+  if (job.status === "running") {
+    signals.push({ key: "running", label: t("launch.signal.running"), tone: "info" });
+  }
+  if (job.quality.toLowerCase() === "best") {
+    signals.push({ key: "best", label: t("launch.signal.best"), tone: "warn" });
+  }
+  if ((job.status === "candidate" || job.status === "queued") && !job.estimated_bytes) {
+    signals.push({ key: "nosize", label: t("launch.signal.noSize"), tone: "idle" });
+  }
+  return signals.slice(0, 3);
 }
 
 function isLaunchableJob(job: DownloadJob) {

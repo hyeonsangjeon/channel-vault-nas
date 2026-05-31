@@ -323,6 +323,7 @@ async def list_download_jobs(
     db: AsyncSession,
     channel_id: int | None = None,
     status: str | None = None,
+    preflight_status: str | None = None,
     limit: int = 100,
 ) -> list[DownloadJobRead]:
     """Return download queue rows with channel and video context."""
@@ -331,6 +332,8 @@ async def list_download_jobs(
         query = query.where(Channel.id == channel_id)
     if status:
         query = query.where(DownloadJob.status == status)
+    if preflight_status:
+        query = query.where(DownloadJob.preflight_status == preflight_status)
     result = await db.execute(query.order_by(DownloadJob.created_at.desc()).limit(max(1, min(limit, 200))))
     return [to_download_job(job, video, channel) for job, video, channel in result.all()]
 
