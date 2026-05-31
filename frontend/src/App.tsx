@@ -422,6 +422,7 @@ function App() {
     unindexed_media: [],
     indexed_missing: [],
   };
+  const storageDriftTotal = storageDrift.unindexed_media_count + storageDrift.indexed_missing_count;
   const storageArchivePercent =
     storageVolume && storageVolume.total_bytes > 0
       ? Math.min(100, Math.max(1, Math.round((storageVolume.archive_bytes / storageVolume.total_bytes) * 100)))
@@ -2843,6 +2844,27 @@ function App() {
                   <span>{t("storage.scan.indexedMissing")}</span>
                   <strong>{storageDrift.indexed_missing_count}</strong>
                 </article>
+              </div>
+            ) : null}
+            {storageScan ? (
+              <div className={`storage-recovery-strip ${storageDriftTotal ? "needs-action" : "clean"}`}>
+                <div>
+                  <HardDrive size={16} />
+                  <div>
+                    <strong>{t("storage.recovery.title")}</strong>
+                    <span>
+                      {storageDriftTotal
+                        ? t("storage.recovery.drift")
+                            .replace("{unindexed}", String(storageDrift.unindexed_media_count))
+                            .replace("{missing}", String(storageDrift.indexed_missing_count))
+                        : t("storage.recovery.clean")}
+                    </span>
+                  </div>
+                </div>
+                <button disabled={workflowStatus === "bulk"} onClick={handleApplyRescan} type="button">
+                  <Download size={14} />
+                  {workflowStatus === "bulk" ? t("import.rescan.running") : t("storage.recovery.action")}
+                </button>
               </div>
             ) : null}
             {storageScan?.top_extensions.length ? (
