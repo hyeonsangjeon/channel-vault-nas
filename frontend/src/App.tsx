@@ -1637,6 +1637,14 @@ function App() {
     }
   }
 
+  function handleFocusMetadataDueChannel(channelId: number) {
+    setRegistration(null);
+    setProbe(null);
+    setSelectedChannelId(channelId);
+    setWorkflowStatus("idle");
+    setWorkflowMessage(t("runtime.metadataScheduler.focused"));
+  }
+
   async function handleOpenLibraryDetail(item: LibraryItem) {
     setSelectedLibraryItem(item);
     setLibraryDetailStatus("loading");
@@ -2004,10 +2012,16 @@ function App() {
                 {metadataDueChannels.length ? (
                   <div className="metadata-due-channel-list" aria-label={t("runtime.metadataScheduler.dueChannels")}>
                     {metadataDueChannels.slice(0, 3).map((channel) => (
-                      <span className={channel.is_due ? "due" : ""} key={channel.id}>
+                      <button
+                        aria-label={`${t("runtime.metadataScheduler.focusChannel")} ${channel.handle ?? channel.title}`}
+                        className={channel.is_due ? "due" : ""}
+                        key={channel.id}
+                        onClick={() => handleFocusMetadataDueChannel(channel.id)}
+                        type="button"
+                      >
                         <strong>{channel.handle ?? channel.title}</strong>
                         <em>{channel.is_due ? t("runtime.scheduler.due") : `${channel.sync_interval_minutes}m`}</em>
-                      </span>
+                      </button>
                     ))}
                   </div>
                 ) : null}

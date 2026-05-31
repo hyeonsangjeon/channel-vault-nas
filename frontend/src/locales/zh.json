@@ -499,6 +499,8 @@
   "runtime.metadataScheduler.due": "{count} due channels",
   "runtime.metadataScheduler.nextDue": "next due",
   "runtime.metadataScheduler.dueChannels": "Due channel list",
+  "runtime.metadataScheduler.focusChannel": "Open channel",
+  "runtime.metadataScheduler.focused": "Opened metadata due channel.",
   "runtime.metadataScheduler.runNow": "立即运行 metadata tick",
   "runtime.metadataScheduler.runRunning": "tick 运行中",
   "runtime.metadataScheduler.runDone": "metadata tick {status} · sync {synced} · 候选 {candidates}",
