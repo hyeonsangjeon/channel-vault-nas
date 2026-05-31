@@ -55,6 +55,7 @@ async def seed() -> None:
         ChannelPolicy,
         DownloadJob,
         DownloadSchedulerTick,
+        LibraryView,
         MediaFile,
         MetadataSyncTick,
         SyncJob,
@@ -362,6 +363,17 @@ async def seed() -> None:
                 completed_at=now - timedelta(minutes=43),
                 next_tick_at=now - timedelta(minutes=28),
                 created_at=now - timedelta(minutes=43, seconds=20),
+            )
+        )
+        session.add(
+            LibraryView(
+                name="Media only triage",
+                query="",
+                integrity_filter="media_only",
+                sidecar_filter="all",
+                codec_filter="",
+                created_at=now - timedelta(days=1),
+                updated_at=now - timedelta(days=1),
             )
         )
         await session.commit()

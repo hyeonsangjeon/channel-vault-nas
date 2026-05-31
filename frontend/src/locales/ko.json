@@ -443,5 +443,13 @@
   "detail.syncOps.autoRunning": "실행 중",
   "detail.syncOps.policyOn": "auto-download 정책 켜짐",
   "detail.syncOps.policyOff": "auto-download 정책 꺼짐",
-  "event.sync.scheduler": "Metadata tick · sync {synced}개, 후보 {candidates}개"
+  "event.sync.scheduler": "Metadata tick · sync {synced}개, 후보 {candidates}개",
+  "runtime.metadataTicks.open": "Metadata 로그",
+  "runtime.metadataTicks.drawerTitle": "Metadata tick 로그",
+  "runtime.metadataTicks.drawerSubtitle": "상태, duration, interval, 채널 limit으로 metadata sync tick을 필터링합니다.",
+  "runtime.metadataTicks.intervalFilter": "metadata interval seconds",
+  "runtime.metadataTicks.limitFilter": "채널 limit",
+  "runtime.metadataTicks.interval": "Interval",
+  "runtime.metadataTicks.limit": "Limit",
+  "runtime.metadataTicks.seen": "감지 영상"
 }

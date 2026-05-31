@@ -443,5 +443,13 @@
   "detail.syncOps.autoRunning": "运行中",
   "detail.syncOps.policyOn": "auto-download 策略开启",
   "detail.syncOps.policyOff": "auto-download 策略关闭",
-  "event.sync.scheduler": "Metadata tick · sync {synced}，候选 {candidates}"
+  "event.sync.scheduler": "Metadata tick · sync {synced}，候选 {candidates}",
+  "runtime.metadataTicks.open": "Metadata 日志",
+  "runtime.metadataTicks.drawerTitle": "Metadata tick 日志",
+  "runtime.metadataTicks.drawerSubtitle": "按状态、duration、interval 和频道 limit 过滤 metadata sync tick。",
+  "runtime.metadataTicks.intervalFilter": "metadata interval seconds",
+  "runtime.metadataTicks.limitFilter": "频道 limit",
+  "runtime.metadataTicks.interval": "Interval",
+  "runtime.metadataTicks.limit": "Limit",
+  "runtime.metadataTicks.seen": "检测视频"
 }
