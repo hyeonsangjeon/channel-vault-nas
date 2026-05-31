@@ -22,11 +22,13 @@ class SyncJobRead(BaseModel):
     id: int
     channel_id: int
     channel_title: str
+    trigger: str
     status: str
     started_at: datetime
     completed_at: datetime | None
     videos_seen: int
     videos_created: int
+    candidates_created: int
     error_message: str | None
     created_at: datetime
 
@@ -38,6 +40,7 @@ class ChannelSyncResult(BaseModel):
     channel: RegisteredChannel
     videos_seen: int
     videos_created: int
+    candidates_created: int = 0
 
 
 class ChannelDetail(BaseModel):
@@ -56,6 +59,11 @@ class ChannelDetail(BaseModel):
     missing_count: int
     removed_saved_count: int
     last_synced_at: datetime | None
+    sync_interval_minutes: int
+    next_sync_due_at: datetime | None
+    last_auto_synced_at: datetime | None
+    last_auto_sync_status: str | None
+    last_auto_candidates_created: int
     first_video_published_at: datetime | None
     latest_video_published_at: datetime | None
     avg_upload_interval_days: float | None

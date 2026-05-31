@@ -56,6 +56,7 @@ async def seed() -> None:
         DownloadJob,
         DownloadSchedulerTick,
         MediaFile,
+        MetadataSyncTick,
         SyncJob,
         Video,
     )
@@ -130,7 +131,7 @@ async def seed() -> None:
         session.add(
             ChannelPolicy(
                 channel_id=channel.id,
-                auto_download=False,
+                auto_download=True,
                 max_quality="1080p",
                 audio_only=False,
                 subtitles_enabled=True,
@@ -268,13 +269,29 @@ async def seed() -> None:
         session.add(
             SyncJob(
                 channel_id=channel.id,
+                trigger="manual",
                 status="completed",
                 started_at=now - timedelta(minutes=8),
                 completed_at=now - timedelta(minutes=7),
                 videos_seen=3,
                 videos_created=0,
+                candidates_created=0,
                 error_message=None,
                 created_at=now - timedelta(minutes=8),
+            )
+        )
+        session.add(
+            SyncJob(
+                channel_id=channel.id,
+                trigger="scheduler",
+                status="completed",
+                started_at=now - timedelta(minutes=43, seconds=20),
+                completed_at=now - timedelta(minutes=43),
+                videos_seen=3,
+                videos_created=1,
+                candidates_created=1,
+                error_message=None,
+                created_at=now - timedelta(minutes=43, seconds=20),
             )
         )
         session.add_all(
@@ -327,6 +344,25 @@ async def seed() -> None:
                     created_at=now - timedelta(minutes=6, seconds=12),
                 ),
             ]
+        )
+        session.add(
+            MetadataSyncTick(
+                trigger="scheduler",
+                status="completed",
+                scheduler_enabled=True,
+                interval_seconds=900,
+                limit=2,
+                due_channel_count=1,
+                synced_count=1,
+                failed_count=0,
+                videos_seen_count=3,
+                videos_created_count=1,
+                candidates_created_count=1,
+                started_at=now - timedelta(minutes=43, seconds=20),
+                completed_at=now - timedelta(minutes=43),
+                next_tick_at=now - timedelta(minutes=28),
+                created_at=now - timedelta(minutes=43, seconds=20),
+            )
         )
         await session.commit()
 

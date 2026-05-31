@@ -94,6 +94,7 @@ import {
   type RescanApplyResult,
   type RuntimeSettings,
   type RuntimeSettingsUpdate,
+  type MetadataSyncTick,
   type SchedulerTick,
   type SchedulerTickFilters,
   type StorageScan,
@@ -232,6 +233,9 @@ type RuntimeDraft = {
   schedulerEnabled: boolean;
   schedulerIntervalSeconds: string;
   schedulerLimit: string;
+  metadataSchedulerEnabled: boolean;
+  metadataSchedulerIntervalSeconds: string;
+  metadataSchedulerLimit: string;
   ytdlpBinary: string;
   ffprobeBinary: string;
 };
@@ -532,6 +536,7 @@ function App() {
     [runtimeSettings],
   );
   const schedulerStatus = runtimeSettings?.scheduler_status ?? null;
+  const metadataSchedulerStatus = runtimeSettings?.metadata_scheduler_status ?? null;
   const restartAdapter = runtimeSettings?.restart_adapter ?? null;
   const restartAdapterLabel = restartAdapter ? restartAdapterLabelText(restartAdapter.adapter, t) : t("runtime.checking");
   const restartAdapterDetail = restartAdapter ? restartAdapter.reason : t("runtime.checking");
@@ -541,24 +546,49 @@ function App() {
       ? t("runtime.enabled")
       : t("runtime.disabled");
   const schedulerRuntimeLabel = schedulerStatus ? schedulerStateLabel(schedulerStatus.state, t) : t("runtime.checking");
+  const metadataSchedulerRuntimeLabel = metadataSchedulerStatus
+    ? schedulerStateLabel(metadataSchedulerStatus.state, t)
+    : t("runtime.checking");
   const schedulerCadenceLabel = schedulerStatus
     ? t("runtime.interval").replace("{seconds}", String(schedulerStatus.interval_seconds))
     : t("runtime.checking");
   const schedulerLimitLabel = schedulerStatus
     ? t("runtime.limit").replace("{count}", String(schedulerStatus.limit))
     : t("runtime.checking");
+  const metadataSchedulerCadenceLabel = metadataSchedulerStatus
+    ? t("runtime.interval").replace("{seconds}", String(metadataSchedulerStatus.interval_seconds))
+    : t("runtime.checking");
+  const metadataSchedulerLimitLabel = metadataSchedulerStatus
+    ? t("runtime.limit").replace("{count}", String(metadataSchedulerStatus.limit))
+    : t("runtime.checking");
   const schedulerDetailLabel = schedulerStatus ? schedulerStateDetail(schedulerStatus, t) : t("runtime.checking");
+  const metadataSchedulerDetailLabel = metadataSchedulerStatus
+    ? metadataSchedulerStateDetail(metadataSchedulerStatus, t)
+    : t("runtime.checking");
   const schedulerNextTickLabel = schedulerStatus ? schedulerNextTick(schedulerStatus, t, runtimeClockNow) : t("runtime.checking");
   const schedulerLastTickLabel = schedulerStatus ? schedulerLastTick(schedulerStatus, t) : t("runtime.checking");
+  const metadataSchedulerNextTickLabel = metadataSchedulerStatus
+    ? metadataSchedulerNextTick(metadataSchedulerStatus, t, runtimeClockNow)
+    : t("runtime.checking");
+  const metadataSchedulerLastTickLabel = metadataSchedulerStatus
+    ? metadataSchedulerLastTick(metadataSchedulerStatus, t)
+    : t("runtime.checking");
   const runtimePendingOverrides = runtimeSettings?.pending_overrides.filter((item) => item.pending_restart) ?? [];
   const runtimeDraftIntervalNumber = Number(runtimeDraft.schedulerIntervalSeconds);
   const runtimeDraftLimitNumber = Number(runtimeDraft.schedulerLimit);
+  const runtimeDraftMetadataIntervalNumber = Number(runtimeDraft.metadataSchedulerIntervalSeconds);
+  const runtimeDraftMetadataLimitNumber = Number(runtimeDraft.metadataSchedulerLimit);
   const runtimeDraftValid =
     Number.isInteger(runtimeDraftIntervalNumber) &&
     runtimeDraftIntervalNumber >= 5 &&
     Number.isInteger(runtimeDraftLimitNumber) &&
     runtimeDraftLimitNumber >= 1 &&
     runtimeDraftLimitNumber <= 20 &&
+    Number.isInteger(runtimeDraftMetadataIntervalNumber) &&
+    runtimeDraftMetadataIntervalNumber >= 30 &&
+    Number.isInteger(runtimeDraftMetadataLimitNumber) &&
+    runtimeDraftMetadataLimitNumber >= 1 &&
+    runtimeDraftMetadataLimitNumber <= 20 &&
     runtimeDraft.ytdlpBinary.trim().length > 0 &&
     runtimeDraft.ffprobeBinary.trim().length > 0;
   const binaryStateLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
@@ -592,6 +622,24 @@ function App() {
         tone: "idle",
       },
       {
+        key: "CVN_METADATA_SYNC_SCHEDULER_ENABLED",
+        value: String(runtimeSettings?.metadata_sync_scheduler_enabled ?? false),
+        recommended: String(runtimeDraft.metadataSchedulerEnabled),
+        tone: runtimeDraft.metadataSchedulerEnabled ? "good" : "warn",
+      },
+      {
+        key: "CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS",
+        value: String(runtimeSettings?.metadata_sync_scheduler_interval_seconds ?? 900),
+        recommended: runtimeDraft.metadataSchedulerIntervalSeconds || "900",
+        tone: "idle",
+      },
+      {
+        key: "CVN_METADATA_SYNC_SCHEDULER_LIMIT",
+        value: String(runtimeSettings?.metadata_sync_scheduler_limit ?? 2),
+        recommended: runtimeDraft.metadataSchedulerLimit || "2",
+        tone: "idle",
+      },
+      {
         key: "CVN_YTDLP_BINARY",
         value: ytdlpBinary?.command ?? "yt-dlp",
         recommended: runtimeDraft.ytdlpBinary || "yt-dlp",
@@ -615,6 +663,11 @@ function App() {
     [runtimeSettings?.scheduler_ticks, schedulerTickRows],
   );
   const schedulerDrawerSummary = useMemo(() => summarizeSchedulerTicks(schedulerTickRows), [schedulerTickRows]);
+  const metadataSyncTickSummary = useMemo(
+    () => summarizeMetadataSyncTicks(runtimeSettings?.metadata_sync_ticks ?? []),
+    [runtimeSettings?.metadata_sync_ticks],
+  );
+  const latestMetadataSyncTick = runtimeSettings?.metadata_sync_ticks[0] ?? null;
   const savedLibraryViewName =
     libraryViewNameDraft.trim() || defaultLibraryViewName(libraryIntegrityFilter, librarySidecarFilter, libraryCodecFilter, libraryQuery, t);
 
@@ -628,10 +681,10 @@ function App() {
   };
 
   useEffect(() => {
-    if (!runtimeGuideOpen && !schedulerStatus?.next_tick_at) return;
+    if (!runtimeGuideOpen && !schedulerStatus?.next_tick_at && !metadataSchedulerStatus?.next_tick_at) return;
     const timer = window.setInterval(() => setRuntimeClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [runtimeGuideOpen, schedulerStatus?.next_tick_at]);
+  }, [metadataSchedulerStatus?.next_tick_at, runtimeGuideOpen, schedulerStatus?.next_tick_at]);
 
   useEffect(() => {
     if (!runtimeSettings) return;
@@ -1158,6 +1211,9 @@ function App() {
       download_worker_scheduler_enabled: runtimeDraft.schedulerEnabled,
       download_worker_scheduler_interval_seconds: runtimeDraftIntervalNumber,
       download_worker_scheduler_limit: runtimeDraftLimitNumber,
+      metadata_sync_scheduler_enabled: runtimeDraft.metadataSchedulerEnabled,
+      metadata_sync_scheduler_interval_seconds: runtimeDraftMetadataIntervalNumber,
+      metadata_sync_scheduler_limit: runtimeDraftMetadataLimitNumber,
       ytdlp_binary: runtimeDraft.ytdlpBinary.trim(),
       ffprobe_binary: runtimeDraft.ffprobeBinary.trim(),
     };
@@ -1525,6 +1581,22 @@ function App() {
                 </div>
               </div>
             </article>
+            <article className={`runtime-card ${schedulerTone(metadataSchedulerStatus?.state)}`}>
+              <div className="runtime-card-icon">
+                <Activity size={18} />
+              </div>
+              <div>
+                <span>{t("runtime.metadataScheduler")}</span>
+                <strong>{metadataSchedulerRuntimeLabel}</strong>
+                <small>
+                  {metadataSchedulerDetailLabel} · {metadataSchedulerCadenceLabel} · {metadataSchedulerLimitLabel}
+                </small>
+                <div className="runtime-tick-row">
+                  <em>{t("runtime.scheduler.next")} · {metadataSchedulerNextTickLabel}</em>
+                  <em>{t("runtime.scheduler.last")} · {metadataSchedulerLastTickLabel}</em>
+                </div>
+              </div>
+            </article>
             <article className={`runtime-card ${ytdlpBinary?.available ? "good" : "warn"}`}>
               <div className="runtime-card-icon">
                 <Rocket size={18} />
@@ -1695,6 +1767,28 @@ function App() {
                 <Clock3 size={15} />
                 {formatDateLabel(channelDetail?.last_synced_at)}
               </span>
+            </div>
+            <div className="sync-ops-grid">
+              <article>
+                <span>{t("detail.syncOps.next")}</span>
+                <strong>{formatDateTimeLabel(channelDetail?.next_sync_due_at, t("runtime.scheduler.none"))}</strong>
+                <small>
+                  {t("detail.syncOps.syncInterval").replace(
+                    "{minutes}",
+                    String(channelDetail?.sync_interval_minutes ?? 0),
+                  )}
+                </small>
+              </article>
+              <article>
+                <span>{t("detail.syncOps.lastAuto")}</span>
+                <strong>{autoSyncStatusLabel(channelDetail, t)}</strong>
+                <small>{formatDateTimeLabel(channelDetail?.last_auto_synced_at, t("detail.syncOps.autoNoRun"))}</small>
+              </article>
+              <article className={channelPolicy?.auto_download ? "good" : "idle"}>
+                <span>{t("detail.syncOps.autoCandidates")}</span>
+                <strong>{channelDetail?.last_auto_candidates_created ?? 0}</strong>
+                <small>{channelPolicy?.auto_download ? t("detail.syncOps.policyOn") : t("detail.syncOps.policyOff")}</small>
+              </article>
             </div>
             <div className="policy-console">
               <div className="policy-signal">
@@ -2601,6 +2695,14 @@ function App() {
                 <em>{t("runtime.scheduler.last")} · {schedulerLastTickLabel}</em>
               </article>
               <article>
+                <Activity size={16} />
+                <span>{t("runtime.metadataScheduler")}</span>
+                <strong>{metadataSchedulerRuntimeLabel}</strong>
+                <small>{metadataSchedulerDetailLabel}</small>
+                <em>{t("runtime.scheduler.next")} · {metadataSchedulerNextTickLabel}</em>
+                <em>{t("runtime.scheduler.last")} · {metadataSchedulerLastTickLabel}</em>
+              </article>
+              <article>
                 <Rocket size={16} />
                 <span>{t("runtime.worker")}</span>
                 <strong>{workerRuntimeLabel}</strong>
@@ -2636,6 +2738,16 @@ function App() {
                     type="checkbox"
                   />
                 </label>
+                <label className="runtime-switch-row">
+                  <span>{t("runtime.apply.metadataScheduler")}</span>
+                  <input
+                    checked={runtimeDraft.metadataSchedulerEnabled}
+                    onChange={(event) =>
+                      setRuntimeDraft((draft) => ({ ...draft, metadataSchedulerEnabled: event.target.checked }))
+                    }
+                    type="checkbox"
+                  />
+                </label>
               </div>
               <div className="runtime-field-grid">
                 <label>
@@ -2655,6 +2767,29 @@ function App() {
                     onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: event.target.value }))}
                     type="number"
                     value={runtimeDraft.schedulerLimit}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.apply.metadataInterval")}</span>
+                  <input
+                    min={30}
+                    onChange={(event) =>
+                      setRuntimeDraft((draft) => ({ ...draft, metadataSchedulerIntervalSeconds: event.target.value }))
+                    }
+                    type="number"
+                    value={runtimeDraft.metadataSchedulerIntervalSeconds}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.apply.metadataLimit")}</span>
+                  <input
+                    max={20}
+                    min={1}
+                    onChange={(event) =>
+                      setRuntimeDraft((draft) => ({ ...draft, metadataSchedulerLimit: event.target.value }))
+                    }
+                    type="number"
+                    value={runtimeDraft.metadataSchedulerLimit}
                   />
                 </label>
                 <label>
@@ -2742,6 +2877,42 @@ function App() {
                 </div>
               ) : (
                 <p className="empty-copy">{t("runtime.ticks.empty")}</p>
+              )}
+            </div>
+
+            <div className="scheduler-tick-log metadata-tick-log">
+              <div className="runtime-apply-heading">
+                <div>
+                  <strong>{t("runtime.metadataTicks.title")}</strong>
+                  <span>{t("runtime.metadataTicks.subtitle")}</span>
+                </div>
+                {latestMetadataSyncTick ? (
+                  <em className={`runtime-mini-badge ${latestMetadataSyncTick.status}`}>
+                    {schedulerTickStatusLabel(latestMetadataSyncTick.status, t)}
+                  </em>
+                ) : null}
+              </div>
+              {(runtimeSettings?.metadata_sync_ticks ?? []).length ? (
+                <div className="scheduler-tick-summary metadata-tick-summary">
+                  <article>
+                    <span>{t("runtime.metadataTicks.due")}</span>
+                    <strong>{metadataSyncTickSummary.due}</strong>
+                  </article>
+                  <article>
+                    <span>{t("runtime.metadataTicks.synced")}</span>
+                    <strong>{metadataSyncTickSummary.synced}</strong>
+                  </article>
+                  <article>
+                    <span>{t("runtime.metadataTicks.videos")}</span>
+                    <strong>{metadataSyncTickSummary.videos}</strong>
+                  </article>
+                  <article>
+                    <span>{t("runtime.metadataTicks.candidates")}</span>
+                    <strong>{metadataSyncTickSummary.candidates}</strong>
+                  </article>
+                </div>
+              ) : (
+                <p className="empty-copy">{t("runtime.metadataTicks.empty")}</p>
               )}
             </div>
           </aside>
@@ -3106,6 +3277,15 @@ function summarizeSchedulerTicks(ticks: SchedulerTick[]) {
   };
 }
 
+function summarizeMetadataSyncTicks(ticks: MetadataSyncTick[]) {
+  return {
+    due: ticks.reduce((sum, tick) => sum + tick.due_channel_count, 0),
+    synced: ticks.reduce((sum, tick) => sum + tick.synced_count, 0),
+    videos: ticks.reduce((sum, tick) => sum + tick.videos_created_count, 0),
+    candidates: ticks.reduce((sum, tick) => sum + tick.candidates_created_count, 0),
+  };
+}
+
 function restartAdapterLabelText(adapter: string, t: (key: TranslationKey) => string) {
   if (adapter === "supervised-hook") return t("runtime.restart.adapter.hook");
   if (adapter === "docker-compose") return t("runtime.restart.adapter.compose");
@@ -3259,6 +3439,13 @@ function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
     return t("event.sync.completed").replace("{count}", String(count));
   }
   if (event.type === "sync.failed") return `${t("event.sync.failed")} ${title}`.trim();
+  if (event.type === "sync.scheduler.completed") {
+    const synced = typeof event.data.synced_count === "number" ? event.data.synced_count : 0;
+    const candidates = typeof event.data.candidates_created_count === "number" ? event.data.candidates_created_count : 0;
+    return t("event.sync.scheduler")
+      .replace("{synced}", String(synced))
+      .replace("{candidates}", String(candidates));
+  }
   if (event.type === "download.candidates") {
     const count = typeof event.data.count === "number" ? event.data.count : 0;
     return t("event.download.candidates").replace("{count}", String(count));
@@ -3296,6 +3483,16 @@ function formatEventTime(value: string) {
 function formatDateLabel(value: string | null | undefined) {
   if (!value) return "sync pending";
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function formatDateTimeLabel(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function formatVideoDate(video: TimelineVideo) {
@@ -3353,6 +3550,15 @@ function jobStatusLabel(status: string, t: (key: TranslationKey) => string) {
   return t("job.status.candidate");
 }
 
+function autoSyncStatusLabel(channel: ChannelDetail | null, t: (key: TranslationKey) => string) {
+  const status = channel?.last_auto_sync_status;
+  if (!status) return t("detail.syncOps.autoNoRun");
+  if (status === "completed") return t("detail.syncOps.autoCompleted");
+  if (status === "failed") return t("detail.syncOps.autoFailed");
+  if (status === "running") return t("detail.syncOps.autoRunning");
+  return status;
+}
+
 function preflightLabel(status: string, t: (key: TranslationKey) => string) {
   if (status === "ready") return t("preflight.status.ready");
   if (status === "review") return t("preflight.status.review");
@@ -3397,12 +3603,29 @@ function schedulerStateDetail(status: RuntimeSettings["scheduler_status"], t: (k
   return t("runtime.scheduler.detail.off");
 }
 
+function metadataSchedulerStateDetail(
+  status: RuntimeSettings["metadata_scheduler_status"],
+  t: (key: TranslationKey) => string,
+) {
+  if (status.state === "armed") return t("runtime.metadataScheduler.detail.armed");
+  if (status.state === "waiting") return t("runtime.metadataScheduler.detail.waiting");
+  if (status.state === "running") return t("runtime.metadataScheduler.detail.running");
+  if (status.state === "failed") {
+    const prefix = t("runtime.metadataScheduler.detail.failed");
+    return status.last_error ? `${prefix}: ${status.last_error}` : prefix;
+  }
+  return t("runtime.metadataScheduler.detail.off");
+}
+
 function defaultRuntimeDraft(): RuntimeDraft {
   return {
     downloadWorkerEnabled: false,
     schedulerEnabled: false,
     schedulerIntervalSeconds: "300",
     schedulerLimit: "1",
+    metadataSchedulerEnabled: false,
+    metadataSchedulerIntervalSeconds: "900",
+    metadataSchedulerLimit: "2",
     ytdlpBinary: "yt-dlp",
     ffprobeBinary: "ffprobe",
   };
@@ -3422,6 +3645,15 @@ function runtimeDraftFromSettings(runtime: RuntimeSettings): RuntimeDraft {
       String(runtime.download_worker_scheduler_interval_seconds),
     schedulerLimit:
       overrides.get("CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT") ?? String(runtime.download_worker_scheduler_limit),
+    metadataSchedulerEnabled: parseRuntimeBool(
+      overrides.get("CVN_METADATA_SYNC_SCHEDULER_ENABLED"),
+      runtime.metadata_sync_scheduler_enabled,
+    ),
+    metadataSchedulerIntervalSeconds:
+      overrides.get("CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS") ??
+      String(runtime.metadata_sync_scheduler_interval_seconds),
+    metadataSchedulerLimit:
+      overrides.get("CVN_METADATA_SYNC_SCHEDULER_LIMIT") ?? String(runtime.metadata_sync_scheduler_limit),
     ytdlpBinary: overrides.get("CVN_YTDLP_BINARY") ?? binary("yt-dlp", "yt-dlp"),
     ffprobeBinary: overrides.get("CVN_FFPROBE_BINARY") ?? binary("ffprobe", "ffprobe"),
   };
@@ -3443,7 +3675,37 @@ function schedulerNextTick(status: RuntimeSettings["scheduler_status"], t: (key:
     .replace("{seconds}", String(seconds % 60));
 }
 
+function metadataSchedulerNextTick(
+  status: RuntimeSettings["metadata_scheduler_status"],
+  t: (key: TranslationKey) => string,
+  nowMs: number,
+) {
+  if (status.running) return t("runtime.scheduler.runningNow");
+  if (!status.next_tick_at) return t("runtime.scheduler.none");
+  const seconds = Math.max(0, Math.ceil((new Date(status.next_tick_at).getTime() - nowMs) / 1000));
+  if (seconds <= 0) return t("runtime.scheduler.due");
+  if (seconds < 60) return t("runtime.scheduler.inSeconds").replace("{seconds}", String(seconds));
+  return t("runtime.scheduler.inMinutes")
+    .replace("{minutes}", String(Math.floor(seconds / 60)))
+    .replace("{seconds}", String(seconds % 60));
+}
+
 function schedulerLastTick(status: RuntimeSettings["scheduler_status"], t: (key: TranslationKey) => string) {
+  const timestamp = status.last_completed_at ?? status.last_started_at;
+  if (!timestamp) return t("runtime.scheduler.none");
+  const result =
+    status.last_result_status === "failed"
+      ? t("runtime.scheduler.result.failed")
+      : status.last_result_status === "completed"
+        ? t("runtime.scheduler.result.completed")
+        : schedulerStateLabel(status.state, t);
+  return `${result} · ${formatEventTime(timestamp)}`;
+}
+
+function metadataSchedulerLastTick(
+  status: RuntimeSettings["metadata_scheduler_status"],
+  t: (key: TranslationKey) => string,
+) {
   const timestamp = status.last_completed_at ?? status.last_started_at;
   if (!timestamp) return t("runtime.scheduler.none");
   const result =

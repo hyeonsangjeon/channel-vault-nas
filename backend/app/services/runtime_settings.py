@@ -27,6 +27,10 @@ from app.schemas.settings import (
     SchedulerTickRead,
 )
 from app.services.download_scheduler import get_download_worker_scheduler_status
+from app.services.metadata_scheduler import (
+    get_metadata_sync_scheduler_status,
+    list_metadata_sync_ticks,
+)
 
 ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
 RUNTIME_FIELD_TO_ENV_KEY = {
@@ -34,6 +38,9 @@ RUNTIME_FIELD_TO_ENV_KEY = {
     "download_worker_scheduler_enabled": "CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED",
     "download_worker_scheduler_interval_seconds": "CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS",
     "download_worker_scheduler_limit": "CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT",
+    "metadata_sync_scheduler_enabled": "CVN_METADATA_SYNC_SCHEDULER_ENABLED",
+    "metadata_sync_scheduler_interval_seconds": "CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS",
+    "metadata_sync_scheduler_limit": "CVN_METADATA_SYNC_SCHEDULER_LIMIT",
     "ytdlp_binary": "CVN_YTDLP_BINARY",
     "ffprobe_binary": "CVN_FFPROBE_BINARY",
 }
@@ -42,8 +49,11 @@ RUNTIME_FIELD_TO_ENV_KEY = {
 async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
     """Return non-secret runtime flags, pending env overrides, and scheduler ticks."""
     scheduler_ticks = await list_scheduler_ticks(db=db, limit=8)
+    metadata_sync_ticks = await list_metadata_sync_ticks(db=db, limit=6)
     scheduler_status = get_download_worker_scheduler_status()
+    metadata_scheduler_status = get_metadata_sync_scheduler_status()
     latest_tick = scheduler_ticks[0] if scheduler_ticks else None
+    latest_metadata_tick = metadata_sync_ticks[0] if metadata_sync_ticks else None
     if scheduler_status.last_completed_at is None and latest_tick is not None:
         scheduler_status = scheduler_status.model_copy(
             update={
@@ -54,6 +64,16 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
                 "next_tick_at": scheduler_status.next_tick_at or latest_tick.next_tick_at,
             }
         )
+    if metadata_scheduler_status.last_completed_at is None and latest_metadata_tick is not None:
+        metadata_scheduler_status = metadata_scheduler_status.model_copy(
+            update={
+                "last_started_at": latest_metadata_tick.started_at,
+                "last_completed_at": latest_metadata_tick.completed_at,
+                "last_error": latest_metadata_tick.error_message,
+                "last_result_status": latest_metadata_tick.status,
+                "next_tick_at": metadata_scheduler_status.next_tick_at or latest_metadata_tick.next_tick_at,
+            }
+        )
 
     pending_overrides = _pending_overrides()
     return RuntimeSettingsRead(
@@ -61,6 +81,9 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
         download_worker_scheduler_enabled=settings.download_worker_scheduler_enabled,
         download_worker_scheduler_interval_seconds=settings.download_worker_scheduler_interval_seconds,
         download_worker_scheduler_limit=settings.download_worker_scheduler_limit,
+        metadata_sync_scheduler_enabled=settings.metadata_sync_scheduler_enabled,
+        metadata_sync_scheduler_interval_seconds=settings.metadata_sync_scheduler_interval_seconds,
+        metadata_sync_scheduler_limit=settings.metadata_sync_scheduler_limit,
         download_dir=settings.download_dir,
         metadata_dir=settings.metadata_dir,
         managed_env_file=str(_runtime_env_path()),
@@ -69,7 +92,9 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
         restart_command=_restart_command(),
         restart_adapter=get_runtime_restart_adapter(),
         scheduler_status=scheduler_status,
+        metadata_scheduler_status=metadata_scheduler_status,
         scheduler_ticks=scheduler_ticks,
+        metadata_sync_ticks=metadata_sync_ticks,
         binaries=[
             _binary_health(name="yt-dlp", command=settings.ytdlp_binary),
             _binary_health(name="ffprobe", command=settings.ffprobe_binary),
@@ -341,6 +366,11 @@ def _current_env_values() -> dict[str, str]:
             settings.download_worker_scheduler_interval_seconds
         ),
         "CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT": _stringify_env_value(settings.download_worker_scheduler_limit),
+        "CVN_METADATA_SYNC_SCHEDULER_ENABLED": _stringify_env_value(settings.metadata_sync_scheduler_enabled),
+        "CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS": _stringify_env_value(
+            settings.metadata_sync_scheduler_interval_seconds
+        ),
+        "CVN_METADATA_SYNC_SCHEDULER_LIMIT": _stringify_env_value(settings.metadata_sync_scheduler_limit),
         "CVN_YTDLP_BINARY": settings.ytdlp_binary,
         "CVN_FFPROBE_BINARY": settings.ffprobe_binary,
     }
