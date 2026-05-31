@@ -244,6 +244,8 @@
   "launch.signal.review": "审核",
   "launch.signal.retry": "重试",
   "launch.signal.running": "运行中",
+  "launch.signal.best": "best 质量",
+  "launch.signal.noSize": "容量未估算",
   "launch.filter.label": "Queue 状态筛选",
   "launch.filter.launchable": "可启动",
   "launch.filter.all": "全部",

@@ -244,6 +244,8 @@
   "launch.signal.review": "レビュー",
   "launch.signal.retry": "再試行",
   "launch.signal.running": "実行中",
+  "launch.signal.best": "best 品質",
+  "launch.signal.noSize": "サイズ未推定",
   "launch.filter.label": "Queue 状態フィルター",
   "launch.filter.launchable": "実行可能",
   "launch.filter.all": "すべて",

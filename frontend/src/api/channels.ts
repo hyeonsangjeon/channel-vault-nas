@@ -796,6 +796,7 @@ export async function enqueueVideoDownload(videoId: number, quality: string): Pr
 
 export type DownloadJobFilters = {
   status?: string;
+  preflight_status?: string;
   limit?: number;
 };
 
@@ -803,6 +804,7 @@ export async function getDownloadJobs(channelId?: number, filters: DownloadJobFi
   const params = new URLSearchParams();
   if (typeof channelId === "number") params.set("channel_id", String(channelId));
   if (filters.status) params.set("status", filters.status);
+  if (filters.preflight_status) params.set("preflight_status", filters.preflight_status);
   if (typeof filters.limit === "number") params.set("limit", String(filters.limit));
   const suffix = params.toString() ? `?${params}` : "";
   return getJson(`/api/jobs/downloads${suffix}`);

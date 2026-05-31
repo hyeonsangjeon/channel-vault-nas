@@ -61,10 +61,17 @@ async def get_download_jobs(
     db: DbSession,
     channel_id: int | None = None,
     status: str | None = None,
+    preflight_status: str | None = None,
     limit: int = 100,
 ) -> list[DownloadJobRead]:
     """Return download queue rows."""
-    return await list_download_jobs(db=db, channel_id=channel_id, status=status, limit=limit)
+    return await list_download_jobs(
+        db=db,
+        channel_id=channel_id,
+        status=status,
+        preflight_status=preflight_status,
+        limit=limit,
+    )
 
 
 @router.get("/downloads/preflight", response_model=QueuePreflightPlan)

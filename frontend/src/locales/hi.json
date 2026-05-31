@@ -244,6 +244,8 @@
   "launch.signal.review": "review",
   "launch.signal.retry": "retry",
   "launch.signal.running": "running",
+  "launch.signal.best": "best quality",
+  "launch.signal.noSize": "size unknown",
   "launch.filter.label": "Queue status filter",
   "launch.filter.launchable": "launchable",
   "launch.filter.all": "all",

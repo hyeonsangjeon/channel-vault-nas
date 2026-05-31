@@ -2569,6 +2569,43 @@ button {
   font-size: 0.68rem;
 }
 
+.launch-job-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.launch-job-signal {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.64rem;
+  font-style: normal;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.launch-job-signal.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.075);
+}
+
+.launch-job-signal.danger {
+  border-color: rgba(251, 113, 133, 0.28);
+  color: #fecdd3;
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.launch-job-signal.info {
+  border-color: rgba(56, 189, 248, 0.24);
+  color: #bae6fd;
+  background: rgba(56, 189, 248, 0.075);
+}
+
 .launch-job-meta {
   display: grid;
   justify-items: end;

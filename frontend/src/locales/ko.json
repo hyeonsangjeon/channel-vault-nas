@@ -244,6 +244,8 @@
   "launch.signal.review": "리뷰",
   "launch.signal.retry": "재시도",
   "launch.signal.running": "실행 중",
+  "launch.signal.best": "best 품질",
+  "launch.signal.noSize": "용량 미추정",
   "launch.filter.label": "Queue 상태 필터",
   "launch.filter.launchable": "실행 가능",
   "launch.filter.all": "전체",
