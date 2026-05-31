@@ -211,6 +211,11 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.getByRole("button", { name: "뷰 저장" }).click();
   await expect(page.locator(".saved-view-pill").filter({ hasText: "무자막 h264" })).toBeVisible();
   await expect(page.locator(".saved-view-pill.active").filter({ hasText: "무자막 h264" })).toBeVisible();
+  const overwrittenView = page.waitForResponse(
+    (response) => response.url().endsWith("/api/library/views") && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "덮어쓰기" }).click();
+  expect((await (await overwrittenView).json()).name).toBe("무자막 h264");
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("h264 1080p");
   await page.screenshot({ path: testInfo.outputPath("library-filtered.png"), fullPage: true });
   await page.locator(".library-card").filter({ hasText: "Golden hour archive" }).click();

@@ -474,6 +474,7 @@
   "library.saved.title": "저장한 뷰",
   "library.saved.name": "저장할 뷰 이름",
   "library.saved.save": "뷰 저장",
+  "library.saved.overwrite": "덮어쓰기",
   "library.saved.delete": "저장 뷰 삭제",
   "library.saved.saved": "라이브러리 뷰 저장됨",
   "library.saved.defaultName": "현재 라이브러리 뷰",

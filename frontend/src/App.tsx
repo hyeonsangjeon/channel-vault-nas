@@ -164,6 +164,7 @@ type SavedLibraryView = {
   sidecar: LibrarySidecarFilter;
   codec: string;
   createdAt: string;
+  updatedAt: string;
 };
 const savedLibraryViewsStorageKey = "channel-vault-library-views";
 const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey }[] = [
@@ -806,6 +807,10 @@ function App() {
   );
   const metadataDrawerSummary = useMemo(() => summarizeMetadataSyncTicks(metadataTickRows), [metadataTickRows]);
   const latestMetadataSyncTick = runtimeSettings?.metadata_sync_ticks[0] ?? null;
+  const activeSavedLibraryView = useMemo(
+    () => savedLibraryViews.find((view) => view.id === activeSavedLibraryViewId) ?? null,
+    [activeSavedLibraryViewId, savedLibraryViews],
+  );
   const savedLibraryViewName =
     libraryViewNameDraft.trim() || defaultLibraryViewName(libraryIntegrityFilter, librarySidecarFilter, libraryCodecFilter, libraryQuery, t);
   const libraryActiveViewChips = useMemo(
@@ -1681,6 +1686,16 @@ function App() {
   async function handleSaveLibraryView() {
     const name = savedLibraryViewName.trim();
     if (!name) return;
+    await persistLibraryView(name);
+  }
+
+  async function handleOverwriteSavedLibraryView() {
+    if (!activeSavedLibraryView) return;
+    await persistLibraryView(activeSavedLibraryView.name);
+  }
+
+  async function persistLibraryView(name: string) {
+    const now = new Date().toISOString();
     const nextView: SavedLibraryView = {
       id: `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name,
@@ -1688,7 +1703,8 @@ function App() {
       integrity: libraryIntegrityFilter,
       sidecar: librarySidecarFilter,
       codec: libraryCodecFilter,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     setSavedLibraryViews((current) => [nextView, ...current.filter((view) => view.name !== name)].slice(0, 10));
     setActiveSavedLibraryViewId(nextView.id);
@@ -2884,6 +2900,15 @@ function App() {
               <button className="library-save-view" onClick={() => void handleSaveLibraryView()} type="button">
                 <Save size={13} />
                 {t("library.saved.save")}
+              </button>
+              <button
+                className="library-overwrite-view"
+                disabled={!activeSavedLibraryView}
+                onClick={() => void handleOverwriteSavedLibraryView()}
+                type="button"
+              >
+                <Bookmark size={13} />
+                {t("library.saved.overwrite")}
               </button>
               {savedLibraryViews.map((view) => (
                 <div className={`saved-view-pill ${activeSavedLibraryViewId === view.id ? "active" : ""}`} key={view.id}>
@@ -4224,6 +4249,7 @@ function toSavedLibraryView(view: LibrarySavedView): SavedLibraryView {
     sidecar: normalizeLibrarySidecar(view.sidecar),
     codec: view.codec,
     createdAt: view.created_at,
+    updatedAt: view.updated_at,
   };
 }
 
