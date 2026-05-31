@@ -198,6 +198,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.getByRole("button", { name: "인덱스 복구" })).toBeVisible();
   await expect(page.locator(".storage-tree-panel").first()).toContainText("@signalvaultlab");
   await expect(page.locator(".storage-orphan-list").first()).toContainText("video.ko.srt");
+  await page.getByLabel("Orphan 종류 필터").getByRole("button", { name: "subtitle" }).click();
+  await expect(page.getByLabel("Orphan sidecar 목록")).toContainText("subtitle");
   const storageTriage = page.getByLabel("Storage triage console");
   await expect(storageTriage).toContainText("청소 후보");
   await storageTriage.getByRole("button", { name: "Sidecar 누락 보기" }).click();
