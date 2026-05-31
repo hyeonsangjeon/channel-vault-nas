@@ -507,6 +507,8 @@ export type RuntimeSettings = {
     running: boolean;
     interval_seconds: number;
     limit: number;
+    due_channel_count: number;
+    next_due_at: string | null;
     last_started_at: string | null;
     last_completed_at: string | null;
     last_error: string | null;

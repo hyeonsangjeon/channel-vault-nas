@@ -514,6 +514,34 @@ button {
   overflow-wrap: anywhere;
 }
 
+.metadata-due-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.metadata-due-strip span,
+.metadata-due-strip em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #bbf7d0;
+  background: rgba(52, 211, 153, 0.07);
+  font-size: 0.66rem;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+.metadata-due-strip em {
+  border-color: rgba(56, 189, 248, 0.16);
+  color: #bae6fd;
+  background: rgba(56, 189, 248, 0.06);
+}
+
 .runtime-inline-action {
   display: inline-flex;
   align-items: center;

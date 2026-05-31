@@ -79,6 +79,8 @@ async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> N
     assert data["download_worker_scheduler_interval_seconds"] >= 5
     assert data["scheduler_status"]["state"] == "off"
     assert data["scheduler_status"]["worker_enabled"] is False
+    assert data["metadata_scheduler_status"]["due_channel_count"] == 0
+    assert data["metadata_scheduler_status"]["next_due_at"] is None
     assert data["pending_restart"] is False
     assert data["scheduler_ticks"] == []
     assert data["restart_adapter"]["manual_required"] is True
