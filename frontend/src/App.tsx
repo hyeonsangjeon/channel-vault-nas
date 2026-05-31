@@ -305,6 +305,7 @@ function App() {
   const [libraryCodecFilter, setLibraryCodecFilter] = useState("");
   const [activeLibraryPreset, setActiveLibraryPreset] = useState<LibraryPresetFilter | null>(null);
   const [savedLibraryViews, setSavedLibraryViews] = useState<SavedLibraryView[]>(() => loadSavedLibraryViews());
+  const [activeSavedLibraryViewId, setActiveSavedLibraryViewId] = useState<string | null>(null);
   const [libraryViewNameDraft, setLibraryViewNameDraft] = useState("");
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<LibraryItem | null>(null);
   const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<LibraryFile[]>([]);
@@ -747,6 +748,13 @@ function App() {
   const latestMetadataSyncTick = runtimeSettings?.metadata_sync_ticks[0] ?? null;
   const savedLibraryViewName =
     libraryViewNameDraft.trim() || defaultLibraryViewName(libraryIntegrityFilter, librarySidecarFilter, libraryCodecFilter, libraryQuery, t);
+  const libraryActiveViewChips = useMemo(
+    () => buildLibraryActiveViewChips(libraryQuery, libraryIntegrityFilter, librarySidecarFilter, libraryCodecFilter, t),
+    [libraryCodecFilter, libraryIntegrityFilter, libraryQuery, librarySidecarFilter, t],
+  );
+  const libraryActiveSummary = t("library.active.count")
+    .replace("{count}", String(library?.total ?? 0))
+    .replace("{bytes}", library?.total_label ?? "0 MB");
 
   const registrationPayload: ChannelRegistrationPayload = {
     value: sourceValue,
@@ -1571,6 +1579,7 @@ function App() {
     const preset = libraryPresetFilters.find((item) => item.id === presetId);
     if (!preset) return;
     setActiveLibraryPreset(preset.id);
+    setActiveSavedLibraryViewId(null);
     setLibraryIntegrityFilter(preset.integrity);
     setLibrarySidecarFilter(preset.sidecar);
     setLibraryCodecFilter(preset.codec);
@@ -1578,12 +1587,24 @@ function App() {
 
   function handleLibraryIntegrityFilter(filter: LibraryIntegrityFilter) {
     setActiveLibraryPreset(null);
+    setActiveSavedLibraryViewId(null);
     setLibraryIntegrityFilter(filter);
   }
 
   function handleLibrarySidecarFilter(filter: LibrarySidecarFilter) {
     setActiveLibraryPreset(null);
+    setActiveSavedLibraryViewId(null);
     setLibrarySidecarFilter(filter);
+  }
+
+  function handleResetLibraryFilters() {
+    setActiveLibraryPreset(null);
+    setActiveSavedLibraryViewId(null);
+    setLibraryQuery("");
+    setLibraryIntegrityFilter("all");
+    setLibrarySidecarFilter("all");
+    setLibraryCodecFilter("");
+    setLibraryViewNameDraft("");
   }
 
   async function handleSaveLibraryView() {
@@ -1599,6 +1620,7 @@ function App() {
       createdAt: new Date().toISOString(),
     };
     setSavedLibraryViews((current) => [nextView, ...current.filter((view) => view.name !== name)].slice(0, 10));
+    setActiveSavedLibraryViewId(nextView.id);
     setLibraryViewNameDraft("");
     try {
       const saved = await saveLibraryView({
@@ -1610,6 +1632,7 @@ function App() {
       });
       const persistedView = toSavedLibraryView(saved);
       setSavedLibraryViews((current) => [persistedView, ...current.filter((view) => view.name !== name)].slice(0, 10));
+      setActiveSavedLibraryViewId(persistedView.id);
       setWorkflowStatus("idle");
       setWorkflowMessage(t("library.saved.saved"));
     } catch (error) {
@@ -1620,6 +1643,7 @@ function App() {
 
   function handleApplySavedLibraryView(view: SavedLibraryView) {
     setActiveLibraryPreset(null);
+    setActiveSavedLibraryViewId(view.id);
     setLibraryQuery(view.query);
     setLibraryIntegrityFilter(view.integrity);
     setLibrarySidecarFilter(view.sidecar);
@@ -1628,6 +1652,7 @@ function App() {
 
   async function handleDeleteSavedLibraryView(viewId: string) {
     setSavedLibraryViews((current) => current.filter((view) => view.id !== viewId));
+    if (activeSavedLibraryViewId === viewId) setActiveSavedLibraryViewId(null);
     const persistedId = Number(viewId);
     if (!Number.isInteger(persistedId)) return;
     try {
@@ -2581,7 +2606,10 @@ function App() {
                 <Search size={15} />
                 <input
                   aria-label={t("library.search")}
-                  onChange={(event) => setLibraryQuery(event.target.value)}
+                  onChange={(event) => {
+                    setActiveSavedLibraryViewId(null);
+                    setLibraryQuery(event.target.value);
+                  }}
                   placeholder={t("library.search")}
                   value={libraryQuery}
                 />
@@ -2647,6 +2675,7 @@ function App() {
                   aria-label={t("library.filter.codec")}
                   onChange={(event) => {
                     setActiveLibraryPreset(null);
+                    setActiveSavedLibraryViewId(null);
                     setLibraryCodecFilter(event.target.value);
                   }}
                   placeholder={t("library.filter.codecPlaceholder")}
@@ -2673,7 +2702,7 @@ function App() {
                 {t("library.saved.save")}
               </button>
               {savedLibraryViews.map((view) => (
-                <div className="saved-view-pill" key={view.id}>
+                <div className={`saved-view-pill ${activeSavedLibraryViewId === view.id ? "active" : ""}`} key={view.id}>
                   <button onClick={() => handleApplySavedLibraryView(view)} type="button">
                     {view.name}
                   </button>
@@ -2687,6 +2716,32 @@ function App() {
                   </button>
                 </div>
               ))}
+            </div>
+
+            <div className="library-active-view" aria-label={t("library.active.title")}>
+              <div className="library-active-main">
+                <span>
+                  <SlidersHorizontal size={13} />
+                  {t("library.active.title")}
+                </span>
+                <strong>{libraryActiveSummary}</strong>
+              </div>
+              <div className="library-active-chips">
+                {libraryActiveViewChips.length ? (
+                  libraryActiveViewChips.map((chip) => (
+                    <span key={`${chip.label}-${chip.value}`}>
+                      <em>{chip.label}</em>
+                      {chip.value}
+                    </span>
+                  ))
+                ) : (
+                  <em>{t("library.active.empty")}</em>
+                )}
+              </div>
+              <button disabled={libraryActiveViewChips.length === 0} onClick={handleResetLibraryFilters} type="button">
+                <RotateCcw size={13} />
+                {t("library.active.reset")}
+              </button>
             </div>
 
             <div className="library-summary">
@@ -3953,6 +4008,29 @@ function normalizeLibrarySidecar(value: string): LibrarySidecarFilter {
     return value;
   }
   return "all";
+}
+
+function buildLibraryActiveViewChips(
+  query: string,
+  integrity: LibraryIntegrityFilter,
+  sidecar: LibrarySidecarFilter,
+  codec: string,
+  t: (key: TranslationKey) => string,
+) {
+  const chips: { label: string; value: string }[] = [];
+  if (query.trim()) chips.push({ label: t("library.active.query"), value: query.trim() });
+  if (integrity !== "all") chips.push({ label: t("library.active.integrity"), value: libraryIntegrityFilterLabel(integrity, t) });
+  if (sidecar !== "all") chips.push({ label: t("library.active.sidecar"), value: librarySidecarFilterLabel(sidecar, t) });
+  if (codec.trim()) chips.push({ label: t("library.active.codec"), value: codec.trim() });
+  return chips;
+}
+
+function libraryIntegrityFilterLabel(filter: LibraryIntegrityFilter, t: (key: TranslationKey) => string) {
+  return t(libraryIntegrityFilters.find((item) => item.id === filter)?.labelKey ?? "library.filter.all");
+}
+
+function librarySidecarFilterLabel(filter: LibrarySidecarFilter, t: (key: TranslationKey) => string) {
+  return t(librarySidecarFilters.find((item) => item.id === filter)?.labelKey ?? "library.filter.all");
 }
 
 function schedulerTickQuery(
