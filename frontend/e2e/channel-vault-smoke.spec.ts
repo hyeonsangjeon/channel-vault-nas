@@ -225,6 +225,13 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.screenshot({ path: testInfo.outputPath("worker-history.png"), fullPage: true });
   await page.getByRole("button", { name: "닫기" }).click();
 
+  await expect(page.getByLabel("Queue 레이더")).toBeVisible();
+  const queueFilters = page.getByLabel("Queue 상태 필터");
+  await expect(queueFilters).toBeVisible();
+  await queueFilters.getByRole("button", { name: "대기" }).click();
+  await expect(page.locator(".queue-status-pill.queued").first()).toBeVisible();
+  await queueFilters.getByRole("button", { name: "실행 가능" }).click();
+
   await page.getByRole("button", { name: "프리플라이트" }).click();
   await expect(page.locator(".command-lines code").filter({ hasText: "yt-dlp" }).first()).toBeVisible();
   await expect(page.locator(".preflight-pill.ready").first()).toBeVisible();

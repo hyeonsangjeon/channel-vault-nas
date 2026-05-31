@@ -144,6 +144,7 @@ type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "prefligh
 type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
+type QueueStatusFilter = "launchable" | "all" | "candidate" | "queued" | "running" | "failed" | "cancelled";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
@@ -169,6 +170,15 @@ const schedulerTickStatusFilters: { id: SchedulerTickStatusFilter; labelKey: Tra
   { id: "failed", labelKey: "runtime.ticks.failed" },
   { id: "skipped", labelKey: "runtime.ticks.skipped" },
   { id: "running", labelKey: "runtime.ticks.running" },
+];
+const queueStatusFilters: { id: QueueStatusFilter; labelKey: TranslationKey }[] = [
+  { id: "launchable", labelKey: "launch.filter.launchable" },
+  { id: "all", labelKey: "launch.filter.all" },
+  { id: "candidate", labelKey: "launch.filter.candidate" },
+  { id: "queued", labelKey: "launch.filter.queued" },
+  { id: "failed", labelKey: "launch.filter.failed" },
+  { id: "running", labelKey: "launch.filter.running" },
+  { id: "cancelled", labelKey: "launch.filter.cancelled" },
 ];
 const libraryIntegrityFilters: { id: LibraryIntegrityFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "library.filter.all" },
@@ -275,6 +285,7 @@ function App() {
   const [preflightPlan, setPreflightPlan] = useState<QueuePreflightPlan | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [queueSearch, setQueueSearch] = useState("");
+  const [queueStatusFilter, setQueueStatusFilter] = useState<QueueStatusFilter>("launchable");
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
   const [selectionSeedKey, setSelectionSeedKey] = useState("");
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
@@ -494,6 +505,16 @@ function App() {
     () => downloadJobs.filter((job) => job.status === "candidate" || job.status === "queued"),
     [downloadJobs],
   );
+  const actionableQueueJobs = useMemo(() => downloadJobs.filter(isSelectableQueueJob), [downloadJobs]);
+  const queueRadar = useMemo(
+    () => ({
+      total: downloadJobs.length,
+      review: downloadJobs.filter((job) => job.preflight_status === "review").length,
+      retry: downloadJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length,
+      running: downloadJobs.filter((job) => job.status === "running").length,
+    }),
+    [downloadJobs],
+  );
   const runningJobs = useMemo(() => downloadJobs.filter((job) => job.status === "running"), [downloadJobs]);
   const runningWorkerJobs = useMemo(
     () => (workerPlan?.running_jobs.length ? workerPlan.running_jobs.map((item) => item.job) : runningJobs),
@@ -511,17 +532,24 @@ function App() {
   const launchableJobKey = useMemo(() => launchableJobs.map((job) => job.id).join(","), [launchableJobs]);
   const filteredLaunchJobs = useMemo(() => {
     const query = queueSearch.trim().toLowerCase();
-    if (!query) return launchableJobs;
-    return launchableJobs.filter((job) =>
+    const statusFiltered =
+      queueStatusFilter === "launchable"
+        ? actionableQueueJobs
+        : queueStatusFilter === "all"
+          ? downloadJobs
+          : downloadJobs.filter((job) => job.status === queueStatusFilter);
+    if (!query) return statusFiltered;
+    return statusFiltered.filter((job) =>
       [job.video_title, job.video_external_id, job.channel_title, job.quality, job.status]
         .join(" ")
         .toLowerCase()
         .includes(query),
     );
-  }, [launchableJobs, queueSearch]);
+  }, [actionableQueueJobs, downloadJobs, queueSearch, queueStatusFilter]);
+  const visibleActionableJobs = useMemo(() => filteredLaunchJobs.filter(isSelectableQueueJob), [filteredLaunchJobs]);
   const selectedJobs = useMemo(
-    () => launchableJobs.filter((job) => selectedJobIds.includes(job.id)),
-    [launchableJobs, selectedJobIds],
+    () => actionableQueueJobs.filter((job) => selectedJobIds.includes(job.id)),
+    [actionableQueueJobs, selectedJobIds],
   );
   const selectedBytesLabel = useMemo(
     () => formatBytes(selectedJobs.reduce((sum, job) => sum + (job.estimated_bytes ?? 0), 0)),
@@ -533,7 +561,7 @@ function App() {
   );
   const launchEstimateLabel = selectedJobs.length ? selectedBytesLabel : launchableBytesLabel;
   const allVisibleJobsSelected =
-    filteredLaunchJobs.length > 0 && filteredLaunchJobs.every((job) => selectedJobIds.includes(job.id));
+    visibleActionableJobs.length > 0 && visibleActionableJobs.every((job) => selectedJobIds.includes(job.id));
   const visibleLibraryItems = useMemo(() => {
     const query = libraryQuery.trim().toLowerCase();
     const codec = libraryCodecFilter.trim().toLowerCase();
@@ -1540,6 +1568,7 @@ function App() {
   }
 
   function handleToggleJobSelection(jobId: number) {
+    if (!actionableQueueJobs.some((job) => job.id === jobId)) return;
     setSelectedJobIds((current) =>
       current.includes(jobId) ? current.filter((id) => id !== jobId) : [...current, jobId],
     );
@@ -1547,16 +1576,16 @@ function App() {
 
   function handleSelectVisibleJobs() {
     if (allVisibleJobsSelected) {
-      const visibleIds = new Set(filteredLaunchJobs.map((job) => job.id));
+      const visibleIds = new Set(visibleActionableJobs.map((job) => job.id));
       setSelectedJobIds((current) => current.filter((id) => !visibleIds.has(id)));
       return;
     }
-    setSelectedJobIds((current) => Array.from(new Set([...current, ...filteredLaunchJobs.map((job) => job.id)])));
+    setSelectedJobIds((current) => Array.from(new Set([...current, ...visibleActionableJobs.map((job) => job.id)])));
   }
 
   function applyDownloadJobs(jobs: DownloadJob[]) {
     setDownloadJobs(jobs);
-    const activeIds = new Set(jobs.filter(isLaunchableJob).map((job) => job.id));
+    const activeIds = new Set(jobs.filter(isSelectableQueueJob).map((job) => job.id));
     setSelectedJobIds((current) => current.filter((id) => activeIds.has(id)));
   }
 
@@ -2157,6 +2186,45 @@ function App() {
               </article>
             </div>
 
+            <div className="queue-radar-strip" aria-label={t("launch.signal.title")}>
+              <div>
+                <ListFilter size={16} />
+                <div>
+                  <strong>{t("launch.signal.title")}</strong>
+                  <span>{t("launch.signal.subtitle")}</span>
+                </div>
+              </div>
+              <article>
+                <span>{t("launch.signal.total")}</span>
+                <strong>{queueRadar.total}</strong>
+              </article>
+              <article>
+                <span>{t("launch.signal.review")}</span>
+                <strong>{queueRadar.review}</strong>
+              </article>
+              <article>
+                <span>{t("launch.signal.retry")}</span>
+                <strong>{queueRadar.retry}</strong>
+              </article>
+              <article>
+                <span>{t("launch.signal.running")}</span>
+                <strong>{queueRadar.running}</strong>
+              </article>
+            </div>
+
+            <div className="launch-filter-rail" aria-label={t("launch.filter.label")}>
+              {queueStatusFilters.map((filter) => (
+                <button
+                  className={queueStatusFilter === filter.id ? "active" : ""}
+                  key={filter.id}
+                  onClick={() => setQueueStatusFilter(filter.id)}
+                  type="button"
+                >
+                  {t(filter.labelKey)}
+                </button>
+              ))}
+            </div>
+
             <div className="launch-toolbar">
               <label className="queue-search">
                 <Search size={15} />
@@ -2179,7 +2247,7 @@ function App() {
                 </button>
                 <button
                   className="command-button"
-                  disabled={filteredLaunchJobs.length === 0}
+                  disabled={visibleActionableJobs.length === 0}
                   onClick={handleSelectVisibleJobs}
                   type="button"
                 >
@@ -2231,15 +2299,17 @@ function App() {
               <div className="launch-job-stack">
                 {filteredLaunchJobs.slice(0, 8).map((job) => {
                   const selected = selectedJobIds.includes(job.id);
+                  const actionable = isSelectableQueueJob(job);
                   return (
-                    <article className={`launch-job ${job.status} ${selected ? "selected" : ""}`} key={job.id}>
+                    <article className={`launch-job ${job.status} ${selected ? "selected" : ""} ${actionable ? "" : "locked"}`} key={job.id}>
                       <button
-                        aria-label={selected ? t("launch.deselectJob") : t("launch.selectJob")}
+                        aria-label={actionable ? (selected ? t("launch.deselectJob") : t("launch.selectJob")) : t("launch.jobLocked")}
                         className="select-job"
+                        disabled={!actionable}
                         onClick={() => handleToggleJobSelection(job.id)}
                         type="button"
                       >
-                        {selected ? <CheckCircle2 size={16} /> : <Square size={16} />}
+                        {actionable ? selected ? <CheckCircle2 size={16} /> : <Square size={16} /> : <CirclePause size={16} />}
                       </button>
                       <div className="launch-job-main">
                         <strong>{job.video_title}</strong>
@@ -2247,6 +2317,7 @@ function App() {
                         {job.archive_path ? <small>{compactArchivePath(job.archive_path)}</small> : null}
                       </div>
                       <div className="launch-job-meta">
+                        <em className={`queue-status-pill ${job.status}`}>{queueJobStatusLabel(job.status, t)}</em>
                         <em className={`preflight-pill ${job.preflight_status}`}>{preflightLabel(job.preflight_status, t)}</em>
                         <small>{formatBytes(job.estimated_bytes ?? 0)}</small>
                       </div>
@@ -4033,8 +4104,21 @@ function preflightLabel(status: string, t: (key: TranslationKey) => string) {
   return t("preflight.status.unchecked");
 }
 
+function queueJobStatusLabel(status: string, t: (key: TranslationKey) => string) {
+  if (status === "candidate") return t("queue.candidates");
+  if (status === "queued") return t("queue.queued");
+  if (status === "running") return t("queue.running");
+  if (status === "failed") return t("queue.failed");
+  if (status === "cancelled") return t("queue.cancelled");
+  return status;
+}
+
 function isLaunchableJob(job: DownloadJob) {
   return job.status === "candidate" || job.status === "queued";
+}
+
+function isSelectableQueueJob(job: DownloadJob) {
+  return job.status === "candidate" || job.status === "queued" || job.status === "failed" || job.status === "cancelled";
 }
 
 function workerHistoryQuery(filter: WorkerHistoryFilter): DownloadWorkerRunFilters {

@@ -734,9 +734,18 @@ export async function enqueueVideoDownload(videoId: number, quality: string): Pr
   return postJson(`/api/videos/${videoId}/download`, { quality });
 }
 
-export async function getDownloadJobs(channelId?: number): Promise<DownloadJob[]> {
-  const query = typeof channelId === "number" ? `?channel_id=${channelId}` : "";
-  return getJson(`/api/jobs/downloads${query}`);
+export type DownloadJobFilters = {
+  status?: string;
+  limit?: number;
+};
+
+export async function getDownloadJobs(channelId?: number, filters: DownloadJobFilters = {}): Promise<DownloadJob[]> {
+  const params = new URLSearchParams();
+  if (typeof channelId === "number") params.set("channel_id", String(channelId));
+  if (filters.status) params.set("status", filters.status);
+  if (typeof filters.limit === "number") params.set("limit", String(filters.limit));
+  const suffix = params.toString() ? `?${params}` : "";
+  return getJson(`/api/jobs/downloads${suffix}`);
 }
 
 export async function getQueuePreflight(channelId?: number): Promise<QueuePreflightPlan> {
