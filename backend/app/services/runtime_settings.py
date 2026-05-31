@@ -131,6 +131,23 @@ def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
             service_name=service_name,
         )
 
+    if configured_adapter == "supervisor" or (configured_adapter == "auto" and os.environ.get("SUPERVISOR_ENABLED")):
+        command = _supervisor_restart_command(service_name=service_name)
+        return RuntimeRestartAdapter(
+            adapter="supervisor",
+            environment="supervised",
+            label="Supervisor restart",
+            command=command,
+            executable=settings.restart_adapter_execute and service_name is not None,
+            manual_required=not settings.restart_adapter_execute or service_name is None,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME and CVN_RESTART_ADAPTER_EXECUTE=true to run supervisorctl"
+                if service_name is None or not settings.restart_adapter_execute
+                else "supervisorctl restart is executable by configuration"
+            ),
+            service_name=service_name,
+        )
+
     compose_file = _detect_compose_file()
     if configured_adapter == "docker_compose" or (configured_adapter == "auto" and compose_file is not None):
         command = _docker_compose_restart_command(compose_file=compose_file, service_name=service_name)
@@ -333,6 +350,11 @@ def _docker_compose_restart_command(*, compose_file: Path | None, service_name: 
 def _systemd_restart_command(*, service_name: str | None) -> str:
     service = service_name or "channel-vault-nas"
     return " ".join(shlex.quote(part) for part in ("systemctl", "restart", service))
+
+
+def _supervisor_restart_command(*, service_name: str | None) -> str:
+    service = service_name or "channel-vault-nas"
+    return " ".join(shlex.quote(part) for part in ("supervisorctl", "restart", service))
 
 
 def _running_in_container() -> bool:

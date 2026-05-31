@@ -176,6 +176,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
   await expect(page.getByText("아카이브 루트").first()).toBeVisible();
   await expect(page.getByText("실제 저장소 트리").first()).toBeVisible();
+  await expect(page.locator(".storage-extension-rail").first()).toContainText(".mp4");
+  await expect(page.locator(".storage-scan-grid").first()).toContainText("미인덱스 미디어");
   await expect(page.locator(".storage-orphan-list").first()).toContainText("video.ko.srt");
   await expect(page.getByText("Queue calibration pass").first()).toBeVisible();
   await expect(page.getByText("Golden hour archive").first()).toBeVisible();

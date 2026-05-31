@@ -68,7 +68,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         const index = languageOrder.indexOf(current);
         return languageOrder[(index + 1) % languageOrder.length];
       });
-    const t = (key: TranslationKey) => translations[language][key];
+    const t = (key: TranslationKey) => translations[language][key] ?? translations.en[key] ?? key;
     return {
       language,
       languageLabel: languages[language],

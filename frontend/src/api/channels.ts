@@ -647,6 +647,20 @@ export type StorageFolderNode = {
   file_count: number;
 };
 
+export type StorageDriftItem = {
+  relative_path: string;
+  kind: string;
+  label: string;
+  reason: string;
+};
+
+export type StorageDrift = {
+  unindexed_media_count: number;
+  indexed_missing_count: number;
+  unindexed_media: StorageDriftItem[];
+  indexed_missing: StorageDriftItem[];
+};
+
 export type StorageScan = {
   scanned_at: string;
   volume: StorageVolume;
@@ -654,6 +668,7 @@ export type StorageScan = {
   top_extensions: StorageExtension[];
   orphan_sidecars: StorageOrphanSidecar[];
   folder_tree: StorageFolderNode[];
+  drift: StorageDrift;
   warnings: string[];
 };
 
