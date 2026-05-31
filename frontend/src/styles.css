@@ -2320,6 +2320,59 @@ button {
   font-size: 0.76rem;
 }
 
+.launch-preflight-runway {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.25fr) repeat(4, minmax(96px, 0.7fr));
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.14);
+  border-radius: 8px;
+  padding: 9px;
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.08), rgba(56, 189, 248, 0.06)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.launch-preflight-runway > div,
+.launch-preflight-runway article {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(5, 8, 14, 0.28);
+}
+
+.launch-preflight-runway > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 7px;
+  align-items: center;
+}
+
+.launch-preflight-runway svg {
+  color: var(--color-success);
+}
+
+.launch-preflight-runway span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.launch-preflight-runway strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launch-preflight-runway > div strong {
+  grid-column: 2;
+}
+
 .launch-board {
   grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
   align-items: start;
@@ -5087,6 +5140,7 @@ button {
   .runtime-grid,
   .runtime-guide-state,
   .launch-grid,
+  .launch-preflight-runway,
   .library-summary,
   .library-shelf,
   .rescan-result,
