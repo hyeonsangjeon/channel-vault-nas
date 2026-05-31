@@ -211,6 +211,7 @@ class QueuePreflightPlan(BaseModel):
     estimated_bytes: int
     estimated_label: str
     ready_job_ids: list[int]
+    review_job_ids: list[int]
     warnings: list[str]
     command_preview: list[str]
     jobs: list[DownloadJobRead]

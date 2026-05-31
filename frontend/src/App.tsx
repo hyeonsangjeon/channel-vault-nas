@@ -152,6 +152,7 @@ type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
 type QueueStatusFilter = "launchable" | "all" | "candidate" | "queued" | "running" | "failed" | "cancelled";
+type QueuePreflightFilter = "all" | "ready" | "review" | "unchecked";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
@@ -186,6 +187,12 @@ const queueStatusFilters: { id: QueueStatusFilter; labelKey: TranslationKey }[] 
   { id: "failed", labelKey: "launch.filter.failed" },
   { id: "running", labelKey: "launch.filter.running" },
   { id: "cancelled", labelKey: "launch.filter.cancelled" },
+];
+const queuePreflightFilters: { id: QueuePreflightFilter; labelKey: TranslationKey }[] = [
+  { id: "all", labelKey: "launch.preflightFilter.all" },
+  { id: "ready", labelKey: "launch.preflightFilter.ready" },
+  { id: "review", labelKey: "launch.preflightFilter.review" },
+  { id: "unchecked", labelKey: "launch.preflightFilter.unchecked" },
 ];
 const libraryIntegrityFilters: { id: LibraryIntegrityFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "library.filter.all" },
@@ -296,6 +303,7 @@ function App() {
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [queueSearch, setQueueSearch] = useState("");
   const [queueStatusFilter, setQueueStatusFilter] = useState<QueueStatusFilter>("launchable");
+  const [queuePreflightFilter, setQueuePreflightFilter] = useState<QueuePreflightFilter>("all");
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
   const [selectionSeedKey, setSelectionSeedKey] = useState("");
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
@@ -534,6 +542,15 @@ function App() {
     }),
     [downloadJobs],
   );
+  const preflightFilterCounts = useMemo(
+    () => ({
+      all: downloadJobs.length,
+      ready: downloadJobs.filter((job) => job.preflight_status === "ready").length,
+      review: downloadJobs.filter((job) => job.preflight_status === "review").length,
+      unchecked: downloadJobs.filter((job) => job.preflight_status === "unchecked").length,
+    }),
+    [downloadJobs],
+  );
   const runningJobs = useMemo(() => downloadJobs.filter((job) => job.status === "running"), [downloadJobs]);
   const runningWorkerJobs = useMemo(
     () => (workerPlan?.running_jobs.length ? workerPlan.running_jobs.map((item) => item.job) : runningJobs),
@@ -557,14 +574,18 @@ function App() {
         : queueStatusFilter === "all"
           ? downloadJobs
           : downloadJobs.filter((job) => job.status === queueStatusFilter);
-    if (!query) return statusFiltered;
-    return statusFiltered.filter((job) =>
+    const preflightFiltered =
+      queuePreflightFilter === "all"
+        ? statusFiltered
+        : statusFiltered.filter((job) => job.preflight_status === queuePreflightFilter);
+    if (!query) return preflightFiltered;
+    return preflightFiltered.filter((job) =>
       [job.video_title, job.video_external_id, job.channel_title, job.quality, job.status]
         .join(" ")
         .toLowerCase()
         .includes(query),
     );
-  }, [actionableQueueJobs, downloadJobs, queueSearch, queueStatusFilter]);
+  }, [actionableQueueJobs, downloadJobs, queuePreflightFilter, queueSearch, queueStatusFilter]);
   const visibleActionableJobs = useMemo(() => filteredLaunchJobs.filter(isSelectableQueueJob), [filteredLaunchJobs]);
   const selectedJobs = useMemo(
     () => actionableQueueJobs.filter((job) => selectedJobIds.includes(job.id)),
@@ -580,7 +601,7 @@ function App() {
   );
   const launchEstimateLabel = selectedJobs.length ? selectedBytesLabel : launchableBytesLabel;
   const preflightReadyCount = preflightPlan?.ready_job_ids.length ?? 0;
-  const preflightReviewCount = preflightPlan ? Math.max(0, preflightPlan.job_count - preflightReadyCount) : 0;
+  const preflightReviewCount = preflightPlan?.review_job_ids.length ?? 0;
   const launchRunwayFreeLabel = storageVolume?.free_label ?? "0 MB";
   const allVisibleJobsSelected =
     visibleActionableJobs.length > 0 && visibleActionableJobs.every((job) => selectedJobIds.includes(job.id));
@@ -2397,6 +2418,24 @@ function App() {
                   type="button"
                 >
                   {t(filter.labelKey)}
+                </button>
+              ))}
+            </div>
+
+            <div className="preflight-filter-rail" aria-label={t("launch.preflightFilter.label")}>
+              <span>
+                <ShieldCheck size={14} />
+                {t("launch.preflightFilter.label")}
+              </span>
+              {queuePreflightFilters.map((filter) => (
+                <button
+                  className={queuePreflightFilter === filter.id ? "active" : ""}
+                  key={filter.id}
+                  onClick={() => setQueuePreflightFilter(filter.id)}
+                  type="button"
+                >
+                  <strong>{t(filter.labelKey)}</strong>
+                  <em>{preflightFilterCounts[filter.id]}</em>
                 </button>
               ))}
             </div>

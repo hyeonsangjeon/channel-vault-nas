@@ -244,6 +244,7 @@ export type QueuePreflightPlan = {
   estimated_bytes: number;
   estimated_label: string;
   ready_job_ids: number[];
+  review_job_ids: number[];
   warnings: string[];
   command_preview: string[];
   jobs: DownloadJob[];
