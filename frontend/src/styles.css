@@ -4317,6 +4317,99 @@ button {
   opacity: 0.55;
 }
 
+.storage-tree-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.06), rgba(56, 189, 248, 0.055)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.storage-tree-head,
+.storage-tree-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.storage-tree-head {
+  justify-content: space-between;
+}
+
+.storage-tree-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.storage-tree-head code {
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #bbf7d0;
+  background: rgba(52, 211, 153, 0.07);
+  font-size: 0.66rem;
+}
+
+.storage-tree-panel article {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.storage-tree-copy svg {
+  flex: 0 0 auto;
+  color: var(--color-storage);
+}
+
+.storage-tree-copy div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.storage-tree-copy strong,
+.storage-tree-copy small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-tree-copy strong {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.storage-tree-copy small {
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 0.65rem;
+}
+
+.storage-tree-copy em {
+  flex: 0 0 auto;
+  color: #dff6ff;
+  font-size: 0.67rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.storage-tree-panel article > i {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-storage), rgba(56, 189, 248, 0.45));
+}
+
 .storage-extension-rail {
   display: grid;
   gap: 8px;

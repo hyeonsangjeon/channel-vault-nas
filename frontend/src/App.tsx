@@ -442,6 +442,10 @@ function App() {
     () => Math.max(1, ...(storageScan?.top_extensions.map((extension) => extension.bytes) ?? [0])),
     [storageScan],
   );
+  const storageFolderMaxBytes = useMemo(
+    () => Math.max(1, ...(storageScan?.folder_tree.map((node) => node.bytes) ?? [0])),
+    [storageScan],
+  );
   const activeTimeline = useMemo<TimelineVideo[]>(
     () =>
       channelVideos.length
@@ -2995,6 +2999,32 @@ function App() {
                   <Download size={14} />
                   {workflowStatus === "bulk" ? t("import.rescan.running") : t("storage.recovery.action")}
                 </button>
+              </div>
+            ) : null}
+            {storageScan?.folder_tree.length ? (
+              <div className="storage-tree-panel" aria-label={t("storage.scan.tree")}>
+                <div className="storage-tree-head">
+                  <span>
+                    <FolderTree size={13} />
+                    {t("storage.scan.tree")}
+                  </span>
+                  <code>{storageScan.folder_tree.length}</code>
+                </div>
+                {storageScan.folder_tree.slice(0, 7).map((node) => (
+                  <article key={node.relative_path}>
+                    <div className="storage-tree-copy" style={{ paddingLeft: `${Math.min(node.depth, 4) * 10}px` }}>
+                      <Folder size={13} />
+                      <div>
+                        <strong>{node.name}</strong>
+                        <small>
+                          {node.file_count} {t("storage.scan.files")} · {node.relative_path}
+                        </small>
+                      </div>
+                      <em>{node.label}</em>
+                    </div>
+                    <i style={{ width: `${Math.max(5, Math.round((node.bytes / storageFolderMaxBytes) * 100))}%` }} />
+                  </article>
+                ))}
               </div>
             ) : null}
             {storageScan?.top_extensions.length ? (

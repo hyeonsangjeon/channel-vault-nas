@@ -194,6 +194,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.locator(".storage-scan-grid").first()).toContainText("미인덱스 미디어");
   await expect(page.getByText("드리프트 대응")).toBeVisible();
   await expect(page.getByRole("button", { name: "인덱스 복구" })).toBeVisible();
+  await expect(page.locator(".storage-tree-panel").first()).toContainText("@signalvaultlab");
   await expect(page.locator(".storage-orphan-list").first()).toContainText("video.ko.srt");
   await expect(page.getByText("Queue calibration pass").first()).toBeVisible();
   await expect(page.getByText("Golden hour archive").first()).toBeVisible();
