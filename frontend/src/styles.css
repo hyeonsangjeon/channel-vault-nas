@@ -1441,6 +1441,46 @@ button {
   white-space: nowrap;
 }
 
+.sync-cadence-control {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) auto;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sync-cadence-control input,
+.sync-cadence-control button {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(3, 7, 18, 0.4);
+  font: inherit;
+}
+
+.sync-cadence-control input {
+  padding: 7px 8px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.sync-cadence-control button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 9px;
+  color: #dff6ff;
+  font-size: 0.7rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.sync-cadence-control button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
 .policy-console {
   display: flex;
   align-items: center;

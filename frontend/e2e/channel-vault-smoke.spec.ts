@@ -174,6 +174,13 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.getByText("다음 sync 예정")).toBeVisible();
   await expect(page.getByText("마지막 자동 sync")).toBeVisible();
   await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
+  await page.getByLabel("Sync 간격 분").fill("120");
+  const intervalPatch = page.waitForResponse(
+    (response) => response.url().endsWith("/api/channels/1") && response.request().method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "간격 저장" }).click();
+  expect((await (await intervalPatch).json()).sync_interval_minutes).toBe(120);
+  await expect(page.getByText("120분 간격")).toBeVisible();
   await expect(page.getByText("아카이브 루트").first()).toBeVisible();
   await expect(page.getByText("실제 저장소 트리").first()).toBeVisible();
   await expect(page.locator(".storage-extension-rail").first()).toContainText(".mp4");
