@@ -250,16 +250,18 @@ async def build_queue_preflight_plan(
     candidate_count = sum(1 for job in launchable if job.status == "candidate")
     queued_count = sum(1 for job in launchable if job.status == "queued")
     estimated_bytes = sum(job.estimated_bytes or _estimate_job_bytes(job.quality) for job in launchable)
-    ready_job_ids = [job.id for job in sorted(launchable, key=lambda item: (-item.priority, item.created_at))]
+    sorted_launchable = sorted(launchable, key=lambda item: (-item.priority, item.created_at))
+    review_job_ids = set(_preflight_review_job_ids(sorted_launchable))
+    ready_job_ids = [job.id for job in sorted_launchable if job.id not in review_job_ids]
+    sorted_review_job_ids = [job.id for job in sorted_launchable if job.id in review_job_ids]
     warnings = _preflight_warnings(launchable)
     command_preview = _command_preview(launchable[:3])
-    preflight_status = "ready" if not warnings else "review"
 
     if launchable:
         now = datetime.now(UTC)
         rows = await _download_job_rows(db, [job.id for job in launchable])
         for job, _video, _channel in rows:
-            job.preflight_status = preflight_status
+            job.preflight_status = "review" if job.id in review_job_ids else "ready"
             job.preflight_checked_at = now
             job.estimated_bytes = job.estimated_bytes or _estimate_job_bytes(job.quality)
         await event_bus.publish(
@@ -282,6 +284,7 @@ async def build_queue_preflight_plan(
         estimated_bytes=estimated_bytes,
         estimated_label=_bytes_label(estimated_bytes),
         ready_job_ids=ready_job_ids,
+        review_job_ids=sorted_review_job_ids,
         warnings=warnings,
         command_preview=command_preview,
         jobs=jobs,
@@ -435,6 +438,12 @@ def _preflight_warnings(jobs: list[DownloadJobRead]) -> list[str]:
     if len(jobs) > 50:
         warnings.append("Large queue batches should be reviewed before launch.")
     return warnings
+
+
+def _preflight_review_job_ids(jobs: list[DownloadJobRead]) -> list[int]:
+    if len(jobs) > 50:
+        return [job.id for job in jobs]
+    return [job.id for job in jobs if job.quality == "best"]
 
 
 def _command_preview(jobs: list[DownloadJobRead]) -> list[str]:

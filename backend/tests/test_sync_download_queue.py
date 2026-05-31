@@ -1,6 +1,6 @@
 """Manual sync, scheduled metadata sync, and download queue API tests."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -321,6 +321,76 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
 
     assert download_job_count == 2
     assert sync_job_count == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_preflight_keeps_best_quality_in_review() -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(MetadataSyncTick))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(LibraryView))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        channel = Channel(
+            source_type="channel",
+            source_url="https://youtube.com/@preflightlab",
+            external_id="UCpreflightlab",
+            handle="@preflightlab",
+            title="Preflight Lab",
+            status="active",
+        )
+        session.add(channel)
+        await session.flush()
+        ready_video = Video(
+            channel_id=channel.id,
+            external_id="ready123",
+            title="Ready 1080p",
+            published_at=datetime(2026, 1, 1, tzinfo=UTC),
+            upload_date=date(2026, 1, 1),
+            duration_seconds=600,
+        )
+        review_video = Video(
+            channel_id=channel.id,
+            external_id="review123",
+            title="Review best",
+            published_at=datetime(2026, 1, 2, tzinfo=UTC),
+            upload_date=date(2026, 1, 2),
+            duration_seconds=900,
+        )
+        session.add_all([ready_video, review_video])
+        await session.flush()
+        ready_job = DownloadJob(video_id=ready_video.id, status="candidate", quality="1080p", priority=40)
+        review_job = DownloadJob(video_id=review_video.id, status="candidate", quality="best", priority=95)
+        session.add_all([ready_job, review_job])
+        await session.flush()
+        ready_job_id = ready_job.id
+        review_job_id = review_job.id
+        channel_id = channel.id
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(f"/api/jobs/downloads/preflight?channel_id={channel_id}")
+
+    payload = response.json()
+    jobs_by_id = {job["id"]: job for job in payload["jobs"]}
+
+    assert response.status_code == 200
+    assert payload["job_count"] == 2
+    assert payload["ready_job_ids"] == [ready_job_id]
+    assert payload["review_job_ids"] == [review_job_id]
+    assert any("best quality" in warning for warning in payload["warnings"])
+    assert jobs_by_id[ready_job_id]["preflight_status"] == "ready"
+    assert jobs_by_id[review_job_id]["preflight_status"] == "review"
 
 
 @pytest.mark.asyncio

@@ -2253,6 +2253,62 @@ button {
   background: rgba(52, 211, 153, 0.08);
 }
 
+.preflight-filter-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.preflight-filter-rail > span,
+.preflight-filter-rail button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.7rem;
+}
+
+.preflight-filter-rail > span {
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.07);
+}
+
+.preflight-filter-rail svg {
+  color: var(--color-info);
+}
+
+.preflight-filter-rail button {
+  cursor: pointer;
+}
+
+.preflight-filter-rail strong {
+  color: inherit;
+  font-size: inherit;
+}
+
+.preflight-filter-rail em {
+  min-width: 20px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.075);
+  font-style: normal;
+  text-align: center;
+}
+
+.preflight-filter-rail button.active {
+  border-color: rgba(56, 189, 248, 0.32);
+  color: #e0f2fe;
+  background: rgba(56, 189, 248, 0.1);
+}
+
 .launch-toolbar {
   grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
   align-items: center;
