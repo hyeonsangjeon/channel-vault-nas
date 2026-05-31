@@ -20,6 +20,7 @@ from app.services.archive_rescan import apply_rescan_plan, apply_rescan_target, 
 from app.services.library_index import list_library_files
 from app.services.media_probe import MediaProbe
 from app.services.storage_guard import backup_sqlite_database, sqlite_path_from_url
+from app.services.storage_scanner import build_storage_scan
 
 
 def test_sqlite_path_from_url_resolves_relative_path(tmp_path: Path) -> None:
@@ -83,6 +84,29 @@ def test_archive_rescan_plan_discovers_video_info_sidecars(tmp_path: Path) -> No
         "2022-05-20 - HEAVY BAG DRILLS [6lXl1hkEgcA]/video.mp4"
     ]
     assert candidate.nfo is not None
+
+
+def test_storage_scan_summarizes_real_archive_and_orphan_sidecars(tmp_path: Path) -> None:
+    video_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Signal clip [sig01]"
+    video_dir.mkdir(parents=True)
+    (video_dir / "video.mp4").write_text("media", encoding="utf-8")
+    (video_dir / "video.info.json").write_text("{}", encoding="utf-8")
+    orphan_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "orphan"
+    orphan_dir.mkdir(parents=True)
+    (orphan_dir / "video.ko.srt").write_text("subtitle", encoding="utf-8")
+
+    scan = build_storage_scan(tmp_path)
+
+    assert scan.volume.exists is True
+    assert scan.volume.file_count == 3
+    assert scan.volume.archive_bytes > 0
+    assert scan.channels[0].relative_path == "channels/signal [UC_SIGNAL]"
+    assert scan.channels[0].media_count == 1
+    assert scan.channels[0].sidecar_count == 2
+    assert scan.channels[0].orphan_sidecar_count == 1
+    assert scan.top_extensions[0].count >= 1
+    assert scan.orphan_sidecars[0].kind == "subtitle"
+    assert any(node.relative_path == "channels" for node in scan.folder_tree)
 
 
 @pytest.mark.asyncio

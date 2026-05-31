@@ -111,9 +111,19 @@ Principle: product specs are shared; working traces are private.
 - Added a managed runtime apply flow that writes non-secret worker, scheduler,
   cadence/limit, and media binary overrides to `.env.runtime`, surfaces
   restart-required state, and provides a restart command copy action.
+- Added deployment-aware runtime restart adapters, including manual/local dev
+  guidance, Docker Compose command generation, systemd guidance, and an
+  executable supervised hook path through `CVN_RESTART_HOOK_COMMAND`.
 - Added persistent `download_scheduler_ticks` rows plus recent tick log UI so
   scheduler pass status, skipped/failed reasons, and started/completed/failed
   counts survive backend process restarts.
+- Added a dedicated scheduler tick log drawer with completed/failed/skipped,
+  slow-duration, interval, and worker-limit filters.
+- Added a filesystem-backed `/api/storage/scan` endpoint and storage panels for
+  real archive bytes, volume pressure, folder tree summaries, extension totals,
+  channel-folder usage, and orphan sidecar warnings.
+- Added browser-local saved Vault Library views so operators can store and
+  reapply custom filter combinations beyond the built-in quick presets.
 - Added planned archive-folder paths to queue rows so Launch Control can show
   where each pending video will land before transfer starts.
 - Added a second Alembic migration for queue preflight columns and hardened

@@ -61,6 +61,20 @@ class RuntimeEnvOverride(BaseModel):
     pending_restart: bool
 
 
+class RuntimeRestartAdapter(BaseModel):
+    """Deployment-aware restart action surfaced to the operator UI."""
+
+    adapter: str
+    environment: str
+    label: str
+    command: str
+    executable: bool
+    manual_required: bool
+    reason: str
+    service_name: str | None = None
+    compose_file: str | None = None
+
+
 class RuntimeSettingsRead(BaseModel):
     """Operator-facing runtime settings snapshot."""
 
@@ -74,6 +88,7 @@ class RuntimeSettingsRead(BaseModel):
     pending_restart: bool
     pending_overrides: list[RuntimeEnvOverride]
     restart_command: str
+    restart_adapter: RuntimeRestartAdapter
     scheduler_status: SchedulerRuntimeStatus
     scheduler_ticks: list[SchedulerTickRead]
     binaries: list[BinaryHealth]
@@ -110,3 +125,20 @@ class RuntimeSettingsApplyResult(BaseModel):
     managed_env_file: str
     restart_command: str
     runtime: RuntimeSettingsRead
+
+
+class RuntimeRestartRequest(BaseModel):
+    """Operator restart request metadata."""
+
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class RuntimeRestartResult(BaseModel):
+    """Result from attempting a deployment-aware restart request."""
+
+    requested: bool
+    adapter: RuntimeRestartAdapter
+    message: str
+    exit_code: int | None = None
+    stdout: str | None = None
+    stderr: str | None = None
