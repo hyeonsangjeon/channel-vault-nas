@@ -319,6 +319,7 @@ function App() {
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<LibraryItem | null>(null);
   const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryDetailStatus, setLibraryDetailStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [storageOrphanKindFilter, setStorageOrphanKindFilter] = useState("all");
   const [rescanResult, setRescanResult] = useState<RescanApplyResult | null>(null);
   const [workerPlan, setWorkerPlan] = useState<DownloadWorkerPlan | null>(null);
   const [workerRuns, setWorkerRuns] = useState<DownloadWorkerRunAudit[]>([]);
@@ -472,6 +473,15 @@ function App() {
       .map(([kind, count]) => `${kind} ${count}`)
       .join(" · ");
   }, [storageScan, t]);
+  const storageOrphanKinds = useMemo(() => {
+    const kinds = new Set(storageScan?.orphan_sidecars.map((sidecar) => sidecar.kind) ?? []);
+    return ["all", ...Array.from(kinds).sort()];
+  }, [storageScan]);
+  const filteredStorageOrphans = useMemo(() => {
+    const orphans = storageScan?.orphan_sidecars ?? [];
+    if (storageOrphanKindFilter === "all") return orphans;
+    return orphans.filter((sidecar) => sidecar.kind === storageOrphanKindFilter);
+  }, [storageOrphanKindFilter, storageScan]);
   const storagePressureLeader = useMemo(
     () => [...(storageScan?.channels ?? [])].sort((a, b) => b.pressure_score - a.pressure_score)[0] ?? null,
     [storageScan],
@@ -3304,6 +3314,20 @@ function App() {
                     {t("storage.triage.actionSidecar")}
                   </button>
                 </div>
+                {storageScan.orphan_sidecars.length ? (
+                  <div className="storage-orphan-kind-filter" aria-label={t("storage.triage.kindFilter")}>
+                    {storageOrphanKinds.map((kind) => (
+                      <button
+                        className={storageOrphanKindFilter === kind ? "active" : ""}
+                        key={kind}
+                        onClick={() => setStorageOrphanKindFilter(kind)}
+                        type="button"
+                      >
+                        {kind === "all" ? t("storage.triage.allKinds") : kind}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {storageScan?.folder_tree.length ? (
@@ -3377,8 +3401,14 @@ function App() {
               </div>
             ) : null}
             {storageScan?.orphan_sidecars.length ? (
-              <div className="storage-orphan-list">
-                {storageScan.orphan_sidecars.slice(0, 3).map((sidecar) => (
+              <div className="storage-orphan-list" aria-label={t("storage.triage.orphanList")}>
+                <div className="storage-orphan-list-head">
+                  <span>{t("storage.triage.orphanList")}</span>
+                  <strong>
+                    {filteredStorageOrphans.length}/{storageScan.orphan_sidecars.length}
+                  </strong>
+                </div>
+                {filteredStorageOrphans.slice(0, 5).map((sidecar) => (
                   <code key={sidecar.relative_path}>
                     {sidecar.kind} · {sidecar.relative_path}
                   </code>
