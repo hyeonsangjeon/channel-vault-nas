@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     download_worker_scheduler_enabled: bool = False
     download_worker_scheduler_interval_seconds: int = 300
     download_worker_scheduler_limit: int = 1
+    restart_adapter: str = "auto"
+    restart_adapter_execute: bool = False
+    restart_hook_command: str = ""
+    restart_service_name: str = ""
+    restart_command_timeout_seconds: int = 8
+    storage_scan_max_files: int = 10_000
+    storage_scan_max_orphans: int = 24
+    storage_scan_max_folders: int = 80
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]

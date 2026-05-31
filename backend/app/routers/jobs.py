@@ -92,10 +92,20 @@ async def get_download_worker_runs(
 async def get_download_scheduler_ticks(
     db: DbSession,
     status: str | None = None,
+    min_duration_seconds: int | None = None,
+    interval_seconds: int | None = None,
+    worker_limit: int | None = None,
     limit: int = 12,
 ) -> list[SchedulerTickRead]:
     """Return recent persisted scheduler tick telemetry."""
-    return await list_scheduler_ticks(db=db, status=status, limit=limit)
+    return await list_scheduler_ticks(
+        db=db,
+        status=status,
+        min_duration_seconds=min_duration_seconds,
+        interval_seconds=interval_seconds,
+        worker_limit=worker_limit,
+        limit=limit,
+    )
 
 
 @router.post("/downloads/worker/run-once", response_model=DownloadWorkerRunResult)

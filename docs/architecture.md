@@ -140,6 +140,46 @@ Change for this app:
 - Use domain-specific repositories/services rather than keeping all behavior in
   a single download manager.
 
+## Runtime Operations
+
+Runtime settings are exposed through `/api/settings/runtime` and remain
+non-secret by design. The operator UI can write worker/scheduler flags,
+cadence/limit, and media binary overrides to the managed `.env.runtime` file,
+then marks the process as restart-pending until the running settings match the
+saved values.
+
+Restart requests use deployment adapters instead of assuming one process model:
+
+- Manual/local dev remains the safe default and returns a copyable command.
+- Docker Compose is detected from compose files and returns a generated
+  `docker compose restart` command.
+- System service mode can generate a `systemctl restart` command when service
+  name and execution are explicitly configured.
+- A supervised NAS/package install can provide `CVN_RESTART_HOOK_COMMAND`; only
+  this explicit hook is executable by default from the UI.
+
+Scheduled worker ticks persist into `download_scheduler_ticks`. The operational
+reader endpoint `/api/jobs/downloads/scheduler/ticks` supports status,
+duration, scheduler interval, worker limit, and result limit filters so the UI
+can separate completed, failed, skipped, and slow ticks without relying on
+in-memory process state.
+
+## Storage Scanner
+
+The database is the archive index, but storage pressure views should read the
+real NAS root. `/api/storage/scan` walks `CVN_DOWNLOAD_DIR` with bounded file
+and display limits, then returns:
+
+- host volume usage and archive bytes under the configured root;
+- bytes, media count, sidecar count, and orphan sidecar count by channel folder;
+- compact folder tree summaries for the first few levels;
+- top extensions by byte size;
+- orphan sidecars, defined as sidecar-like files without a media sibling in the
+  same folder.
+
+This endpoint is intentionally read-only and does not mutate the DB. DB rebuild
+or import behavior stays under the library rescan endpoints.
+
 ## Auth
 
 Initial auth remains NAS-simple:

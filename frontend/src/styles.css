@@ -647,6 +647,74 @@ button {
   overflow-wrap: anywhere;
 }
 
+.runtime-restart-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.runtime-adapter-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-top: 10px;
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(250, 204, 21, 0.055);
+}
+
+.runtime-adapter-panel.good {
+  border-color: rgba(52, 211, 153, 0.18);
+  background: rgba(52, 211, 153, 0.055);
+}
+
+.runtime-adapter-panel svg {
+  color: var(--color-warning);
+}
+
+.runtime-adapter-panel.good svg {
+  color: var(--color-success);
+}
+
+.runtime-adapter-panel strong,
+.runtime-adapter-panel span,
+.runtime-adapter-panel code {
+  display: block;
+}
+
+.runtime-adapter-panel strong {
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.runtime-adapter-panel span {
+  margin-top: 3px;
+  color: var(--faint);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.runtime-adapter-panel code {
+  margin-top: 8px;
+  border-left: 2px solid rgba(56, 189, 248, 0.7);
+  padding: 7px 8px;
+  color: #dff6ff;
+  background: rgba(56, 189, 248, 0.07);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.runtime-restart-request {
+  margin-top: 9px;
+}
+
 .runtime-apply-panel,
 .scheduler-tick-log {
   padding: 12px;
@@ -860,6 +928,34 @@ button {
 
 .runtime-binary-list article.warn svg {
   color: var(--color-warning);
+}
+
+.scheduler-tick-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scheduler-tick-summary article {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(2, 6, 12, 0.28);
+}
+
+.scheduler-tick-summary span {
+  display: block;
+  color: var(--faint);
+  font-size: 0.66rem;
+}
+
+.scheduler-tick-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 .scheduler-tick-list {
@@ -2174,6 +2270,16 @@ button {
   backdrop-filter: blur(10px);
 }
 
+.scheduler-tick-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(2, 6, 12, 0.64);
+  backdrop-filter: blur(10px);
+}
+
 .worker-history-drawer {
   width: min(520px, calc(100vw - 24px));
   min-width: 0;
@@ -2184,6 +2290,20 @@ button {
   background:
     linear-gradient(145deg, rgba(56, 189, 248, 0.12), transparent 36%),
     linear-gradient(215deg, rgba(52, 211, 153, 0.1), transparent 44%),
+    #080c13;
+  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.42);
+}
+
+.scheduler-tick-drawer {
+  width: min(560px, calc(100vw - 24px));
+  min-width: 0;
+  height: 100dvh;
+  overflow-y: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  background:
+    linear-gradient(145deg, rgba(250, 204, 21, 0.1), transparent 35%),
+    linear-gradient(215deg, rgba(56, 189, 248, 0.12), transparent 44%),
     #080c13;
   box-shadow: -24px 0 70px rgba(0, 0, 0, 0.42);
 }
@@ -2359,6 +2479,102 @@ button {
   overflow-wrap: anywhere;
 }
 
+.scheduler-tick-filters {
+  display: grid;
+  gap: 10px;
+}
+
+.scheduler-numeric-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scheduler-numeric-filters label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(5, 8, 14, 0.58);
+}
+
+.scheduler-numeric-filters span {
+  color: var(--faint);
+  font-size: 0.66rem;
+}
+
+.scheduler-numeric-filters input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(56, 189, 248, 0.14);
+  border-radius: 7px;
+  padding: 8px;
+  color: var(--text);
+  background: rgba(8, 13, 22, 0.86);
+  font: inherit;
+  font-size: 0.74rem;
+}
+
+.scheduler-tick-summary-grid {
+  margin-top: 12px;
+}
+
+.scheduler-tick-list.expanded {
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.scheduler-tick-list.expanded article {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.scheduler-tick-list.expanded article > div:first-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+}
+
+.scheduler-tick-list.expanded dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.scheduler-tick-list.expanded dl div {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.scheduler-tick-list.expanded dt {
+  color: var(--faint);
+  font-size: 0.64rem;
+}
+
+.scheduler-tick-list.expanded dd {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.scheduler-tick-list.expanded code {
+  display: block;
+  border-left: 2px solid var(--color-warning);
+  padding: 8px 9px;
+  color: #f8df9c;
+  background: rgba(245, 158, 11, 0.07);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .library-index-panel {
   margin-bottom: 14px;
   background:
@@ -2480,6 +2696,97 @@ button {
 
 .library-codec-filter input::placeholder {
   color: var(--faint);
+}
+
+.library-saved-views {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: -2px 0 12px;
+  border: 1px solid rgba(52, 211, 153, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(52, 211, 153, 0.045);
+}
+
+.library-saved-views > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #bbf7d0;
+  font-size: 0.68rem;
+}
+
+.library-saved-views label {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
+.library-saved-views input {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0 9px;
+  color: var(--text);
+  background: rgba(5, 8, 14, 0.62);
+  font: inherit;
+  font-size: 0.72rem;
+}
+
+.library-save-view,
+.saved-view-pill button {
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.045);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.library-save-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border-color: rgba(52, 211, 153, 0.2);
+  color: #bbf7d0;
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.saved-view-pill {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.14);
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.055);
+}
+
+.saved-view-pill button {
+  border-radius: 0;
+  background: transparent;
+}
+
+.saved-view-pill button:first-child {
+  max-width: 150px;
+  overflow: hidden;
+  padding: 0 9px;
+  color: #dff6ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-view-pill button:last-child {
+  width: 30px;
+  display: grid;
+  place-items: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fecaca;
 }
 
 .library-summary {
@@ -3316,15 +3623,64 @@ button {
 }
 
 .storage-map {
-  height: 220px;
+  height: 172px;
   display: flex;
   gap: 8px;
   align-items: stretch;
 }
 
+.storage-volume {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.13);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(56, 189, 248, 0.05);
+}
+
+.storage-volume > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.storage-volume span,
+.storage-volume small,
+.storage-cell small,
+.storage-scan-grid span {
+  color: var(--faint);
+  font-size: 0.68rem;
+}
+
+.storage-volume code {
+  color: #dff6ff;
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+}
+
+.storage-volume strong {
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 1rem;
+}
+
+.storage-volume-bar {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.storage-volume-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-success), var(--color-info), var(--color-storage));
+}
+
 .storage-cell {
   min-width: 72px;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -3346,6 +3702,70 @@ button {
 .storage-cell strong {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.9rem;
+}
+
+.storage-cell small {
+  color: rgba(3, 16, 12, 0.68);
+  font-weight: 700;
+}
+
+.storage-scan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.storage-scan-grid article {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.storage-scan-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.storage-orphan-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.storage-orphan-list code {
+  display: block;
+  border-left: 2px solid var(--color-warning);
+  padding: 7px 8px;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.07);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.storage-folder-scan {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+}
+
+.storage-folder-scan > strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.storage-folder-scan em {
+  margin-left: auto;
+  color: var(--color-info);
+  font-size: 0.66rem;
+  font-style: normal;
 }
 
 .policy-copy {
@@ -3717,6 +4137,11 @@ button {
     display: grid;
   }
 
+  .runtime-restart-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
   .runtime-apply-heading {
     display: grid;
   }
@@ -3735,6 +4160,9 @@ button {
   .library-summary,
   .library-shelf,
   .rescan-result,
+  .scheduler-tick-summary,
+  .scheduler-numeric-filters,
+  .storage-scan-grid,
   .worker-stats,
   .worker-running-job,
   .launch-hero {
@@ -3751,6 +4179,11 @@ button {
     padding: 16px;
   }
 
+  .scheduler-tick-drawer {
+    width: 100vw;
+    padding: 16px;
+  }
+
   .library-detail-drawer {
     width: 100vw;
     padding: 16px;
@@ -3758,6 +4191,7 @@ button {
 
   .worker-history-summary,
   .worker-history-card dl,
+  .scheduler-tick-list.expanded dl,
   .library-detail-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

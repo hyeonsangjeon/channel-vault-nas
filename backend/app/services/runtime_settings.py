@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import re
+import shlex
 from pathlib import Path
 from shutil import which
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.config import BACKEND_ROOT, settings
 from app.models.archive import DownloadSchedulerTick
 from app.schemas.settings import (
     BinaryHealth,
     RuntimeEnvOverride,
+    RuntimeRestartAdapter,
+    RuntimeRestartRequest,
+    RuntimeRestartResult,
     RuntimeSettingsApplyResult,
     RuntimeSettingsRead,
     RuntimeSettingsUpdate,
@@ -61,12 +67,146 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
         pending_restart=any(item.pending_restart for item in pending_overrides),
         pending_overrides=pending_overrides,
         restart_command=_restart_command(),
+        restart_adapter=get_runtime_restart_adapter(),
         scheduler_status=scheduler_status,
         scheduler_ticks=scheduler_ticks,
         binaries=[
             _binary_health(name="yt-dlp", command=settings.ytdlp_binary),
             _binary_health(name="ffprobe", command=settings.ffprobe_binary),
         ],
+    )
+
+
+def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
+    """Return the best restart adapter for the current deployment."""
+    configured_adapter = settings.restart_adapter.strip().lower() or "auto"
+    hook_command = settings.restart_hook_command.strip()
+    service_name = settings.restart_service_name.strip() or None
+
+    if configured_adapter == "disabled":
+        return RuntimeRestartAdapter(
+            adapter="disabled",
+            environment="manual",
+            label="Restart disabled",
+            command=_restart_command(),
+            executable=False,
+            manual_required=True,
+            reason="runtime restart adapter is disabled",
+        )
+
+    if hook_command:
+        return RuntimeRestartAdapter(
+            adapter="supervised-hook",
+            environment=_runtime_environment(),
+            label="Supervised restart hook",
+            command=hook_command,
+            executable=True,
+            manual_required=False,
+            reason="CVN_RESTART_HOOK_COMMAND is configured",
+            service_name=service_name,
+        )
+
+    compose_file = _detect_compose_file()
+    if configured_adapter == "docker_compose" or (configured_adapter == "auto" and compose_file is not None):
+        command = _docker_compose_restart_command(compose_file=compose_file, service_name=service_name)
+        return RuntimeRestartAdapter(
+            adapter="docker-compose",
+            environment="container" if _running_in_container() else "docker-compose",
+            label="Docker Compose restart",
+            command=command,
+            executable=settings.restart_adapter_execute,
+            manual_required=not settings.restart_adapter_execute,
+            reason=(
+                "docker compose file detected; enable CVN_RESTART_ADAPTER_EXECUTE=true to run it from the UI"
+                if not settings.restart_adapter_execute
+                else "docker compose restart command is executable by configuration"
+            ),
+            service_name=service_name,
+            compose_file=str(compose_file) if compose_file is not None else None,
+        )
+
+    if configured_adapter == "systemd":
+        command = _systemd_restart_command(service_name=service_name)
+        return RuntimeRestartAdapter(
+            adapter="systemd",
+            environment="nas-service",
+            label="System service restart",
+            command=command,
+            executable=settings.restart_adapter_execute and service_name is not None,
+            manual_required=not settings.restart_adapter_execute or service_name is None,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME and CVN_RESTART_ADAPTER_EXECUTE=true to run systemctl"
+                if service_name is None or not settings.restart_adapter_execute
+                else "system service restart is executable by configuration"
+            ),
+            service_name=service_name,
+        )
+
+    if configured_adapter == "local" or configured_adapter == "local_dev":
+        return RuntimeRestartAdapter(
+            adapter="local-dev",
+            environment="local-dev",
+            label="Local dev restart",
+            command=_restart_command(),
+            executable=settings.restart_adapter_execute,
+            manual_required=not settings.restart_adapter_execute,
+            reason=(
+                "local dev restart stays manual unless CVN_RESTART_ADAPTER_EXECUTE=true"
+                if not settings.restart_adapter_execute
+                else "local restart command is executable by configuration"
+            ),
+        )
+
+    return RuntimeRestartAdapter(
+        adapter="manual",
+        environment=_runtime_environment(),
+        label="Manual restart",
+        command=_restart_command(),
+        executable=False,
+        manual_required=True,
+        reason="no restart hook or deployment adapter was detected",
+    )
+
+
+async def request_runtime_restart(payload: RuntimeRestartRequest) -> RuntimeRestartResult:
+    """Run a configured restart adapter, or return manual guidance."""
+    adapter = get_runtime_restart_adapter()
+    reason = payload.reason or "runtime settings changed"
+    if not adapter.executable:
+        return RuntimeRestartResult(
+            requested=False,
+            adapter=adapter,
+            message=f"Manual restart required: {adapter.reason}",
+        )
+
+    env = os.environ.copy()
+    env["CVN_RESTART_REASON"] = reason
+    process = await asyncio.create_subprocess_shell(
+        adapter.command,
+        cwd=str(BACKEND_ROOT.parent),
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=max(1, settings.restart_command_timeout_seconds),
+        )
+    except TimeoutError:
+        return RuntimeRestartResult(
+            requested=True,
+            adapter=adapter,
+            message="Restart command was dispatched and is still running.",
+        )
+
+    return RuntimeRestartResult(
+        requested=process.returncode == 0,
+        adapter=adapter,
+        message="Restart command completed." if process.returncode == 0 else "Restart command failed.",
+        exit_code=process.returncode,
+        stdout=_trim_command_output(stdout.decode(errors="replace")),
+        stderr=_trim_command_output(stderr.decode(errors="replace")),
     )
 
 
@@ -94,18 +234,38 @@ async def apply_runtime_settings(
     )
 
 
-async def list_scheduler_ticks(*, db: AsyncSession, limit: int = 12, status: str | None = None) -> list[SchedulerTickRead]:
+async def list_scheduler_ticks(
+    *,
+    db: AsyncSession,
+    limit: int = 12,
+    status: str | None = None,
+    min_duration_seconds: int | None = None,
+    interval_seconds: int | None = None,
+    worker_limit: int | None = None,
+) -> list[SchedulerTickRead]:
     """Return newest persistent scheduler tick telemetry rows."""
     effective_limit = max(1, min(limit, 100))
+    fetch_limit = min(500, effective_limit * 5) if min_duration_seconds is not None else effective_limit
     query = select(DownloadSchedulerTick)
     if status:
         query = query.where(DownloadSchedulerTick.status == status)
+    if interval_seconds is not None:
+        query = query.where(DownloadSchedulerTick.interval_seconds == interval_seconds)
+    if worker_limit is not None:
+        query = query.where(DownloadSchedulerTick.limit == worker_limit)
     rows = (
         await db.execute(
-            query.order_by(DownloadSchedulerTick.created_at.desc(), DownloadSchedulerTick.id.desc()).limit(effective_limit)
+            query.order_by(DownloadSchedulerTick.created_at.desc(), DownloadSchedulerTick.id.desc()).limit(fetch_limit)
         )
     ).scalars()
-    return [_to_scheduler_tick_read(row) for row in rows]
+    ticks = [_to_scheduler_tick_read(row) for row in rows]
+    if min_duration_seconds is not None:
+        ticks = [
+            tick
+            for tick in ticks
+            if tick.duration_seconds is not None and tick.duration_seconds >= min_duration_seconds
+        ]
+    return ticks[:effective_limit]
 
 
 def _binary_health(*, name: str, command: str) -> BinaryHealth:
@@ -124,6 +284,53 @@ def _runtime_env_path() -> Path:
 
 def _restart_command() -> str:
     return "cd backend && uvicorn app.main:app --reload"
+
+
+def _detect_compose_file() -> Path | None:
+    root = BACKEND_ROOT.parent
+    for name in ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"):
+        candidate = root / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _docker_compose_restart_command(*, compose_file: Path | None, service_name: str | None) -> str:
+    parts = ["docker", "compose"]
+    if compose_file is not None:
+        parts.extend(["-f", str(compose_file)])
+    parts.append("restart")
+    if service_name:
+        parts.append(service_name)
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+def _systemd_restart_command(*, service_name: str | None) -> str:
+    service = service_name or "channel-vault-nas"
+    return " ".join(shlex.quote(part) for part in ("systemctl", "restart", service))
+
+
+def _running_in_container() -> bool:
+    return Path("/.dockerenv").exists() or os.environ.get("container") is not None
+
+
+def _runtime_environment() -> str:
+    if _running_in_container():
+        return "container"
+    if os.environ.get("INVOCATION_ID") or os.environ.get("SYSTEMD_EXEC_PID"):
+        return "systemd"
+    if os.environ.get("SUPERVISOR_ENABLED"):
+        return "supervised"
+    return "local-dev"
+
+
+def _trim_command_output(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) <= 1200:
+        return cleaned
+    return cleaned[:1200] + "\n..."
 
 
 def _current_env_values() -> dict[str, str]:

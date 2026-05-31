@@ -417,6 +417,7 @@ export type RuntimeSettings = {
   pending_restart: boolean;
   pending_overrides: RuntimeEnvOverride[];
   restart_command: string;
+  restart_adapter: RuntimeRestartAdapter;
   scheduler_status: {
     state: "off" | "locked" | "armed" | "waiting" | "running" | "failed" | string;
     enabled: boolean;
@@ -432,6 +433,18 @@ export type RuntimeSettings = {
   };
   scheduler_ticks: SchedulerTick[];
   binaries: BinaryHealth[];
+};
+
+export type RuntimeRestartAdapter = {
+  adapter: string;
+  environment: string;
+  label: string;
+  command: string;
+  executable: boolean;
+  manual_required: boolean;
+  reason: string;
+  service_name: string | null;
+  compose_file: string | null;
 };
 
 export type RuntimeEnvOverride = {
@@ -479,6 +492,22 @@ export type RuntimeSettingsApplyResult = {
   runtime: RuntimeSettings;
 };
 
+export type RuntimeRestartResult = {
+  requested: boolean;
+  adapter: RuntimeRestartAdapter;
+  message: string;
+  exit_code: number | null;
+  stdout: string | null;
+  stderr: string | null;
+};
+
+export type SchedulerTickFilters = {
+  status?: string;
+  min_duration_seconds?: number;
+  interval_seconds?: number;
+  worker_limit?: number;
+};
+
 export type RescanApplyResult = {
   root: string;
   candidates_seen: number;
@@ -487,6 +516,69 @@ export type RescanApplyResult = {
   media_files_indexed: number;
   thumbnails_indexed: number;
   subtitles_indexed: number;
+  warnings: string[];
+};
+
+export type StorageVolume = {
+  root: string;
+  exists: boolean;
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  archive_bytes: number;
+  pressure_percent: number;
+  archive_label: string;
+  used_label: string;
+  free_label: string;
+  total_label: string;
+  file_count: number;
+  dir_count: number;
+};
+
+export type StorageChannel = {
+  relative_path: string;
+  title: string;
+  bytes: number;
+  label: string;
+  file_count: number;
+  media_count: number;
+  sidecar_count: number;
+  orphan_sidecar_count: number;
+  video_folder_count: number;
+  pressure_score: number;
+};
+
+export type StorageExtension = {
+  extension: string;
+  bytes: number;
+  label: string;
+  count: number;
+};
+
+export type StorageOrphanSidecar = {
+  relative_path: string;
+  kind: string;
+  size_bytes: number;
+  label: string;
+  reason: string;
+};
+
+export type StorageFolderNode = {
+  relative_path: string;
+  name: string;
+  depth: number;
+  bytes: number;
+  label: string;
+  file_count: number;
+};
+
+export type StorageScan = {
+  scanned_at: string;
+  volume: StorageVolume;
+  channels: StorageChannel[];
+  top_extensions: StorageExtension[];
+  orphan_sidecars: StorageOrphanSidecar[];
+  folder_tree: StorageFolderNode[];
   warnings: string[];
 };
 
@@ -612,6 +704,30 @@ export async function getRuntimeSettings(): Promise<RuntimeSettings> {
 
 export async function updateRuntimeSettings(payload: RuntimeSettingsUpdate): Promise<RuntimeSettingsApplyResult> {
   return patchJson("/api/settings/runtime", payload);
+}
+
+export async function requestRuntimeRestart(reason: string): Promise<RuntimeRestartResult> {
+  return postJson("/api/settings/runtime/restart", { reason });
+}
+
+export async function getSchedulerTicks(limit = 24, filters: SchedulerTickFilters = {}): Promise<SchedulerTick[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (filters.status) params.set("status", filters.status);
+  if (typeof filters.min_duration_seconds === "number") {
+    params.set("min_duration_seconds", String(filters.min_duration_seconds));
+  }
+  if (typeof filters.interval_seconds === "number") {
+    params.set("interval_seconds", String(filters.interval_seconds));
+  }
+  if (typeof filters.worker_limit === "number") {
+    params.set("worker_limit", String(filters.worker_limit));
+  }
+  return getJson(`/api/jobs/downloads/scheduler/ticks?${params}`);
+}
+
+export async function getStorageScan(): Promise<StorageScan> {
+  return getJson("/api/storage/scan");
 }
 
 export async function applyLibraryRescan(): Promise<RescanApplyResult> {

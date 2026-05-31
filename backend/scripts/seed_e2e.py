@@ -50,7 +50,15 @@ async def seed() -> None:
 
     import app.models  # noqa: F401
     from app.database import Base
-    from app.models.archive import Channel, ChannelPolicy, DownloadJob, MediaFile, SyncJob, Video
+    from app.models.archive import (
+        Channel,
+        ChannelPolicy,
+        DownloadJob,
+        DownloadSchedulerTick,
+        MediaFile,
+        SyncJob,
+        Video,
+    )
 
     engine = create_async_engine(_sqlite_url(database_path), future=True)
     async with engine.begin() as conn:
@@ -87,6 +95,9 @@ async def seed() -> None:
         "video.webm",
         2048,
     )
+    orphan_dir = archive_root / "channels/@signalvaultlab [UC_CVN_E2E]/2026/orphan-sidecars"
+    orphan_dir.mkdir(parents=True, exist_ok=True)
+    (orphan_dir / "video.ko.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nOrphan subtitle\n", encoding="utf-8")
 
     async with Session() as session:
         channel = Channel(
@@ -265,6 +276,57 @@ async def seed() -> None:
                 error_message=None,
                 created_at=now - timedelta(minutes=8),
             )
+        )
+        session.add_all(
+            [
+                DownloadSchedulerTick(
+                    trigger="scheduler",
+                    status="completed",
+                    scheduler_enabled=True,
+                    worker_enabled=True,
+                    interval_seconds=300,
+                    limit=2,
+                    started_count=2,
+                    completed_count=2,
+                    failed_count=0,
+                    started_at=now - timedelta(minutes=35, seconds=18),
+                    completed_at=now - timedelta(minutes=35),
+                    next_tick_at=now - timedelta(minutes=30),
+                    created_at=now - timedelta(minutes=35, seconds=18),
+                ),
+                DownloadSchedulerTick(
+                    trigger="scheduler",
+                    status="skipped",
+                    scheduler_enabled=True,
+                    worker_enabled=False,
+                    interval_seconds=300,
+                    limit=2,
+                    started_count=0,
+                    completed_count=0,
+                    failed_count=0,
+                    skipped_reason="worker disabled",
+                    started_at=now - timedelta(minutes=20, seconds=1),
+                    completed_at=now - timedelta(minutes=20),
+                    next_tick_at=now - timedelta(minutes=15),
+                    created_at=now - timedelta(minutes=20, seconds=1),
+                ),
+                DownloadSchedulerTick(
+                    trigger="scheduler",
+                    status="failed",
+                    scheduler_enabled=True,
+                    worker_enabled=True,
+                    interval_seconds=600,
+                    limit=1,
+                    started_count=1,
+                    completed_count=0,
+                    failed_count=1,
+                    error_message="fixture retry budget exhausted",
+                    started_at=now - timedelta(minutes=6, seconds=12),
+                    completed_at=now - timedelta(minutes=6),
+                    next_tick_at=now + timedelta(minutes=4),
+                    created_at=now - timedelta(minutes=6, seconds=12),
+                ),
+            ]
         )
         await session.commit()
 

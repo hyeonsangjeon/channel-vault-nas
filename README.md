@@ -137,9 +137,10 @@ npm run dev
 ```
 
 The first screen is an `Archive Observatory` dashboard. The current backend
-snapshot is DB-backed for registered channels, sync jobs, and download queue
-candidates, while a few lower-priority visual panels still use local mock
-fallbacks until the media worker and storage scanner land.
+snapshot is DB-backed for registered channels, sync jobs, download queue
+candidates, and a filesystem storage scanner that reads the configured NAS
+archive root for real channel-folder bytes, folder tree summaries, volume
+pressure, extension totals, and orphan sidecar warnings.
 
 After a channel exists, the UI auto-opens the first registered channel and shows
 Archive Launch Control: queue search, selectable candidate/queued jobs,
@@ -175,9 +176,14 @@ operator debugging. Its Env guide drawer converts that live snapshot into the
 exact `.env` lines needed to arm the worker/scheduler and override `yt-dlp` or
 `ffprobe` binary paths, lets the operator save those non-secret overrides into
 the managed `.env.runtime` file, and marks the backend restart requirement
-until the running process matches the saved env. The drawer also shows the
-recent persistent scheduler tick log from SQLite; each scheduled pass records
-whether it completed, failed, or was skipped because the worker remained locked.
+until the running process matches the saved env. The runtime API also detects a
+deployment-aware restart adapter: manual/local dev by default, Docker Compose
+guidance when a compose file exists, systemd guidance when configured, and a
+real executable supervised hook when `CVN_RESTART_HOOK_COMMAND` is provided.
+The drawer links to a dedicated scheduler tick log with filters for completed,
+failed, skipped, slow duration, scheduler interval, and worker limit. Each
+scheduled pass records whether it completed, failed, or was skipped because the
+worker remained locked.
 
 The selected channel also exposes a Vault Library shelf backed by SQLite:
 videos, indexed media files, queue state, media byte totals, and sidecar
@@ -194,9 +200,11 @@ fields. The library shelf renders those facts as compact quality chips beside
 duration, sidecar fidelity, queue status, and media size. The shelf can be
 filtered by integrity, missing sidecar type, and codec/profile such as `h264`,
 `1080p`, or `mp4`, with quick-view presets for common checks like missing
-subtitles, media-only files, 1080p h264, and complete mp4 assets. Selecting a
-library card opens a media detail drawer with per-file stream actions,
-technical profile, path integrity state, and sidecar/subtitle inventory.
+subtitles, media-only files, 1080p h264, and complete mp4 assets. Operators can
+also save browser-local library views, for example "무자막 h264" or "failed
+1080p", and reapply them later from the shelf toolbar. Selecting a library card
+opens a media detail drawer with per-file stream actions, technical profile,
+path integrity state, and sidecar/subtitle inventory.
 
 Startup is NAS-safe by default: the app backs up SQLite, runs Alembic
 `upgrade head`, then keeps an early `create_all` safety net for development
@@ -210,7 +218,8 @@ languages are English, Korean, Japanese, Chinese, and Hindi.
 Browser smoke coverage lives in `frontend/e2e/`. `npm run e2e:smoke` starts an
 isolated FastAPI backend, Vite frontend, temporary SQLite DB, and temporary NAS
 fixture, then verifies registration UI, queue preflight/bulk actions, library
-shelf, worker control room, and rescan apply flows on desktop and mobile.
+shelf, saved library views, runtime restart/tick log surfaces, real storage
+scan panels, worker control room, and rescan apply flows on desktop and mobile.
 
 ## Release Direction
 

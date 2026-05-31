@@ -4,6 +4,7 @@ import {
   Archive,
   Bell,
   BookOpen,
+  Bookmark,
   CalendarDays,
   CheckCircle2,
   CirclePause,
@@ -26,12 +27,15 @@ import {
   ListFilter,
   Rocket,
   RotateCcw,
+  Save,
   Search,
+  Server,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   TimerReset,
+  Trash2,
   Waves,
   X,
   XCircle,
@@ -59,8 +63,11 @@ import {
   getQueuePreflight,
   getRecentEvents,
   getRuntimeSettings,
+  getSchedulerTicks,
+  getStorageScan,
   probeChannel,
   registerChannel,
+  requestRuntimeRestart,
   retryDownloadJob,
   runDownloadWorkerOnce,
   stopDownloadJob,
@@ -87,6 +94,9 @@ import {
   type RescanApplyResult,
   type RuntimeSettings,
   type RuntimeSettingsUpdate,
+  type SchedulerTick,
+  type SchedulerTickFilters,
+  type StorageScan,
 } from "./api/channels";
 import { ChannelConstellation } from "./components/ChannelConstellation";
 import { MetricTile } from "./components/MetricTile";
@@ -122,14 +132,33 @@ const navItems: { key: TranslationKey; id: string }[] = [
 const qualityOptions = ["720p", "1080p", "best"];
 type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "error";
 type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
+type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
+type SchedulerDurationFilter = "all" | "slow";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
+type SavedLibraryView = {
+  id: string;
+  name: string;
+  query: string;
+  integrity: LibraryIntegrityFilter;
+  sidecar: LibrarySidecarFilter;
+  codec: string;
+  createdAt: string;
+};
+const savedLibraryViewsStorageKey = "channel-vault-library-views";
 const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "worker.history.filter.all" },
   { id: "failed", labelKey: "worker.history.filter.failed" },
   { id: "dry_run", labelKey: "worker.history.filter.dryRun" },
   { id: "live", labelKey: "worker.history.filter.live" },
+];
+const schedulerTickStatusFilters: { id: SchedulerTickStatusFilter; labelKey: TranslationKey }[] = [
+  { id: "all", labelKey: "runtime.ticks.filter.all" },
+  { id: "completed", labelKey: "runtime.ticks.completed" },
+  { id: "failed", labelKey: "runtime.ticks.failed" },
+  { id: "skipped", labelKey: "runtime.ticks.skipped" },
+  { id: "running", labelKey: "runtime.ticks.running" },
 ];
 const libraryIntegrityFilters: { id: LibraryIntegrityFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "library.filter.all" },
@@ -224,6 +253,7 @@ function App() {
   const [events, setEvents] = useState<ArchiveEvent[]>([]);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettings | null>(null);
+  const [storageScan, setStorageScan] = useState<StorageScan | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>("idle");
   const [workflowMessage, setWorkflowMessage] = useState("");
   const [preflightPlan, setPreflightPlan] = useState<QueuePreflightPlan | null>(null);
@@ -237,6 +267,8 @@ function App() {
   const [librarySidecarFilter, setLibrarySidecarFilter] = useState<LibrarySidecarFilter>("all");
   const [libraryCodecFilter, setLibraryCodecFilter] = useState("");
   const [activeLibraryPreset, setActiveLibraryPreset] = useState<LibraryPresetFilter | null>(null);
+  const [savedLibraryViews, setSavedLibraryViews] = useState<SavedLibraryView[]>(() => loadSavedLibraryViews());
+  const [libraryViewNameDraft, setLibraryViewNameDraft] = useState("");
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<LibraryItem | null>(null);
   const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryDetailStatus, setLibraryDetailStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -246,9 +278,17 @@ function App() {
   const [workerHistoryRuns, setWorkerHistoryRuns] = useState<DownloadWorkerRunAudit[]>([]);
   const [workerHistoryOpen, setWorkerHistoryOpen] = useState(false);
   const [workerHistoryFilter, setWorkerHistoryFilter] = useState<WorkerHistoryFilter>("all");
+  const [schedulerTickDrawerOpen, setSchedulerTickDrawerOpen] = useState(false);
+  const [schedulerTickRows, setSchedulerTickRows] = useState<SchedulerTick[]>([]);
+  const [schedulerTickStatusFilter, setSchedulerTickStatusFilter] = useState<SchedulerTickStatusFilter>("all");
+  const [schedulerDurationFilter, setSchedulerDurationFilter] = useState<SchedulerDurationFilter>("all");
+  const [schedulerIntervalFilter, setSchedulerIntervalFilter] = useState("");
+  const [schedulerLimitFilter, setSchedulerLimitFilter] = useState("");
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [runtimeRestartStatus, setRuntimeRestartStatus] = useState<"idle" | "requesting" | "requested" | "manual" | "error">("idle");
+  const [runtimeRestartMessage, setRuntimeRestartMessage] = useState("");
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
   const [runtimeApplyMessage, setRuntimeApplyMessage] = useState("");
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft>(() => defaultRuntimeDraft());
@@ -319,6 +359,34 @@ function App() {
       .filter((link) => ids.has(link.source) && ids.has(link.target))
       .map((link) => ({ source: link.source, target: link.target, weight: link.weight }));
   }, [dashboard]);
+  const storageMapChannels = useMemo(
+    () =>
+      storageScan?.channels.length
+        ? storageScan.channels.map((channel) => ({
+            id: channel.relative_path,
+            title: channel.title,
+            storageGb: Math.max(1, channel.pressure_score),
+            label: channel.label,
+            mediaCount: channel.media_count,
+            orphanSidecars: channel.orphan_sidecar_count,
+            warn: channel.orphan_sidecar_count > 0 || channel.pressure_score > 65,
+          }))
+        : activeChannels.map((channel) => ({
+            id: channel.id,
+            title: channel.title,
+            storageGb: channel.storageGb,
+            label: `${channel.storageGb} ${t("unit.gb")}`,
+            mediaCount: 0,
+            orphanSidecars: 0,
+            warn: channel.health < 85,
+          })),
+    [activeChannels, storageScan, t],
+  );
+  const storageVolume = storageScan?.volume ?? null;
+  const storageArchivePercent =
+    storageVolume && storageVolume.total_bytes > 0
+      ? Math.min(100, Math.max(1, Math.round((storageVolume.archive_bytes / storageVolume.total_bytes) * 100)))
+      : 0;
   const activeTimeline = useMemo<TimelineVideo[]>(
     () =>
       channelVideos.length
@@ -464,6 +532,9 @@ function App() {
     [runtimeSettings],
   );
   const schedulerStatus = runtimeSettings?.scheduler_status ?? null;
+  const restartAdapter = runtimeSettings?.restart_adapter ?? null;
+  const restartAdapterLabel = restartAdapter ? restartAdapterLabelText(restartAdapter.adapter, t) : t("runtime.checking");
+  const restartAdapterDetail = restartAdapter ? restartAdapter.reason : t("runtime.checking");
   const workerRuntimeLabel = !runtimeSettings
     ? t("runtime.checking")
     : runtimeSettings.download_worker_enabled
@@ -539,6 +610,13 @@ function App() {
     () => runtimeEnvRows.map((row) => `${row.key}=${row.recommended}`).join("\n"),
     [runtimeEnvRows],
   );
+  const schedulerTickSummary = useMemo(
+    () => summarizeSchedulerTicks(schedulerTickRows.length ? schedulerTickRows : runtimeSettings?.scheduler_ticks ?? []),
+    [runtimeSettings?.scheduler_ticks, schedulerTickRows],
+  );
+  const schedulerDrawerSummary = useMemo(() => summarizeSchedulerTicks(schedulerTickRows), [schedulerTickRows]);
+  const savedLibraryViewName =
+    libraryViewNameDraft.trim() || defaultLibraryViewName(libraryIntegrityFilter, librarySidecarFilter, libraryCodecFilter, libraryQuery, t);
 
   const registrationPayload: ChannelRegistrationPayload = {
     value: sourceValue,
@@ -561,18 +639,24 @@ function App() {
   }, [runtimeSettings]);
 
   useEffect(() => {
+    localStorage.setItem(savedLibraryViewsStorageKey, JSON.stringify(savedLibraryViews));
+  }, [savedLibraryViews]);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadDashboard() {
       try {
-        const [snapshot, recentEvents, runtimeSnapshot] = await Promise.all([
+        const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot] = await Promise.all([
           getDashboard(),
           getRecentEvents(),
           getRuntimeSettings(),
+          getStorageScan(),
         ]);
         if (cancelled) return;
         setDashboard(snapshot);
         setEvents(recentEvents);
         setRuntimeSettings(runtimeSnapshot);
+        setStorageScan(storageSnapshot);
       } catch {
         if (cancelled) return;
         setDashboard(null);
@@ -586,6 +670,7 @@ function App() {
         const event = JSON.parse(message.data) as ArchiveEvent;
         setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 8));
         getDashboard().then(setDashboard).catch(() => undefined);
+        getStorageScan().then(setStorageScan).catch(() => undefined);
       } catch {
         // Ignore malformed development events.
       }
@@ -957,9 +1042,10 @@ function App() {
     try {
       const result = await applyLibraryRescan();
       setRescanResult(result);
-      const [snapshot, recentEvents] = await Promise.all([getDashboard(), getRecentEvents()]);
+      const [snapshot, recentEvents, storageSnapshot] = await Promise.all([getDashboard(), getRecentEvents(), getStorageScan()]);
       setDashboard(snapshot);
       setEvents(recentEvents);
+      setStorageScan(storageSnapshot);
       if (registeredChannelId) {
         await loadChannelState(registeredChannelId);
       }
@@ -1042,6 +1128,22 @@ function App() {
     }
   }
 
+  async function handleRequestRuntimeRestart() {
+    if (!runtimeSettings?.restart_adapter) return;
+    setRuntimeRestartStatus("requesting");
+    setRuntimeRestartMessage("");
+    try {
+      const result = await requestRuntimeRestart("operator requested runtime restart after env apply");
+      const runtimeSnapshot = await getRuntimeSettings();
+      setRuntimeSettings(runtimeSnapshot);
+      setRuntimeRestartStatus(result.requested ? "requested" : "manual");
+      setRuntimeRestartMessage(result.requested ? t("runtime.restart.requested") : result.message);
+    } catch (error) {
+      setRuntimeRestartStatus("error");
+      setRuntimeRestartMessage(error instanceof Error ? error.message : t("runtime.restart.error"));
+    }
+  }
+
   async function handleApplyRuntimeSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!runtimeDraftValid) {
@@ -1101,6 +1203,67 @@ function App() {
     }
   }
 
+  async function refreshSchedulerTicks(
+    statusFilter: SchedulerTickStatusFilter = schedulerTickStatusFilter,
+    durationFilter: SchedulerDurationFilter = schedulerDurationFilter,
+    intervalFilter: string = schedulerIntervalFilter,
+    limitFilter: string = schedulerLimitFilter,
+  ) {
+    const filters = schedulerTickQuery(statusFilter, durationFilter, intervalFilter, limitFilter);
+    const ticks = await getSchedulerTicks(48, filters);
+    setSchedulerTickRows(ticks);
+  }
+
+  async function handleOpenSchedulerTicks() {
+    setSchedulerTickRows(runtimeSettings?.scheduler_ticks ?? []);
+    setSchedulerTickDrawerOpen(true);
+    try {
+      await refreshSchedulerTicks();
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleSchedulerTickStatus(filter: SchedulerTickStatusFilter) {
+    setSchedulerTickStatusFilter(filter);
+    try {
+      await refreshSchedulerTicks(filter);
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleSchedulerDurationFilter(filter: SchedulerDurationFilter) {
+    setSchedulerDurationFilter(filter);
+    try {
+      await refreshSchedulerTicks(schedulerTickStatusFilter, filter);
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleSchedulerNumericFilter(kind: "interval" | "limit", value: string) {
+    if (kind === "interval") {
+      setSchedulerIntervalFilter(value);
+    } else {
+      setSchedulerLimitFilter(value);
+    }
+    try {
+      await refreshSchedulerTicks(
+        schedulerTickStatusFilter,
+        schedulerDurationFilter,
+        kind === "interval" ? value : schedulerIntervalFilter,
+        kind === "limit" ? value : schedulerLimitFilter,
+      );
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
   async function handleOpenLibraryDetail(item: LibraryItem) {
     setSelectedLibraryItem(item);
     setLibraryDetailStatus("loading");
@@ -1133,6 +1296,35 @@ function App() {
   function handleLibrarySidecarFilter(filter: LibrarySidecarFilter) {
     setActiveLibraryPreset(null);
     setLibrarySidecarFilter(filter);
+  }
+
+  function handleSaveLibraryView() {
+    const name = savedLibraryViewName.trim();
+    if (!name) return;
+    const nextView: SavedLibraryView = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name,
+      query: libraryQuery,
+      integrity: libraryIntegrityFilter,
+      sidecar: librarySidecarFilter,
+      codec: libraryCodecFilter,
+      createdAt: new Date().toISOString(),
+    };
+    setSavedLibraryViews((current) => [nextView, ...current.filter((view) => view.name !== name)].slice(0, 10));
+    setLibraryViewNameDraft("");
+    setWorkflowMessage(t("library.saved.saved"));
+  }
+
+  function handleApplySavedLibraryView(view: SavedLibraryView) {
+    setActiveLibraryPreset(null);
+    setLibraryQuery(view.query);
+    setLibraryIntegrityFilter(view.integrity);
+    setLibrarySidecarFilter(view.sidecar);
+    setLibraryCodecFilter(view.codec);
+  }
+
+  function handleDeleteSavedLibraryView(viewId: string) {
+    setSavedLibraryViews((current) => current.filter((view) => view.id !== viewId));
   }
 
   function handleToggleJobSelection(jobId: number) {
@@ -1281,6 +1473,8 @@ function App() {
                 onClick={() => {
                   setRuntimeGuideCopyStatus("idle");
                   setRuntimeRestartCopyStatus("idle");
+                  setRuntimeRestartStatus("idle");
+                  setRuntimeRestartMessage("");
                   setRuntimeApplyStatus("idle");
                   setRuntimeApplyMessage("");
                   setRuntimeGuideOpen(true);
@@ -1949,6 +2143,40 @@ function App() {
               </label>
             </div>
 
+            <div className="library-saved-views" aria-label={t("library.saved.title")}>
+              <span>
+                <Bookmark size={13} />
+                {t("library.saved.title")}
+              </span>
+              <label>
+                <input
+                  aria-label={t("library.saved.name")}
+                  onChange={(event) => setLibraryViewNameDraft(event.target.value)}
+                  placeholder={savedLibraryViewName}
+                  value={libraryViewNameDraft}
+                />
+              </label>
+              <button className="library-save-view" onClick={handleSaveLibraryView} type="button">
+                <Save size={13} />
+                {t("library.saved.save")}
+              </button>
+              {savedLibraryViews.map((view) => (
+                <div className="saved-view-pill" key={view.id}>
+                  <button onClick={() => handleApplySavedLibraryView(view)} type="button">
+                    {view.name}
+                  </button>
+                  <button
+                    aria-label={t("library.saved.delete")}
+                    onClick={() => handleDeleteSavedLibraryView(view.id)}
+                    title={t("library.saved.delete")}
+                    type="button"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
             <div className="library-summary">
               <article>
                 <span>{t("library.total")}</span>
@@ -2070,6 +2298,19 @@ function App() {
                 </div>
               ))}
             </div>
+            {storageScan?.folder_tree.length ? (
+              <div className="storage-folder-scan" aria-label={t("storage.scan.tree")}>
+                <strong>{t("storage.scan.tree")}</strong>
+                {storageScan.folder_tree.slice(0, 8).map((node) => (
+                  <div className="folder-row folder-channel" key={node.relative_path}>
+                    <span style={{ width: `${node.depth * 18}px` }} />
+                    <Folder size={15} />
+                    <code>{node.name}</code>
+                    <em>{node.label}</em>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="fidelity-list" aria-label={t("panel.fidelity.title")}>
               <p className="panel-kicker">{t("panel.fidelity.kicker")}</p>
               {fidelityChecks.map((item) => (
@@ -2162,19 +2403,66 @@ function App() {
               </div>
               <Database size={20} className="panel-icon" />
             </div>
+            {storageVolume ? (
+              <div className="storage-volume">
+                <div>
+                  <span>{t("storage.scan.root")}</span>
+                  <code>{storageVolume.root}</code>
+                </div>
+                <strong>{storageVolume.archive_label}</strong>
+                <div className="storage-volume-bar" aria-label={t("storage.scan.pressure")}>
+                  <span style={{ width: `${storageArchivePercent}%` }} />
+                </div>
+                <small>
+                  {t("storage.scan.free")
+                    .replace("{free}", storageVolume.free_label)
+                    .replace("{total}", storageVolume.total_label)}
+                </small>
+              </div>
+            ) : null}
             <div className="storage-map">
-              {activeChannels.map((channel) => (
+              {storageMapChannels.map((channel) => (
                 <div
-                  className={`storage-cell ${channel.health < 85 ? "warn" : ""}`}
+                  className={`storage-cell ${channel.warn ? "warn" : ""}`}
                   key={channel.id}
                   style={{ flexGrow: channel.storageGb }}
-                  title={`${channel.title}: ${channel.storageGb} GB`}
+                  title={`${channel.title}: ${channel.label}`}
                 >
                   <span>{channel.title}</span>
-                  <strong>{channel.storageGb} {t("unit.gb")}</strong>
+                  <strong>{channel.label}</strong>
+                  {storageScan ? (
+                    <small>
+                      {channel.mediaCount} {t("storage.scan.media")} · {channel.orphanSidecars} {t("storage.scan.orphan")}
+                    </small>
+                  ) : null}
                 </div>
               ))}
             </div>
+            {storageScan ? (
+              <div className="storage-scan-grid">
+                <article>
+                  <span>{t("storage.scan.files")}</span>
+                  <strong>{storageScan.volume.file_count}</strong>
+                </article>
+                <article>
+                  <span>{t("storage.scan.folders")}</span>
+                  <strong>{storageScan.volume.dir_count}</strong>
+                </article>
+                <article>
+                  <span>{t("storage.scan.orphans")}</span>
+                  <strong>{storageScan.orphan_sidecars.length}</strong>
+                </article>
+              </div>
+            ) : null}
+            {storageScan?.orphan_sidecars.length ? (
+              <div className="storage-orphan-list">
+                {storageScan.orphan_sidecars.slice(0, 3).map((sidecar) => (
+                  <code key={sidecar.relative_path}>
+                    {sidecar.kind} · {sidecar.relative_path}
+                  </code>
+                ))}
+              </div>
+            ) : null}
           </motion.div>
 
           <motion.div
@@ -2267,14 +2555,40 @@ function App() {
                 <span>{runtimeSettings?.managed_env_file ?? ".env.runtime"}</span>
               </div>
               {runtimeSettings?.pending_restart ? (
-                <button className="runtime-copy-button" onClick={() => void handleCopyRestartCommand()} type="button">
-                  <ClipboardList size={14} />
-                  {runtimeRestartCopyStatus === "copied" ? t("runtime.restart.copied") : t("runtime.restart.copy")}
-                </button>
+                <div className="runtime-restart-actions">
+                  <button className="runtime-copy-button" onClick={() => void handleCopyRestartCommand()} type="button">
+                    <ClipboardList size={14} />
+                    {runtimeRestartCopyStatus === "copied" ? t("runtime.restart.copied") : t("runtime.restart.copy")}
+                  </button>
+                </div>
               ) : null}
             </div>
             {runtimeRestartCopyStatus === "error" ? (
               <div className="runtime-copy-status error">{t("runtime.restart.copyError")}</div>
+            ) : null}
+            <div className={`runtime-adapter-panel ${restartAdapter?.executable ? "good" : "warn"}`}>
+              <Server size={16} />
+              <div>
+                <strong>{restartAdapterLabel}</strong>
+                <span>
+                  {restartAdapter?.environment ?? t("runtime.checking")} · {restartAdapterDetail}
+                </span>
+                <code>{restartAdapter?.command ?? runtimeSettings?.restart_command ?? ""}</code>
+                <button
+                  className="runtime-apply-button runtime-restart-request"
+                  disabled={!restartAdapter?.executable || runtimeRestartStatus === "requesting"}
+                  onClick={() => void handleRequestRuntimeRestart()}
+                  type="button"
+                >
+                  <RotateCcw size={14} />
+                  {runtimeRestartStatus === "requesting" ? t("runtime.restart.requesting") : t("runtime.restart.request")}
+                </button>
+              </div>
+            </div>
+            {runtimeRestartMessage ? (
+              <div className={`runtime-copy-status ${runtimeRestartStatus === "error" ? "error" : "copied"}`}>
+                {runtimeRestartMessage}
+              </div>
             ) : null}
 
             <div className="runtime-guide-state">
@@ -2402,26 +2716,157 @@ function App() {
                   <strong>{t("runtime.ticks.title")}</strong>
                   <span>{t("runtime.ticks.subtitle")}</span>
                 </div>
+                <button className="runtime-apply-button" onClick={() => void handleOpenSchedulerTicks()} type="button">
+                  <History size={14} />
+                  {t("runtime.ticks.open")}
+                </button>
               </div>
               {(runtimeSettings?.scheduler_ticks ?? []).length ? (
-                <div className="scheduler-tick-list">
-                  {runtimeSettings?.scheduler_ticks.map((tick) => (
-                    <article className={tick.status} key={tick.id}>
-                      <span>{schedulerTickStatusLabel(tick.status, t)}</span>
-                      <strong>
-                        {tick.started_count}/{tick.completed_count}/{tick.failed_count}
-                      </strong>
-                      <small>
-                        {formatEventTime(tick.created_at)}
-                        {tick.duration_seconds !== null ? ` · ${formatDuration(tick.duration_seconds)}` : ""}
-                      </small>
-                      {tick.skipped_reason ?? tick.error_message ? <em>{tick.skipped_reason ?? tick.error_message}</em> : null}
-                    </article>
-                  ))}
+                <div className="scheduler-tick-summary">
+                  <article>
+                    <span>{t("runtime.ticks.completed")}</span>
+                    <strong>{schedulerTickSummary.completed}</strong>
+                  </article>
+                  <article>
+                    <span>{t("runtime.ticks.failed")}</span>
+                    <strong>{schedulerTickSummary.failed}</strong>
+                  </article>
+                  <article>
+                    <span>{t("runtime.ticks.skipped")}</span>
+                    <strong>{schedulerTickSummary.skipped}</strong>
+                  </article>
+                  <article>
+                    <span>{t("runtime.ticks.slow")}</span>
+                    <strong>{schedulerTickSummary.slow}</strong>
+                  </article>
                 </div>
               ) : (
                 <p className="empty-copy">{t("runtime.ticks.empty")}</p>
               )}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+      {schedulerTickDrawerOpen ? (
+        <div className="scheduler-tick-backdrop" onClick={() => setSchedulerTickDrawerOpen(false)} role="presentation">
+          <aside
+            aria-label={t("runtime.ticks.drawerTitle")}
+            className="scheduler-tick-drawer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="worker-history-header">
+              <div>
+                <p className="panel-kicker">{t("runtime.scheduler")}</p>
+                <h2>{t("runtime.ticks.drawerTitle")}</h2>
+                <span>{t("runtime.ticks.drawerSubtitle")}</span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => setSchedulerTickDrawerOpen(false)}
+                title={t("actions.close")}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="scheduler-tick-filters">
+              <div className="worker-history-filters">
+                <ListFilter size={14} />
+                {schedulerTickStatusFilters.map((filter) => (
+                  <button
+                    className={schedulerTickStatusFilter === filter.id ? "active" : ""}
+                    key={filter.id}
+                    onClick={() => void handleSchedulerTickStatus(filter.id)}
+                    type="button"
+                  >
+                    {t(filter.labelKey)}
+                  </button>
+                ))}
+                <button
+                  className={schedulerDurationFilter === "slow" ? "active" : ""}
+                  onClick={() => void handleSchedulerDurationFilter(schedulerDurationFilter === "slow" ? "all" : "slow")}
+                  type="button"
+                >
+                  <TimerReset size={13} />
+                  {t("runtime.ticks.slowOnly")}
+                </button>
+              </div>
+              <div className="scheduler-numeric-filters">
+                <label>
+                  <span>{t("runtime.ticks.intervalFilter")}</span>
+                  <input
+                    min={5}
+                    onChange={(event) => void handleSchedulerNumericFilter("interval", event.target.value)}
+                    placeholder={String(runtimeSettings?.download_worker_scheduler_interval_seconds ?? 300)}
+                    type="number"
+                    value={schedulerIntervalFilter}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.ticks.limitFilter")}</span>
+                  <input
+                    min={1}
+                    onChange={(event) => void handleSchedulerNumericFilter("limit", event.target.value)}
+                    placeholder={String(runtimeSettings?.download_worker_scheduler_limit ?? 1)}
+                    type="number"
+                    value={schedulerLimitFilter}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="worker-history-summary scheduler-tick-summary-grid">
+              <article>
+                <span>{t("runtime.ticks.filter.all")}</span>
+                <strong>{schedulerTickRows.length}</strong>
+              </article>
+              <article>
+                <span>{t("runtime.ticks.failed")}</span>
+                <strong>{schedulerDrawerSummary.failed}</strong>
+              </article>
+              <article>
+                <span>{t("runtime.ticks.skipped")}</span>
+                <strong>{schedulerDrawerSummary.skipped}</strong>
+              </article>
+              <article>
+                <span>{t("runtime.ticks.slow")}</span>
+                <strong>{schedulerDrawerSummary.slow}</strong>
+              </article>
+            </div>
+
+            <div className="scheduler-tick-list expanded">
+              {schedulerTickRows.map((tick) => (
+                <article className={tick.status} key={tick.id}>
+                  <div>
+                    <span>{schedulerTickStatusLabel(tick.status, t)}</span>
+                    <strong>
+                      {tick.started_count}/{tick.completed_count}/{tick.failed_count}
+                    </strong>
+                    <small>
+                      {formatEventTime(tick.created_at)}
+                      {tick.duration_seconds !== null ? ` · ${formatDuration(tick.duration_seconds)}` : ""}
+                    </small>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>{t("runtime.ticks.interval")}</dt>
+                      <dd>{tick.interval_seconds}s</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.ticks.limit")}</dt>
+                      <dd>{tick.limit}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("runtime.worker")}</dt>
+                      <dd>{tick.worker_enabled ? t("runtime.enabled") : t("runtime.disabled")}</dd>
+                    </div>
+                  </dl>
+                  {tick.skipped_reason ?? tick.error_message ? <code>{tick.skipped_reason ?? tick.error_message}</code> : null}
+                </article>
+              ))}
+              {schedulerTickRows.length === 0 ? <p className="empty-copy">{t("runtime.ticks.empty")}</p> : null}
             </div>
           </aside>
         </div>
@@ -2622,6 +3067,63 @@ function App() {
       ) : null}
     </main>
   );
+}
+
+function loadSavedLibraryViews(): SavedLibraryView[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(savedLibraryViewsStorageKey) ?? "[]") as SavedLibraryView[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((view) => view && typeof view.id === "string" && typeof view.name === "string")
+      .slice(0, 10);
+  } catch {
+    return [];
+  }
+}
+
+function schedulerTickQuery(
+  statusFilter: SchedulerTickStatusFilter,
+  durationFilter: SchedulerDurationFilter,
+  intervalFilter: string,
+  limitFilter: string,
+): SchedulerTickFilters {
+  const filters: SchedulerTickFilters = {};
+  if (statusFilter !== "all") filters.status = statusFilter;
+  if (durationFilter === "slow") filters.min_duration_seconds = 10;
+  const interval = Number(intervalFilter);
+  if (Number.isInteger(interval) && interval >= 5) filters.interval_seconds = interval;
+  const workerLimit = Number(limitFilter);
+  if (Number.isInteger(workerLimit) && workerLimit >= 1) filters.worker_limit = workerLimit;
+  return filters;
+}
+
+function summarizeSchedulerTicks(ticks: SchedulerTick[]) {
+  return {
+    completed: ticks.filter((tick) => tick.status === "completed").length,
+    failed: ticks.filter((tick) => tick.status === "failed").length,
+    skipped: ticks.filter((tick) => tick.status === "skipped").length,
+    slow: ticks.filter((tick) => (tick.duration_seconds ?? 0) >= 10).length,
+  };
+}
+
+function restartAdapterLabelText(adapter: string, t: (key: TranslationKey) => string) {
+  if (adapter === "supervised-hook") return t("runtime.restart.adapter.hook");
+  if (adapter === "docker-compose") return t("runtime.restart.adapter.compose");
+  if (adapter === "systemd") return t("runtime.restart.adapter.systemd");
+  if (adapter === "local-dev") return t("runtime.restart.adapter.local");
+  if (adapter === "disabled") return t("runtime.restart.adapter.disabled");
+  return t("runtime.restart.adapter.manual");
+}
+
+function defaultLibraryViewName(
+  integrity: LibraryIntegrityFilter,
+  sidecar: LibrarySidecarFilter,
+  codec: string,
+  query: string,
+  t: (key: TranslationKey) => string,
+) {
+  const parts = [query.trim(), codec.trim(), integrity !== "all" ? integrity : "", sidecar !== "all" ? sidecar : ""].filter(Boolean);
+  return parts.length ? parts.join(" · ") : t("library.saved.defaultName");
 }
 
 function getInitials(value: string) {

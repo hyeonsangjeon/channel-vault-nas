@@ -79,8 +79,29 @@ async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> N
     assert data["scheduler_status"]["worker_enabled"] is False
     assert data["pending_restart"] is False
     assert data["scheduler_ticks"] == []
+    assert data["restart_adapter"]["manual_required"] is True
+    assert data["restart_adapter"]["command"]
     assert {binary["name"] for binary in data["binaries"]} == {"yt-dlp", "ffprobe"}
     assert "secret" not in data
+
+
+@pytest.mark.asyncio
+async def test_runtime_restart_hook_adapter_executes_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.config.settings.restart_hook_command", "printf restarted")
+    monkeypatch.setattr("app.config.settings.restart_command_timeout_seconds", 2)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        adapter_response = await client.get("/api/settings/runtime/restart")
+        restart_response = await client.post("/api/settings/runtime/restart", json={"reason": "test"})
+
+    assert adapter_response.status_code == 200
+    assert adapter_response.json()["adapter"] == "supervised-hook"
+    assert adapter_response.json()["executable"] is True
+    assert restart_response.status_code == 200
+    data = restart_response.json()
+    assert data["requested"] is True
+    assert data["exit_code"] == 0
+    assert data["stdout"] == "restarted"
 
 
 @pytest.mark.asyncio
