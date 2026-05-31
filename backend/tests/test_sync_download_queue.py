@@ -148,6 +148,10 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         library_item = await client.get(f"/api/library/{first_video_id}")
         library_files = await client.get(f"/api/library/{first_video_id}/files")
         library_stream = await client.get(f"/api/library/{first_video_id}/stream")
+        coverage = await client.get(f"/api/channels/{channel_id}/coverage")
+        missing = await client.get(f"/api/channels/{channel_id}/missing")
+        removed = await client.get(f"/api/channels/{channel_id}/removed")
+        cadence = await client.get(f"/api/channels/{channel_id}/cadence")
         saved_view = await client.post(
             "/api/library/views",
             json={
@@ -262,6 +266,17 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert library_files.json()[0]["info_json_exists"] is False
     assert {sidecar["kind"] for sidecar in library_files.json()[0]["sidecars"]} == {"info_json", "thumbnail", "nfo"}
     assert library_stream.status_code == 404
+    assert coverage.status_code == 200
+    assert coverage.json()["source"] == 2
+    assert coverage.json()["archived"] == 1
+    assert coverage.json()["missing"] == 1
+    assert missing.status_code == 200
+    assert [video["id"] for video in missing.json()] == ["6lXl1hkEgcA"]
+    assert removed.status_code == 200
+    assert removed.json() == []
+    assert cadence.status_code == 200
+    assert cadence.json()["avg_upload_interval_days"] > 0
+    assert sum(bucket["count"] for bucket in cadence.json()["buckets"]) == 2
     assert saved_view.status_code == 200
     assert saved_view.json()["name"] == "무자막 h264"
     assert saved_view.json()["sidecar"] == "subtitles"
