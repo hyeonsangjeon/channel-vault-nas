@@ -176,6 +176,7 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
             json={"max_quality": "best", "auto_download": True, "subtitle_languages": ["ko", "en", "ja"]},
         )
         jobs = await client.get(f"/api/jobs/downloads?channel_id={channel_id}")
+        queued_jobs = await client.get(f"/api/jobs/downloads?channel_id={channel_id}&status=queued&limit=5")
         sync_jobs = await client.get("/api/jobs/sync")
         filtered_sync_jobs = await client.get(
             f"/api/jobs/sync?channel_id={channel_id}&trigger=manual&status=completed&limit=5"
@@ -279,6 +280,9 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
 
     assert jobs.status_code == 200
     assert sorted(job["status"] for job in jobs.json()) == ["candidate", "queued"]
+    assert queued_jobs.status_code == 200
+    assert len(queued_jobs.json()) == 1
+    assert queued_jobs.json()[0]["status"] == "queued"
     assert sync_jobs.status_code == 200
     assert sync_jobs.json()[0]["status"] == "completed"
     assert filtered_sync_jobs.status_code == 200

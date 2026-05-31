@@ -2014,6 +2014,81 @@ button {
   font-size: 1.3rem;
 }
 
+.queue-radar-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(0, 0.7fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.queue-radar-strip > div,
+.queue-radar-strip article {
+  min-width: 0;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.07), rgba(56, 189, 248, 0.045)),
+    rgba(2, 6, 12, 0.28);
+}
+
+.queue-radar-strip > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.queue-radar-strip svg {
+  flex: 0 0 auto;
+  color: #7dd3fc;
+}
+
+.queue-radar-strip strong,
+.queue-radar-strip span {
+  display: block;
+}
+
+.queue-radar-strip > div strong {
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.queue-radar-strip span {
+  color: var(--faint);
+  font-size: 0.66rem;
+}
+
+.queue-radar-strip article strong {
+  margin-top: 4px;
+  color: #e0f2fe;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.92rem;
+}
+
+.launch-filter-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.launch-filter-rail button {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.72rem;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.launch-filter-rail button.active {
+  border-color: rgba(52, 211, 153, 0.28);
+  color: #d1fae5;
+  background: rgba(52, 211, 153, 0.08);
+}
+
 .launch-toolbar {
   grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
   align-items: center;
@@ -2109,6 +2184,22 @@ button {
   border-left-color: var(--color-info);
 }
 
+.launch-job.running {
+  border-left-color: #7dd3fc;
+}
+
+.launch-job.failed {
+  border-left-color: #fb7185;
+}
+
+.launch-job.cancelled {
+  border-left-color: #94a3b8;
+}
+
+.launch-job.locked {
+  opacity: 0.82;
+}
+
 .launch-job.selected {
   border-color: rgba(52, 211, 153, 0.24);
   border-left-color: var(--color-success);
@@ -2130,6 +2221,11 @@ button {
 .launch-job.selected .select-job {
   color: var(--color-success);
   border-color: rgba(52, 211, 153, 0.3);
+}
+
+.select-job:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .launch-job-main,
@@ -2178,6 +2274,47 @@ button {
   font-size: 0.7rem;
   font-style: normal;
   white-space: nowrap;
+}
+
+.queue-status-pill {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.7rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.queue-status-pill.candidate {
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.queue-status-pill.queued {
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #bae6fd;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.queue-status-pill.running {
+  border-color: rgba(125, 211, 252, 0.25);
+  color: #e0f2fe;
+  background: rgba(125, 211, 252, 0.08);
+}
+
+.queue-status-pill.failed {
+  border-color: rgba(251, 113, 133, 0.28);
+  color: #fecdd3;
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.queue-status-pill.cancelled {
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.08);
 }
 
 .preflight-pill.ready {
@@ -4519,6 +4656,7 @@ button {
   .library-summary,
   .library-shelf,
   .rescan-result,
+  .queue-radar-strip,
   .scheduler-tick-summary,
   .scheduler-numeric-filters,
   .storage-scan-grid,

@@ -319,13 +319,16 @@ async def list_download_jobs(
     *,
     db: AsyncSession,
     channel_id: int | None = None,
+    status: str | None = None,
     limit: int = 100,
 ) -> list[DownloadJobRead]:
     """Return download queue rows with channel and video context."""
     query = _download_job_query()
     if channel_id is not None:
         query = query.where(Channel.id == channel_id)
-    result = await db.execute(query.order_by(DownloadJob.created_at.desc()).limit(limit))
+    if status:
+        query = query.where(DownloadJob.status == status)
+    result = await db.execute(query.order_by(DownloadJob.created_at.desc()).limit(max(1, min(limit, 200))))
     return [to_download_job(job, video, channel) for job, video, channel in result.all()]
 
 
