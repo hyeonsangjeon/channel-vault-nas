@@ -177,6 +177,9 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         )
         jobs = await client.get(f"/api/jobs/downloads?channel_id={channel_id}")
         sync_jobs = await client.get("/api/jobs/sync")
+        filtered_sync_jobs = await client.get(
+            f"/api/jobs/sync?channel_id={channel_id}&trigger=manual&status=completed&limit=5"
+        )
         dashboard = await client.get("/api/dashboard")
         events = await client.get("/api/events/recent")
 
@@ -278,6 +281,9 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert sorted(job["status"] for job in jobs.json()) == ["candidate", "queued"]
     assert sync_jobs.status_code == 200
     assert sync_jobs.json()[0]["status"] == "completed"
+    assert filtered_sync_jobs.status_code == 200
+    assert len(filtered_sync_jobs.json()) == 1
+    assert filtered_sync_jobs.json()[0]["trigger"] == "manual"
     assert dashboard.status_code == 200
     assert dashboard.json()["coverage"]["source"] == 2
     assert dashboard.json()["channels"][0]["storage_gb"] > 0
