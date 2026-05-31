@@ -572,6 +572,7 @@
   "worker.liveStart": "Start up to 5",
   "worker.liveCancel": "Cancel",
   "worker.liveComplete": "Live pass complete · completed {completed}, failed {failed}, candidates {candidates}",
+  "worker.liveProgress": "Live download",
   "worker.liveConfirmTitle": "Download new videos",
   "worker.liveConfirm.limit": "Max this pass",
   "worker.liveConfirm.skipped": "Already downloaded skipped",

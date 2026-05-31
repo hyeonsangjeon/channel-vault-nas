@@ -572,6 +572,7 @@
   "worker.liveStart": "최대 5개 시작",
   "worker.liveCancel": "취소",
   "worker.liveComplete": "실행 완료 · 완료 {completed}개, 실패 {failed}개, 후보 {candidates}개",
+  "worker.liveProgress": "실시간 다운로드",
   "worker.liveConfirmTitle": "새 영상만 다운로드",
   "worker.liveConfirm.limit": "이번 pass 최대",
   "worker.liveConfirm.skipped": "이미 받은 영상은 건너뜀",

@@ -2304,6 +2304,12 @@ button {
   background: linear-gradient(90deg, var(--color-info), var(--color-success));
 }
 
+.job-telemetry-line {
+  margin-top: 5px;
+  color: #b6e7ff;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
 .job-row strong,
 .job-row small {
   display: block;
@@ -2794,6 +2800,34 @@ button {
   font-size: 0.68rem;
 }
 
+.launch-job-progress {
+  position: relative;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  margin-top: 7px;
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.launch-job-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.85), rgba(52, 211, 153, 0.9));
+}
+
+.launch-job-progress em {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #e0f2fe;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.62rem;
+  font-style: normal;
+}
+
 .launch-job-signals {
   display: flex;
   flex-wrap: wrap;
@@ -3061,6 +3095,86 @@ button {
   border-color: rgba(245, 158, 11, 0.26);
   color: #fde68a;
   background: rgba(245, 158, 11, 0.08);
+}
+
+.live-progress-strip {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 14px;
+  align-items: center;
+  margin-top: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+  background:
+    linear-gradient(90deg, rgba(96, 165, 250, 0.14), transparent 58%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.live-progress-strip.completed {
+  border-color: rgba(52, 211, 153, 0.22);
+  background:
+    linear-gradient(90deg, rgba(52, 211, 153, 0.12), transparent 58%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.live-progress-strip.failed,
+.live-progress-strip.cancelled {
+  border-color: rgba(248, 113, 113, 0.22);
+  background:
+    linear-gradient(90deg, rgba(248, 113, 113, 0.1), transparent 58%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.live-progress-strip span,
+.live-progress-strip small,
+.live-progress-readout em {
+  display: block;
+  color: var(--faint);
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.live-progress-strip strong {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.live-progress-strip small {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.live-progress-readout {
+  min-width: 72px;
+  text-align: right;
+}
+
+.live-progress-readout strong {
+  color: #bae6fd;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 1rem;
+}
+
+.live-progress-meter {
+  grid-column: 1 / -1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.live-progress-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #60a5fa, #34d399);
 }
 
 .worker-stats {

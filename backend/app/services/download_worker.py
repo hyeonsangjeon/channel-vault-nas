@@ -360,7 +360,15 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
     await _commit_worker_state(db)
     await event_bus.publish(
         "download.started",
-        {"job_id": job.id, "video_id": video.id, "video_title": video.title, "channel_title": channel.title},
+        {
+            "job_id": job.id,
+            "video_id": video.id,
+            "video_title": video.title,
+            "channel_id": channel.id,
+            "channel_title": channel.title,
+            "archive_dir": archive_dir,
+            "quality": job.quality,
+        },
     )
 
     last_line = ""
@@ -389,6 +397,10 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
                         "job_id": job.id,
                         "video_id": video.id,
                         "video_title": video.title,
+                        "channel_id": channel.id,
+                        "channel_title": channel.title,
+                        "archive_dir": archive_dir,
+                        "quality": job.quality,
                         "percent": job.progress,
                         "eta": parsed.eta,
                         "speed": parsed.speed,
@@ -402,14 +414,35 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
             job.completed_at = job.completed_at or datetime.now(UTC)
             job.updated_at = datetime.now(UTC)
             await _commit_worker_state(db)
-            await event_bus.publish("download.cancelled", {"job_id": job.id, "video_title": video.title})
+            await event_bus.publish(
+                "download.cancelled",
+                {
+                    "job_id": job.id,
+                    "video_id": video.id,
+                    "video_title": video.title,
+                    "channel_id": channel.id,
+                    "channel_title": channel.title,
+                    "archive_dir": archive_dir,
+                },
+            )
             return False
         job.status = "failed"
         job.error_message = str(exc)
         job.completed_at = datetime.now(UTC)
         job.updated_at = job.completed_at
         await _commit_worker_state(db)
-        await event_bus.publish("download.failed", {"job_id": job.id, "video_title": video.title, "error": str(exc)})
+        await event_bus.publish(
+            "download.failed",
+            {
+                "job_id": job.id,
+                "video_id": video.id,
+                "video_title": video.title,
+                "channel_id": channel.id,
+                "channel_title": channel.title,
+                "archive_dir": archive_dir,
+                "error": str(exc),
+            },
+        )
         return False
     finally:
         _RUNNING_PROCESSES.pop(job.id, None)
@@ -423,7 +456,15 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
         await _commit_worker_state(db)
         await event_bus.publish(
             "download.completed",
-            {"job_id": job.id, "video_id": video.id, "video_title": video.title},
+            {
+                "job_id": job.id,
+                "video_id": video.id,
+                "video_title": video.title,
+                "channel_id": channel.id,
+                "channel_title": channel.title,
+                "archive_dir": archive_dir,
+                "quality": job.quality,
+            },
         )
         return True
 
@@ -434,7 +475,14 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
         await _commit_worker_state(db)
         await event_bus.publish(
             "download.cancelled",
-            {"job_id": job.id, "video_id": video.id, "video_title": video.title},
+            {
+                "job_id": job.id,
+                "video_id": video.id,
+                "video_title": video.title,
+                "channel_id": channel.id,
+                "channel_title": channel.title,
+                "archive_dir": archive_dir,
+            },
         )
         return False
 
@@ -445,7 +493,15 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
     await _commit_worker_state(db)
     await event_bus.publish(
         "download.failed",
-        {"job_id": job.id, "video_id": video.id, "video_title": video.title, "error": job.error_message},
+        {
+            "job_id": job.id,
+            "video_id": video.id,
+            "video_title": video.title,
+            "channel_id": channel.id,
+            "channel_title": channel.title,
+            "archive_dir": archive_dir,
+            "error": job.error_message,
+        },
     )
     return False
 
