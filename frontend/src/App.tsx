@@ -53,6 +53,9 @@ import {
   deleteLibraryView,
   enqueueVideoDownload,
   getChannel,
+  getChannelCadence,
+  getChannelCoverage,
+  getChannelMissingVideos,
   getChannelPolicy,
   getChannelVideos,
   getDashboard,
@@ -85,6 +88,9 @@ import {
   type ArchiveEvent,
   type ChannelPolicy,
   type ChannelDetail,
+  type ChannelCadence,
+  type ChannelCoverage,
+  type MissingVideo,
   type ChannelProbeResult,
   type ChannelRegistrationPayload,
   type ChannelRegistrationResult,
@@ -273,6 +279,9 @@ function App() {
   const [channelDetail, setChannelDetail] = useState<ChannelDetail | null>(null);
   const [channelPolicy, setChannelPolicy] = useState<ChannelPolicy | null>(null);
   const [channelVideos, setChannelVideos] = useState<ChannelVideo[]>([]);
+  const [channelCoverage, setChannelCoverage] = useState<ChannelCoverage | null>(null);
+  const [channelMissingVideos, setChannelMissingVideos] = useState<MissingVideo[]>([]);
+  const [channelCadence, setChannelCadence] = useState<ChannelCadence | null>(null);
   const [syncIntervalDraft, setSyncIntervalDraft] = useState("360");
   const [syncIntervalStatus, setSyncIntervalStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
@@ -467,6 +476,8 @@ function App() {
   const cadenceAverageLabel = channelDetail?.avg_upload_interval_days
     ? `${t("metrics.uploadCadence.label")}: ${channelDetail.avg_upload_interval_days}d`
     : t("cadence.next");
+  const channelCoveragePercent = channelCoverage?.percent ?? (activeCounts?.video_count ? Math.round((activeArchivedCount / activeCounts.video_count) * 100) : 0);
+  const channelCadenceMax = Math.max(1, ...(channelCadence?.buckets.map((bucket) => bucket.count) ?? [0]));
   const syncIntervalNumber = Number(syncIntervalDraft);
   const syncIntervalValid = Number.isInteger(syncIntervalNumber) && syncIntervalNumber >= 5 && syncIntervalNumber <= 10_080;
   const activeQueue = useMemo(
@@ -840,6 +851,9 @@ function App() {
       setChannelDetail(null);
       setChannelPolicy(null);
       setChannelVideos([]);
+      setChannelCoverage(null);
+      setChannelMissingVideos([]);
+      setChannelCadence(null);
       setSyncJobs([]);
       setDownloadJobs([]);
       setPreflightPlan(null);
@@ -855,10 +869,25 @@ function App() {
     let cancelled = false;
     async function load() {
       try {
-        const [detail, policy, videos, syncJobSnapshot, jobs, librarySnapshot, workerSnapshot, workerRunSnapshot] = await Promise.all([
+        const [
+          detail,
+          policy,
+          videos,
+          coverage,
+          missingVideos,
+          cadence,
+          syncJobSnapshot,
+          jobs,
+          librarySnapshot,
+          workerSnapshot,
+          workerRunSnapshot,
+        ] = await Promise.all([
           getChannel(channelId),
           getChannelPolicy(channelId),
           getChannelVideos(channelId),
+          getChannelCoverage(channelId),
+          getChannelMissingVideos(channelId),
+          getChannelCadence(channelId),
           getSyncJobs(channelId, 4),
           getDownloadJobs(channelId),
           getLibrary(channelId),
@@ -869,6 +898,9 @@ function App() {
         setChannelDetail(detail);
         setChannelPolicy(policy);
         setChannelVideos(videos);
+        setChannelCoverage(coverage);
+        setChannelMissingVideos(missingVideos);
+        setChannelCadence(cadence);
         setSyncJobs(syncJobSnapshot);
         setDownloadJobs(jobs);
         setLibrary(librarySnapshot);
@@ -896,6 +928,9 @@ function App() {
     setChannelDetail(null);
     setChannelPolicy(null);
     setChannelVideos([]);
+    setChannelCoverage(null);
+    setChannelMissingVideos([]);
+    setChannelCadence(null);
     setSyncJobs([]);
     setDownloadJobs([]);
     setPreflightPlan(null);
@@ -1622,10 +1657,26 @@ function App() {
   }
 
   async function loadChannelState(channelId: number) {
-    const [detail, policy, videos, syncJobSnapshot, jobs, snapshot, librarySnapshot, workerSnapshot, workerRunSnapshot] = await Promise.all([
+    const [
+      detail,
+      policy,
+      videos,
+      coverage,
+      missingVideos,
+      cadence,
+      syncJobSnapshot,
+      jobs,
+      snapshot,
+      librarySnapshot,
+      workerSnapshot,
+      workerRunSnapshot,
+    ] = await Promise.all([
       getChannel(channelId),
       getChannelPolicy(channelId),
       getChannelVideos(channelId),
+      getChannelCoverage(channelId),
+      getChannelMissingVideos(channelId),
+      getChannelCadence(channelId),
       getSyncJobs(channelId, 4),
       getDownloadJobs(channelId),
       getDashboard(),
@@ -1636,6 +1687,9 @@ function App() {
     setChannelDetail(detail);
     setChannelPolicy(policy);
     setChannelVideos(videos);
+    setChannelCoverage(coverage);
+    setChannelMissingVideos(missingVideos);
+    setChannelCadence(cadence);
     setSyncJobs(syncJobSnapshot);
     applyDownloadJobs(jobs);
     setSelectedJobIds(jobs.filter(isLaunchableJob).map((job) => job.id));
@@ -2149,6 +2203,40 @@ function App() {
                     <strong>{downloadJobs.length}</strong>
                     {t("detail.queue")}
                   </span>
+                </div>
+                <div className="coverage-inspector" aria-label={t("detail.coverageApi.title")}>
+                  <div className="coverage-meter">
+                    <div>
+                      <strong>{channelCoveragePercent}%</strong>
+                      <span>{t("detail.coverageApi.title")}</span>
+                    </div>
+                    <i>
+                      <b style={{ width: `${Math.max(0, Math.min(channelCoveragePercent, 100))}%` }} />
+                    </i>
+                    <small>
+                      {t("detail.coverageApi.summary")
+                        .replace("{archived}", String(channelCoverage?.archived ?? activeArchivedCount))
+                        .replace("{source}", String(channelCoverage?.source ?? activeCounts?.video_count ?? 0))
+                        .replace("{missing}", String(channelCoverage?.missing ?? activeMissingCount))}
+                    </small>
+                  </div>
+                  {channelCadence ? (
+                    <div className="cadence-mini-rail" aria-label={t("detail.coverageApi.cadence")}>
+                      {channelCadence.buckets.map((bucket) => (
+                        <span key={bucket.dow} title={`${bucket.label} ${bucket.count}`}>
+                          <i style={{ height: `${Math.max(10, Math.round((bucket.count / channelCadenceMax) * 100))}%` }} />
+                          <em>{bucket.label.slice(0, 1)}</em>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {channelMissingVideos.length ? (
+                    <div className="missing-mini-card">
+                      <span>{t("detail.coverageApi.nextMissing")}</span>
+                      <strong>{channelMissingVideos[0].title}</strong>
+                      <small>{channelMissingVideos[0].id}</small>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="job-list">
                   {downloadJobs.slice(0, 4).map((job) => (
