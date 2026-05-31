@@ -242,6 +242,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.getByRole("button", { name: "닫기" }).click();
 
   await expect(page.getByLabel("Queue 레이더")).toBeVisible();
+  await expect(page.getByRole("button", { name: "선택 재시도" })).toBeDisabled();
   const queueFilters = page.getByLabel("Queue 상태 필터");
   await expect(queueFilters).toBeVisible();
   await queueFilters.getByRole("button", { name: "대기" }).click();
