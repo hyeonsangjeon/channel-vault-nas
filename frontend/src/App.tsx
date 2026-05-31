@@ -1598,6 +1598,19 @@ function App() {
     }
   }
 
+  async function handleResetSchedulerTickFilters() {
+    setSchedulerTickStatusFilter("all");
+    setSchedulerDurationFilter("all");
+    setSchedulerIntervalFilter("");
+    setSchedulerLimitFilter("");
+    try {
+      await refreshSchedulerTicks("all", "all", "", "");
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
   async function refreshMetadataTicks(
     statusFilter: SchedulerTickStatusFilter = metadataTickStatusFilter,
     durationFilter: SchedulerDurationFilter = metadataDurationFilter,
@@ -1653,6 +1666,19 @@ function App() {
         kind === "interval" ? value : metadataIntervalFilter,
         kind === "limit" ? value : metadataLimitFilter,
       );
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleResetMetadataTickFilters() {
+    setMetadataTickStatusFilter("all");
+    setMetadataDurationFilter("all");
+    setMetadataIntervalFilter("");
+    setMetadataLimitFilter("");
+    try {
+      await refreshMetadataTicks("all", "all", "", "");
     } catch (error) {
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
@@ -3927,6 +3953,10 @@ function App() {
                   <TimerReset size={13} />
                   {t("runtime.ticks.slowOnly")}
                 </button>
+                <button onClick={() => void handleResetSchedulerTickFilters()} type="button">
+                  <RotateCcw size={13} />
+                  {t("runtime.ticks.resetFilters")}
+                </button>
               </div>
               <div className="scheduler-numeric-filters">
                 <label>
@@ -4065,6 +4095,10 @@ function App() {
                 >
                   <TimerReset size={13} />
                   {t("runtime.ticks.slowOnly")}
+                </button>
+                <button onClick={() => void handleResetMetadataTickFilters()} type="button">
+                  <RotateCcw size={13} />
+                  {t("runtime.ticks.resetFilters")}
                 </button>
               </div>
               <div className="scheduler-numeric-filters">
