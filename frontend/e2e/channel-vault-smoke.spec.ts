@@ -37,8 +37,8 @@ async function openKoreanVault(page: Page) {
   await expect(page.getByRole("button", { name: "지금 metadata tick" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "yt-dlp" })).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "ffprobe" })).toBeVisible();
-  await expect(page.getByText("아카이브 런치 컨트롤")).toBeVisible();
-  await expect(page.getByText("인덱스된 미디어 선반")).toBeVisible();
+  await expect(page.getByLabel("채널 상세 탭")).toContainText("다운로드");
+  await expect(page.getByRole("button", { name: "새 영상만 다운로드" })).toBeVisible();
 }
 
 test.afterEach(async ({ page }) => {
@@ -131,6 +131,7 @@ test("registration command bar can probe and commit without external YouTube cal
   await expect(page.getByText("E2E Vault Signal").first()).toBeVisible();
   await page.getByRole("button", { name: "점화하기" }).click();
   await expect(page.getByRole("button", { name: "등록 완료" })).toBeVisible();
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "다운로드" }).click();
   await expect(page.getByText("다운로드 파동을 드라이런")).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -192,8 +193,10 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.getByText("다음 sync 예정")).toBeVisible();
   await expect(page.getByText("마지막 자동 sync")).toBeVisible();
   await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "로그" }).click();
   await expect(page.getByLabel("Sync 작업 기록")).toBeVisible();
   await expect(page.locator(".sync-job-ledger").first()).toContainText("감지");
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "개요" }).click();
   await expect(page.getByLabel("Coverage 지표")).toBeVisible();
   await expect(page.getByLabel("업로드 요일 분포")).toBeVisible();
   await expect(page.locator(".coverage-inspector")).toContainText("1/3 보존");
@@ -241,12 +244,15 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.locator(".library-sidecar-grid").first()).toContainText("자막");
   await page.screenshot({ path: testInfo.outputPath("library-detail.png"), fullPage: true });
   await page.getByRole("button", { name: "닫기" }).click();
-  await expect(page.getByText("워커 관제실")).toBeVisible();
-  await expect(page.getByText("잠김").first()).toBeVisible();
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "정책" }).click();
+  await expect(page.getByText("정책 콘솔")).toBeVisible();
   await page.getByRole("button", { name: "워커 정지" }).click();
   await expect(page.getByRole("button", { name: "워커 재개" })).toBeVisible();
   await page.getByRole("button", { name: "워커 재개" }).click();
   await expect(page.getByRole("button", { name: "워커 정지" })).toBeVisible();
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "다운로드" }).click();
+  await expect(page.getByText("워커 관제실")).toBeVisible();
+  await expect(page.getByText("잠김").first()).toBeVisible();
   const workerRun = page.waitForResponse(
     (response) => response.url().endsWith("/api/jobs/downloads/worker/run-once") && response.request().method() === "POST",
   );

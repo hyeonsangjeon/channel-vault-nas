@@ -72,9 +72,15 @@ async def apply_rescan_target(
         return result
 
     target = Path(target_path)
-    if not target.is_absolute():
-        target = root / target
-    target = target.resolve()
+    if target.is_absolute():
+        target = target.resolve()
+    else:
+        cwd_relative_target = target.resolve()
+        try:
+            cwd_relative_target.relative_to(root)
+            target = cwd_relative_target
+        except ValueError:
+            target = (root / target).resolve()
     try:
         target.relative_to(root)
     except ValueError:
