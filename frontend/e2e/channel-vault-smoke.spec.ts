@@ -174,6 +174,8 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.getByText("다음 sync 예정")).toBeVisible();
   await expect(page.getByText("마지막 자동 sync")).toBeVisible();
   await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
+  await expect(page.getByLabel("Sync 작업 기록")).toBeVisible();
+  await expect(page.locator(".sync-job-ledger").first()).toContainText("감지");
   await page.getByLabel("Sync 간격 분").fill("120");
   const intervalPatch = page.waitForResponse(
     (response) => response.url().endsWith("/api/channels/1") && response.request().method() === "PATCH",

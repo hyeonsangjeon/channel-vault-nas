@@ -708,6 +708,24 @@ export async function syncChannel(channelId: number, payload: Pick<ChannelRegist
   return postJson(`/api/channels/${channelId}/sync`, payload);
 }
 
+export type SyncJobFilters = {
+  status?: string;
+  trigger?: string;
+};
+
+export async function getSyncJobs(
+  channelId?: number,
+  limit = 4,
+  filters: SyncJobFilters = {},
+): Promise<SyncJob[]> {
+  const params = new URLSearchParams();
+  if (typeof channelId === "number") params.set("channel_id", String(channelId));
+  params.set("limit", String(limit));
+  if (filters.status) params.set("status", filters.status);
+  if (filters.trigger) params.set("trigger", filters.trigger);
+  return getJson(`/api/jobs/sync?${params}`);
+}
+
 export async function createDownloadCandidates(channelId: number, quality: string): Promise<DownloadCandidateResult> {
   return postJson(`/api/channels/${channelId}/downloads/candidates`, { quality, limit: 50 });
 }

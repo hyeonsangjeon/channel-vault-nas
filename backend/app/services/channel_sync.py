@@ -158,9 +158,22 @@ async def run_channel_sync(
     )
 
 
-async def list_sync_jobs(db: AsyncSession, limit: int = 50) -> list[SyncJobRead]:
+async def list_sync_jobs(
+    db: AsyncSession,
+    limit: int = 50,
+    channel_id: int | None = None,
+    status: str | None = None,
+    trigger: str | None = None,
+) -> list[SyncJobRead]:
     """Return recent sync jobs."""
-    result = await db.execute(_sync_job_query().order_by(SyncJob.created_at.desc()).limit(limit))
+    query = _sync_job_query()
+    if channel_id is not None:
+        query = query.where(SyncJob.channel_id == channel_id)
+    if status:
+        query = query.where(SyncJob.status == status)
+    if trigger:
+        query = query.where(SyncJob.trigger == trigger)
+    result = await db.execute(query.order_by(SyncJob.created_at.desc()).limit(max(1, min(limit, 100))))
     return [to_sync_job(job, channel) for job, channel in result.all()]
 
 

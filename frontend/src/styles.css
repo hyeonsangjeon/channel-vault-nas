@@ -1481,6 +1481,122 @@ button {
   opacity: 0.46;
 }
 
+.sync-job-ledger {
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 8px;
+  margin: 0 0 14px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(168, 85, 247, 0.045) 46%, transparent),
+    rgba(3, 7, 18, 0.3);
+}
+
+.sync-job-ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.sync-job-ledger-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #dff6ff;
+  font-size: 0.74rem;
+  font-weight: 790;
+}
+
+.sync-job-ledger-head svg {
+  color: #7dd3fc;
+}
+
+.sync-job-ledger-head em {
+  color: var(--faint);
+  font-size: 0.66rem;
+  font-style: normal;
+}
+
+.sync-job-ledger-list {
+  display: grid;
+  gap: 7px;
+}
+
+.sync-job-ledger article {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(170px, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(2, 6, 12, 0.33);
+}
+
+.sync-job-ledger article.completed {
+  border-color: rgba(52, 211, 153, 0.2);
+}
+
+.sync-job-ledger article.failed {
+  border-color: rgba(248, 113, 113, 0.22);
+}
+
+.sync-job-ledger article.running {
+  border-color: rgba(125, 211, 252, 0.22);
+}
+
+.sync-job-ledger strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.sync-job-ledger span {
+  display: block;
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 0.66rem;
+  overflow-wrap: anywhere;
+}
+
+.sync-job-ledger dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.sync-job-ledger dl div {
+  min-width: 0;
+  border-radius: 7px;
+  padding: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sync-job-ledger dt {
+  color: var(--faint);
+  font-size: 0.62rem;
+}
+
+.sync-job-ledger dd {
+  margin: 2px 0 0;
+  color: #e0f2fe;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.sync-job-ledger code {
+  grid-column: 1 / -1;
+  border-radius: 7px;
+  padding: 7px;
+  color: #fecdd3;
+  background: rgba(127, 29, 29, 0.2);
+  white-space: normal;
+}
+
 .policy-console {
   display: flex;
   align-items: center;
@@ -4376,6 +4492,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .sync-job-ledger article {
+    grid-template-columns: 1fr;
+  }
+
   .runtime-restart-actions {
     width: 100%;
     justify-content: stretch;
@@ -4434,6 +4554,7 @@ button {
 
   .worker-history-summary,
   .worker-history-card dl,
+  .sync-job-ledger dl,
   .scheduler-tick-list.expanded dl,
   .library-detail-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));

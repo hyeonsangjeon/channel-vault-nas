@@ -68,6 +68,7 @@ import {
   getRuntimeSettings,
   getSchedulerTicks,
   getStorageScan,
+  getSyncJobs,
   probeChannel,
   registerChannel,
   requestRuntimeRestart,
@@ -105,6 +106,7 @@ import {
   type SchedulerTick,
   type SchedulerTickFilters,
   type StorageScan,
+  type SyncJob,
 } from "./api/channels";
 import { ChannelConstellation } from "./components/ChannelConstellation";
 import { MetricTile } from "./components/MetricTile";
@@ -262,6 +264,7 @@ function App() {
   const [channelVideos, setChannelVideos] = useState<ChannelVideo[]>([]);
   const [syncIntervalDraft, setSyncIntervalDraft] = useState("360");
   const [syncIntervalStatus, setSyncIntervalStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [events, setEvents] = useState<ArchiveEvent[]>([]);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
@@ -806,6 +809,7 @@ function App() {
       setChannelDetail(null);
       setChannelPolicy(null);
       setChannelVideos([]);
+      setSyncJobs([]);
       setDownloadJobs([]);
       setPreflightPlan(null);
       setSelectedJobIds([]);
@@ -820,10 +824,11 @@ function App() {
     let cancelled = false;
     async function load() {
       try {
-        const [detail, policy, videos, jobs, librarySnapshot, workerSnapshot, workerRunSnapshot] = await Promise.all([
+        const [detail, policy, videos, syncJobSnapshot, jobs, librarySnapshot, workerSnapshot, workerRunSnapshot] = await Promise.all([
           getChannel(channelId),
           getChannelPolicy(channelId),
           getChannelVideos(channelId),
+          getSyncJobs(channelId, 4),
           getDownloadJobs(channelId),
           getLibrary(channelId),
           getDownloadWorkerPlan(channelId),
@@ -833,6 +838,7 @@ function App() {
         setChannelDetail(detail);
         setChannelPolicy(policy);
         setChannelVideos(videos);
+        setSyncJobs(syncJobSnapshot);
         setDownloadJobs(jobs);
         setLibrary(librarySnapshot);
         setWorkerPlan(workerSnapshot);
@@ -859,6 +865,7 @@ function App() {
     setChannelDetail(null);
     setChannelPolicy(null);
     setChannelVideos([]);
+    setSyncJobs([]);
     setDownloadJobs([]);
     setPreflightPlan(null);
     setSelectedJobIds([]);
@@ -1554,10 +1561,11 @@ function App() {
   }
 
   async function loadChannelState(channelId: number) {
-    const [detail, policy, videos, jobs, snapshot, librarySnapshot, workerSnapshot, workerRunSnapshot] = await Promise.all([
+    const [detail, policy, videos, syncJobSnapshot, jobs, snapshot, librarySnapshot, workerSnapshot, workerRunSnapshot] = await Promise.all([
       getChannel(channelId),
       getChannelPolicy(channelId),
       getChannelVideos(channelId),
+      getSyncJobs(channelId, 4),
       getDownloadJobs(channelId),
       getDashboard(),
       getLibrary(channelId),
@@ -1567,6 +1575,7 @@ function App() {
     setChannelDetail(detail);
     setChannelPolicy(policy);
     setChannelVideos(videos);
+    setSyncJobs(syncJobSnapshot);
     applyDownloadJobs(jobs);
     setSelectedJobIds(jobs.filter(isLaunchableJob).map((job) => job.id));
     setPreflightPlan(null);
@@ -1957,6 +1966,42 @@ function App() {
                 <small>{channelPolicy?.auto_download ? t("detail.syncOps.policyOn") : t("detail.syncOps.policyOff")}</small>
               </article>
             </div>
+            {syncJobs.length ? (
+              <div className="sync-job-ledger" aria-label={t("detail.syncJobs.title")}>
+                <div className="sync-job-ledger-head">
+                  <span>
+                    <History size={13} />
+                    {t("detail.syncJobs.title")}
+                  </span>
+                  <em>{t("detail.syncJobs.count").replace("{count}", String(syncJobs.length))}</em>
+                </div>
+                <div className="sync-job-ledger-list">
+                  {syncJobs.slice(0, 4).map((job) => (
+                    <article className={job.status} key={job.id}>
+                      <div>
+                        <strong>{syncJobStatusLabel(job.status, t)}</strong>
+                        <span>{job.trigger} · {formatEventTime(job.completed_at ?? job.started_at)}</span>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>{t("detail.syncJobs.seen")}</dt>
+                          <dd>{job.videos_seen}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("detail.syncJobs.new")}</dt>
+                          <dd>{job.videos_created}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("detail.syncJobs.candidates")}</dt>
+                          <dd>{job.candidates_created}</dd>
+                        </div>
+                      </dl>
+                      {job.error_message ? <code>{job.error_message}</code> : null}
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="policy-console">
               <div className="policy-signal">
                 <SlidersHorizontal size={17} />
@@ -4145,6 +4190,12 @@ function schedulerTickStatusLabel(status: string, t: (key: TranslationKey) => st
   if (status === "failed") return t("runtime.ticks.failed");
   if (status === "skipped") return t("runtime.ticks.skipped");
   return t("runtime.ticks.running");
+}
+
+function syncJobStatusLabel(status: string, t: (key: TranslationKey) => string) {
+  if (status === "completed") return t("detail.syncJobs.completed");
+  if (status === "failed") return t("detail.syncJobs.failed");
+  return t("detail.syncJobs.running");
 }
 
 function mediaProfileLabel(item: LibraryItem) {

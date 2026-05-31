@@ -42,9 +42,15 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("/sync", response_model=list[SyncJobRead])
-async def get_sync_jobs(db: DbSession) -> list[SyncJobRead]:
+async def get_sync_jobs(
+    db: DbSession,
+    channel_id: int | None = None,
+    status: str | None = None,
+    trigger: str | None = None,
+    limit: int = 50,
+) -> list[SyncJobRead]:
     """Return recent metadata sync jobs."""
-    return await list_sync_jobs(db)
+    return await list_sync_jobs(db, channel_id=channel_id, status=status, trigger=trigger, limit=limit)
 
 
 @router.get("/downloads", response_model=list[DownloadJobRead])
