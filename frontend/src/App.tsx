@@ -343,6 +343,8 @@ function App() {
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartStatus, setRuntimeRestartStatus] = useState<"idle" | "requesting" | "requested" | "manual" | "error">("idle");
   const [runtimeRestartMessage, setRuntimeRestartMessage] = useState("");
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
@@ -1407,6 +1409,42 @@ function App() {
     } catch {
       setLaunchCommandCopyStatus("error");
       window.setTimeout(() => setLaunchCommandCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleCopyTickRows(kind: "scheduler" | "metadata") {
+    const payload =
+      kind === "scheduler"
+        ? {
+            kind: "download_worker_scheduler_ticks",
+            filters: {
+              status: schedulerTickStatusFilter,
+              duration: schedulerDurationFilter,
+              interval_seconds: schedulerIntervalFilter || null,
+              worker_limit: schedulerLimitFilter || null,
+            },
+            count: schedulerTickRows.length,
+            ticks: schedulerTickRows,
+          }
+        : {
+            kind: "metadata_sync_scheduler_ticks",
+            filters: {
+              status: metadataTickStatusFilter,
+              duration: metadataDurationFilter,
+              interval_seconds: metadataIntervalFilter || null,
+              channel_limit: metadataLimitFilter || null,
+            },
+            count: metadataTickRows.length,
+            ticks: metadataTickRows,
+          };
+    const setStatus = kind === "scheduler" ? setSchedulerTickCopyStatus : setMetadataTickCopyStatus;
+    try {
+      await copyTextToClipboard(JSON.stringify(payload, null, 2));
+      setStatus("copied");
+      window.setTimeout(() => setStatus("idle"), 1800);
+    } catch {
+      setStatus("error");
+      window.setTimeout(() => setStatus("idle"), 2200);
     }
   }
 
@@ -3842,15 +3880,30 @@ function App() {
                 <h2>{t("runtime.ticks.drawerTitle")}</h2>
                 <span>{t("runtime.ticks.drawerSubtitle")}</span>
               </div>
-              <button
-                aria-label={t("actions.close")}
-                className="icon-button"
-                onClick={() => setSchedulerTickDrawerOpen(false)}
-                title={t("actions.close")}
-                type="button"
-              >
-                <X size={16} />
-              </button>
+              <div className="runtime-heading-actions">
+                <button
+                  className="runtime-apply-button"
+                  disabled={!schedulerTickRows.length}
+                  onClick={() => void handleCopyTickRows("scheduler")}
+                  type="button"
+                >
+                  <ClipboardList size={14} />
+                  {schedulerTickCopyStatus === "copied"
+                    ? t("runtime.ticks.copyCopied")
+                    : schedulerTickCopyStatus === "error"
+                      ? t("runtime.ticks.copyError")
+                      : t("runtime.ticks.copyJson")}
+                </button>
+                <button
+                  aria-label={t("actions.close")}
+                  className="icon-button"
+                  onClick={() => setSchedulerTickDrawerOpen(false)}
+                  title={t("actions.close")}
+                  type="button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             <div className="scheduler-tick-filters">
@@ -3966,15 +4019,30 @@ function App() {
                 <h2>{t("runtime.metadataTicks.drawerTitle")}</h2>
                 <span>{t("runtime.metadataTicks.drawerSubtitle")}</span>
               </div>
-              <button
-                aria-label={t("actions.close")}
-                className="icon-button"
-                onClick={() => setMetadataTickDrawerOpen(false)}
-                title={t("actions.close")}
-                type="button"
-              >
-                <X size={16} />
-              </button>
+              <div className="runtime-heading-actions">
+                <button
+                  className="runtime-apply-button"
+                  disabled={!metadataTickRows.length}
+                  onClick={() => void handleCopyTickRows("metadata")}
+                  type="button"
+                >
+                  <ClipboardList size={14} />
+                  {metadataTickCopyStatus === "copied"
+                    ? t("runtime.ticks.copyCopied")
+                    : metadataTickCopyStatus === "error"
+                      ? t("runtime.ticks.copyError")
+                      : t("runtime.ticks.copyJson")}
+                </button>
+                <button
+                  aria-label={t("actions.close")}
+                  className="icon-button"
+                  onClick={() => setMetadataTickDrawerOpen(false)}
+                  title={t("actions.close")}
+                  type="button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             <div className="scheduler-tick-filters">
