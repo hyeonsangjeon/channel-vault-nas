@@ -616,6 +616,7 @@ function App() {
     () => actionableQueueJobs.filter((job) => selectedJobIds.includes(job.id)),
     [actionableQueueJobs, selectedJobIds],
   );
+  const selectedRetryableCount = selectedJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length;
   const selectedBytesLabel = useMemo(
     () => formatBytes(selectedJobs.reduce((sum, job) => sum + (job.estimated_bytes ?? 0), 0)),
     [selectedJobs],
@@ -1259,7 +1260,7 @@ function App() {
     }
   }
 
-  async function handleBulkQueueAction(action: "queue" | "cancel" | "prioritize", priority?: number) {
+  async function handleBulkQueueAction(action: "queue" | "cancel" | "prioritize" | "retry", priority?: number) {
     if (!registeredChannelId) return;
     const jobIds = selectedJobIds.length ? selectedJobIds : preflightPlan?.ready_job_ids ?? [];
     if (jobIds.length === 0) {
@@ -1287,7 +1288,9 @@ function App() {
           ? "queue.bulk.queued"
           : action === "cancel"
             ? "queue.bulk.cancelled"
-            : "queue.bulk.prioritized";
+            : action === "retry"
+              ? "queue.bulk.retried"
+              : "queue.bulk.prioritized";
       setWorkflowMessage(t(messageKey as TranslationKey).replace("{count}", String(result.updated)));
     } catch (error) {
       setWorkflowStatus("error");
@@ -2522,6 +2525,15 @@ function App() {
                 >
                   <Zap size={16} />
                   {t("launch.prioritize")}
+                </button>
+                <button
+                  className="command-button"
+                  disabled={workflowStatus === "bulk" || selectedRetryableCount === 0}
+                  onClick={() => handleBulkQueueAction("retry", 75)}
+                  type="button"
+                >
+                  <RotateCcw size={16} />
+                  {t("launch.retrySelected")}
                 </button>
                 <button
                   className="primary-action"
