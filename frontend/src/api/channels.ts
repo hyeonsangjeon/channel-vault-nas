@@ -119,6 +119,42 @@ export type ChannelVideo = {
   discovered_at: string;
 };
 
+export type ChannelCoverage = {
+  channel_id: string;
+  source: number;
+  archived: number;
+  missing: number;
+  removed_saved: number;
+  percent: number;
+  updated_at: string;
+};
+
+export type MissingVideo = {
+  id: string;
+  title: string;
+  published_at: string;
+  source_state: string;
+  reason: string;
+};
+
+export type ChannelCadenceBucket = {
+  dow: number;
+  label: string;
+  count: number;
+  typical_hour: number;
+};
+
+export type ChannelCadence = {
+  channel_id: string;
+  first_video_published_at: string;
+  latest_video_published_at: string;
+  avg_upload_interval_days: number;
+  typical_upload_dow: number;
+  typical_upload_hour: number;
+  next_expected_at: string;
+  buckets: ChannelCadenceBucket[];
+};
+
 export type ChannelPolicy = {
   channel_id: number;
   auto_download: boolean;
@@ -694,6 +730,18 @@ export async function updateChannel(channelId: number, payload: ChannelSettingsU
 
 export async function getChannelVideos(channelId: number): Promise<ChannelVideo[]> {
   return getJson(`/api/channels/${channelId}/videos`);
+}
+
+export async function getChannelCoverage(channelId: number): Promise<ChannelCoverage> {
+  return getJson(`/api/channels/${channelId}/coverage`);
+}
+
+export async function getChannelMissingVideos(channelId: number): Promise<MissingVideo[]> {
+  return getJson(`/api/channels/${channelId}/missing`);
+}
+
+export async function getChannelCadence(channelId: number): Promise<ChannelCadence> {
+  return getJson(`/api/channels/${channelId}/cadence`);
 }
 
 export async function getChannelPolicy(channelId: number): Promise<ChannelPolicy> {
