@@ -18,6 +18,7 @@ from app.config import BACKEND_ROOT, settings
 from app.models.archive import Channel, DownloadSchedulerTick
 from app.schemas.settings import (
     BinaryHealth,
+    MetadataSyncDueChannel,
     RuntimeEnvOverride,
     RuntimeRestartAdapter,
     RuntimeRestartRequest,
@@ -75,11 +76,12 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
                 "next_tick_at": metadata_scheduler_status.next_tick_at or latest_metadata_tick.next_tick_at,
             }
         )
-    due_channel_count, next_due_at = await _metadata_scheduler_due_summary(db)
+    due_channel_count, next_due_at, due_channels = await _metadata_scheduler_due_summary(db)
     metadata_scheduler_status = metadata_scheduler_status.model_copy(
         update={
             "due_channel_count": due_channel_count,
             "next_due_at": next_due_at,
+            "due_channels": due_channels,
         }
     )
 
@@ -260,19 +262,47 @@ async def request_runtime_restart(payload: RuntimeRestartRequest) -> RuntimeRest
     )
 
 
-async def _metadata_scheduler_due_summary(db: AsyncSession) -> tuple[int, datetime | None]:
-    """Return due-channel count and the next channel-level due time."""
+async def _metadata_scheduler_due_summary(
+    db: AsyncSession,
+) -> tuple[int, datetime | None, list[MetadataSyncDueChannel]]:
+    """Return due-channel count, next channel-level due time, and visible due rows."""
     now = datetime.now(UTC)
     rows = (await db.execute(select(Channel).where(Channel.status == "active"))).scalars().all()
     due_count = 0
     next_due_at: datetime | None = None
+    due_channels: list[MetadataSyncDueChannel] = []
     for channel in rows:
         due_at = _channel_next_sync_due_at(channel, now)
-        if due_at <= now:
+        is_due = due_at <= now
+        if is_due:
             due_count += 1
+            due_channels.append(
+                MetadataSyncDueChannel(
+                    id=channel.id,
+                    title=channel.title,
+                    handle=channel.handle,
+                    sync_interval_minutes=channel.sync_interval_minutes,
+                    last_synced_at=channel.last_synced_at,
+                    next_due_at=due_at,
+                    is_due=is_due,
+                )
+            )
+        else:
+            due_channels.append(
+                MetadataSyncDueChannel(
+                    id=channel.id,
+                    title=channel.title,
+                    handle=channel.handle,
+                    sync_interval_minutes=channel.sync_interval_minutes,
+                    last_synced_at=channel.last_synced_at,
+                    next_due_at=due_at,
+                    is_due=is_due,
+                )
+            )
         if next_due_at is None or due_at < next_due_at:
             next_due_at = due_at
-    return due_count, next_due_at
+    due_channels.sort(key=lambda channel: channel.next_due_at)
+    return due_count, next_due_at, due_channels[:5]
 
 
 def _channel_next_sync_due_at(channel: Channel, now: datetime) -> datetime:

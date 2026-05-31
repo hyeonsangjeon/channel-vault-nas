@@ -488,6 +488,7 @@
   "runtime.metadataScheduler.dueLabel": "Metadata due 채널",
   "runtime.metadataScheduler.due": "due 채널 {count}개",
   "runtime.metadataScheduler.nextDue": "다음 due",
+  "runtime.metadataScheduler.dueChannels": "Due 채널 목록",
   "runtime.metadataScheduler.runNow": "지금 metadata tick",
   "runtime.metadataScheduler.runRunning": "tick 실행 중",
   "runtime.metadataScheduler.runDone": "metadata tick {status} · sync {synced}개 · 후보 {candidates}개",

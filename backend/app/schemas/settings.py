@@ -30,6 +30,18 @@ class SchedulerRuntimeStatus(BaseModel):
     next_tick_at: datetime | None
 
 
+class MetadataSyncDueChannel(BaseModel):
+    """One channel due for metadata sync."""
+
+    id: int
+    title: str
+    handle: str | None
+    sync_interval_minutes: int
+    last_synced_at: datetime | None
+    next_due_at: datetime
+    is_due: bool
+
+
 class MetadataSyncSchedulerStatus(BaseModel):
     """In-process metadata scheduler status for operator review."""
 
@@ -40,6 +52,7 @@ class MetadataSyncSchedulerStatus(BaseModel):
     limit: int
     due_channel_count: int = 0
     next_due_at: datetime | None = None
+    due_channels: list[MetadataSyncDueChannel] = Field(default_factory=list)
     last_started_at: datetime | None
     last_completed_at: datetime | None
     last_error: str | None

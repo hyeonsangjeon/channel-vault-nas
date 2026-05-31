@@ -488,6 +488,7 @@
   "runtime.metadataScheduler.dueLabel": "Metadata due channels",
   "runtime.metadataScheduler.due": "{count} due channels",
   "runtime.metadataScheduler.nextDue": "next due",
+  "runtime.metadataScheduler.dueChannels": "Due channel list",
   "runtime.metadataScheduler.runNow": "今すぐ metadata tick",
   "runtime.metadataScheduler.runRunning": "tick 実行中",
   "runtime.metadataScheduler.runDone": "metadata tick {status} · sync {synced} · 候補 {candidates}",
