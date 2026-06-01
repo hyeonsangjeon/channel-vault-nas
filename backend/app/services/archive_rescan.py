@@ -20,6 +20,7 @@ NFO_NAME = "video.nfo"
 MEDIA_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".m4a", ".mp3", ".opus"}
 THUMBNAIL_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 SUBTITLE_EXTENSIONS = {".srt", ".vtt", ".ass", ".ssa", ".json3", ".srv1", ".srv2", ".srv3", ".ttml"}
+QUARANTINE_DIR_NAME = ".channel-vault-quarantine"
 
 
 def build_rescan_plan(download_dir: str | Path) -> RescanPlan:
@@ -31,6 +32,8 @@ def build_rescan_plan(download_dir: str | Path) -> RescanPlan:
 
     candidates: list[RescanCandidate] = []
     for info_json in sorted(root.rglob(INFO_JSON_NAME)):
+        if _is_quarantined_path(info_json, root):
+            continue
         candidate = _candidate_from_info_json(root=root, info_json=info_json, warnings=warnings)
         if candidate is not None:
             candidates.append(candidate)
@@ -53,7 +56,7 @@ async def apply_rescan_plan(db: AsyncSession, download_dir: str | Path) -> Resca
         candidates=plan.candidates,
         warnings=plan.warnings,
     )
-    await _refresh_channel_counts(db)
+    await refresh_channel_counts(db)
     await _publish_apply_result(result, targeted=False)
     return result
 
@@ -87,6 +90,10 @@ async def apply_rescan_target(
         result = _empty_apply_result(root=root, warnings=[f"target is outside download root: {target}"])
         await _publish_apply_result(result, targeted=True)
         return result
+    if _is_quarantined_path(target, root):
+        result = _empty_apply_result(root=root, warnings=[f"target is inside quarantine: {_relative(target, root)}"])
+        await _publish_apply_result(result, targeted=True)
+        return result
 
     info_json = target if target.name == INFO_JSON_NAME else target / INFO_JSON_NAME
     if not info_json.exists():
@@ -105,7 +112,7 @@ async def apply_rescan_target(
         candidates=candidates,
         warnings=warnings,
     )
-    await _refresh_channel_counts(db, channel_ids=channel_ids)
+    await refresh_channel_counts(db, channel_ids=channel_ids)
     await _publish_apply_result(result, targeted=True)
     return result
 
@@ -231,6 +238,13 @@ def _candidate_from_info_json(root: Path, info_json: Path, warnings: list[str]) 
 
 def _relative(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
+
+
+def _is_quarantined_path(path: Path, root: Path) -> bool:
+    try:
+        return QUARANTINE_DIR_NAME in path.relative_to(root).parts
+    except ValueError:
+        return False
 
 
 def _string_or_none(value: Any) -> str | None:
@@ -379,7 +393,7 @@ async def _primary_media_file(db: AsyncSession, video_id: int) -> MediaFile | No
     return await db.scalar(select(MediaFile).where(MediaFile.video_id == video_id).order_by(MediaFile.created_at.desc()).limit(1))
 
 
-async def _refresh_channel_counts(db: AsyncSession, *, channel_ids: set[int] | None = None) -> None:
+async def refresh_channel_counts(db: AsyncSession, *, channel_ids: set[int] | None = None) -> None:
     query = select(Channel)
     if channel_ids is not None:
         if not channel_ids:

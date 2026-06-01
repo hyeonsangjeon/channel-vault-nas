@@ -1,6 +1,7 @@
 """ORM models."""
 
 from app.models.archive import (
+    ArchiveEventLog,
     Channel,
     ChannelPolicy,
     DownloadJob,
@@ -14,6 +15,7 @@ from app.models.archive import (
 )
 
 __all__ = [
+    "ArchiveEventLog",
     "Channel",
     "ChannelPolicy",
     "DownloadJob",

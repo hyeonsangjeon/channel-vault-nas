@@ -4,10 +4,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select
 
+from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
+from app.main import app
 from app.models.archive import (
+    ArchiveEventLog,
     Channel,
     ChannelPolicy,
     DownloadJob,
@@ -19,8 +23,14 @@ from app.models.archive import (
 from app.services.archive_rescan import apply_rescan_plan, apply_rescan_target, build_rescan_plan
 from app.services.library_index import list_library_files
 from app.services.media_probe import MediaProbe
+from app.services.storage_drift import prune_missing_media_index, recover_unindexed_media
 from app.services.storage_guard import backup_sqlite_database, sqlite_path_from_url
-from app.services.storage_scanner import build_storage_scan
+from app.services.storage_orphans import (
+    list_quarantined_sidecars,
+    quarantine_orphan_sidecar,
+    restore_quarantined_sidecar,
+)
+from app.services.storage_scanner import build_storage_scan, storage_scan_export_rows
 
 
 def test_sqlite_path_from_url_resolves_relative_path(tmp_path: Path) -> None:
@@ -86,6 +96,26 @@ def test_archive_rescan_plan_discovers_video_info_sidecars(tmp_path: Path) -> No
     assert candidate.nfo is not None
 
 
+def test_archive_rescan_plan_ignores_quarantine_sidecars(tmp_path: Path) -> None:
+    archive_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Signal clip [sig01]"
+    _write_sidecar_video(archive_dir, video_id="sig01", title="Signal clip")
+    quarantine_dir = (
+        tmp_path
+        / ".channel-vault-quarantine"
+        / "20260601-191000-000000"
+        / "channels"
+        / "signal [UC_SIGNAL]"
+        / "2026"
+        / "quarantined-json"
+    )
+    _write_sidecar_video(quarantine_dir, video_id="quarantine01", title="Quarantined JSON")
+
+    plan = build_rescan_plan(tmp_path)
+
+    assert plan.candidate_count == 1
+    assert plan.candidates[0].video_id == "sig01"
+
+
 def test_storage_scan_summarizes_real_archive_and_orphan_sidecars(tmp_path: Path) -> None:
     video_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Signal clip [sig01]"
     video_dir.mkdir(parents=True)
@@ -112,6 +142,10 @@ def test_storage_scan_summarizes_real_archive_and_orphan_sidecars(tmp_path: Path
     assert scan.drift.unindexed_media_count == 0
     assert scan.drift.indexed_missing_count == 1
     assert scan.drift.indexed_missing[0].relative_path == missing_index_path
+    export_rows = storage_scan_export_rows(scan)
+    assert export_rows[0]["section"] == "volume"
+    assert any(row.get("section") == "orphan_sidecar" and row.get("kind") == "subtitle" for row in export_rows)
+    assert any(row.get("section") == "drift" and row.get("relative_path") == missing_index_path for row in export_rows)
 
     unindexed_scan = build_storage_scan(tmp_path, indexed_media_paths=set())
     assert unindexed_scan.drift.unindexed_media_count == 1
@@ -215,6 +249,321 @@ async def test_archive_rescan_apply_indexes_sidecars_into_db(
     assert library_files[0].info_json_exists is True
     assert library_files[0].thumbnail_exists is True
     assert {sidecar.kind for sidecar in library_files[0].sidecars} == {"info_json", "thumbnail", "subtitle"}
+
+
+@pytest.mark.asyncio
+async def test_storage_drift_actions_recover_and_prune_indexes(tmp_path: Path) -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        await session.commit()
+
+    video_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Signal clip [sig01]"
+    video_dir.mkdir(parents=True)
+    (video_dir / "video.info.json").write_text(
+        """
+        {
+          "id": "sig01",
+          "title": "Signal clip",
+          "channel": "Signal",
+          "channel_id": "UC_SIGNAL",
+          "upload_date": "20260601"
+        }
+        """,
+        encoding="utf-8",
+    )
+    (video_dir / "video.mp4").write_text("media", encoding="utf-8")
+    (video_dir / "thumbnail.jpg").write_text("thumb", encoding="utf-8")
+    (video_dir / "video.ko.srt").write_text("subtitle", encoding="utf-8")
+    (video_dir / "video.nfo").write_text("nfo", encoding="utf-8")
+
+    relative_media = "channels/signal [UC_SIGNAL]/2026/Signal clip [sig01]/video.mp4"
+    async with AsyncSessionLocal() as session:
+        dry_recovered = await recover_unindexed_media(
+            db=session,
+            download_dir=tmp_path,
+            relative_path=relative_media,
+            dry_run=True,
+        )
+        recovered = await recover_unindexed_media(
+            db=session,
+            download_dir=tmp_path,
+            relative_path=relative_media,
+        )
+        await session.commit()
+
+    assert dry_recovered.applied is False
+    assert dry_recovered.planned_media_files == 1
+    assert dry_recovered.planned_info_json == 1
+    assert dry_recovered.planned_subtitles == 1
+    assert dry_recovered.planned_thumbnails == 1
+    assert dry_recovered.planned_nfo == 1
+    assert recovered.applied is True
+    assert recovered.rescan is not None
+    assert recovered.rescan.media_files_indexed == 1
+
+    missing_relative = "channels/signal [UC_SIGNAL]/2026/missing/video.mp4"
+    async with AsyncSessionLocal() as session:
+        video = (await session.execute(select(Video).where(Video.external_id == "sig01"))).scalar_one()
+        session.add(
+            MediaFile(
+                video_id=video.id,
+                relative_path=missing_relative,
+                filename="video.mp4",
+                size_bytes=100,
+                container="mp4",
+            )
+        )
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        dry_run = await prune_missing_media_index(
+            db=session,
+            download_dir=tmp_path,
+            relative_path=missing_relative,
+            dry_run=True,
+        )
+        pruned = await prune_missing_media_index(
+            db=session,
+            download_dir=tmp_path,
+            relative_path=missing_relative,
+        )
+        await session.commit()
+        remaining = await session.scalar(select(func.count(MediaFile.id)).where(MediaFile.relative_path == missing_relative))
+
+    assert dry_run.applied is False
+    assert dry_run.deleted_media_files == 1
+    assert pruned.applied is True
+    assert pruned.deleted_media_files == 1
+    assert remaining == 0
+
+
+@pytest.mark.asyncio
+async def test_storage_drift_action_endpoints_recover_and_prune_indexes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadJob))
+        await session.execute(delete(DownloadWorkerRun))
+        await session.execute(delete(SyncJob))
+        await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(MediaFile))
+        await session.execute(delete(Video))
+        await session.execute(delete(Channel))
+        await session.execute(delete(ArchiveEventLog))
+        await session.commit()
+
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    video_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Endpoint clip [endpoint01]"
+    video_dir.mkdir(parents=True)
+    (video_dir / "video.info.json").write_text(
+        """
+        {
+          "id": "endpoint01",
+          "title": "Endpoint clip",
+          "channel": "Signal",
+          "channel_id": "UC_SIGNAL",
+          "upload_date": "20260601"
+        }
+        """,
+        encoding="utf-8",
+    )
+    (video_dir / "video.mp4").write_text("media", encoding="utf-8")
+    (video_dir / "thumbnail.jpg").write_text("thumb", encoding="utf-8")
+    (video_dir / "video.ko.srt").write_text("subtitle", encoding="utf-8")
+    relative_media = "channels/signal [UC_SIGNAL]/2026/Endpoint clip [endpoint01]/video.mp4"
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        recovered = await client.post(
+            "/api/storage/drift/recover-unindexed",
+            json={"relative_path": relative_media, "dry_run": True},
+        )
+        applied_recovery = await client.post(
+            "/api/storage/drift/recover-unindexed",
+            json={"relative_path": relative_media},
+        )
+        scan = await client.get("/api/storage/scan")
+
+    assert recovered.status_code == 200
+    recovered_data = recovered.json()
+    assert recovered_data["applied"] is False
+    assert recovered_data["planned_media_files"] == 1
+    assert recovered_data["planned_subtitles"] == 1
+    assert recovered_data["planned_thumbnails"] == 1
+    assert applied_recovery.status_code == 200
+    assert applied_recovery.json()["applied"] is True
+    assert applied_recovery.json()["rescan"]["media_files_indexed"] == 1
+    assert scan.status_code == 200
+    assert scan.json()["drift"]["unindexed_media_count"] == 0
+
+    missing_relative = "channels/signal [UC_SIGNAL]/2026/missing/video.mp4"
+    async with AsyncSessionLocal() as session:
+        video = (await session.execute(select(Video).where(Video.external_id == "endpoint01"))).scalar_one()
+        session.add(
+            MediaFile(
+                video_id=video.id,
+                relative_path=missing_relative,
+                filename="video.mp4",
+                size_bytes=100,
+                container="mp4",
+            )
+        )
+        await session.commit()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        dry_run = await client.post(
+            "/api/storage/drift/prune-missing-index",
+            json={"relative_path": missing_relative, "dry_run": True},
+        )
+        pruned = await client.post(
+            "/api/storage/drift/prune-missing-index",
+            json={"relative_path": missing_relative},
+        )
+
+    assert dry_run.status_code == 200
+    assert dry_run.json()["applied"] is False
+    assert dry_run.json()["deleted_media_files"] == 1
+    assert pruned.status_code == 200
+    assert pruned.json()["applied"] is True
+    assert pruned.json()["deleted_media_files"] == 1
+
+
+@pytest.mark.asyncio
+async def test_storage_orphan_sidecar_quarantine_preview_and_apply(tmp_path: Path) -> None:
+    orphan_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "subtitle-only"
+    orphan_dir.mkdir(parents=True)
+    orphan_path = orphan_dir / "video.ko.srt"
+    orphan_path.write_text("subtitle", encoding="utf-8")
+    relative_path = "channels/signal [UC_SIGNAL]/2026/subtitle-only/video.ko.srt"
+
+    before_scan = build_storage_scan(tmp_path)
+    assert before_scan.orphan_sidecars[0].relative_path == relative_path
+
+    dry_run = await quarantine_orphan_sidecar(
+        download_dir=tmp_path,
+        relative_path=relative_path,
+        dry_run=True,
+    )
+    assert dry_run.applied is False
+    assert dry_run.destination_relative_path is not None
+    assert dry_run.destination_relative_path.endswith(relative_path)
+    assert orphan_path.exists()
+
+    applied = await quarantine_orphan_sidecar(
+        download_dir=tmp_path,
+        relative_path=relative_path,
+        dry_run=False,
+    )
+    assert applied.applied is True
+    assert applied.destination_relative_path is not None
+    assert not orphan_path.exists()
+    assert (tmp_path / applied.destination_relative_path).exists()
+
+    after_scan = build_storage_scan(tmp_path)
+    assert after_scan.orphan_sidecars == []
+
+
+@pytest.mark.asyncio
+async def test_storage_orphan_quarantine_list_and_restore(tmp_path: Path) -> None:
+    orphan_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "subtitle-only"
+    orphan_dir.mkdir(parents=True)
+    orphan_path = orphan_dir / "video.ko.srt"
+    orphan_path.write_text("subtitle", encoding="utf-8")
+    relative_path = "channels/signal [UC_SIGNAL]/2026/subtitle-only/video.ko.srt"
+
+    quarantined = await quarantine_orphan_sidecar(
+        download_dir=tmp_path,
+        relative_path=relative_path,
+        dry_run=False,
+    )
+    assert quarantined.destination_relative_path is not None
+
+    listed = list_quarantined_sidecars(download_dir=tmp_path)
+    assert listed.count == 1
+    assert listed.items[0].relative_path == quarantined.destination_relative_path
+    assert listed.items[0].original_relative_path == relative_path
+    assert listed.items[0].restore_blocked_reason is None
+
+    dry_run = await restore_quarantined_sidecar(
+        download_dir=tmp_path,
+        quarantine_relative_path=quarantined.destination_relative_path,
+        dry_run=True,
+    )
+    assert dry_run.applied is False
+    assert dry_run.destination_relative_path == relative_path
+    assert not orphan_path.exists()
+
+    restored = await restore_quarantined_sidecar(
+        download_dir=tmp_path,
+        quarantine_relative_path=quarantined.destination_relative_path,
+        dry_run=False,
+    )
+    assert restored.applied is True
+    assert restored.destination_relative_path == relative_path
+    assert orphan_path.exists()
+    assert list_quarantined_sidecars(download_dir=tmp_path).count == 0
+    assert build_storage_scan(tmp_path).orphan_sidecars[0].relative_path == relative_path
+
+
+@pytest.mark.asyncio
+async def test_storage_orphan_quarantine_endpoint_respects_dry_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    orphan_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "json-only"
+    orphan_dir.mkdir(parents=True)
+    orphan_path = orphan_dir / "video.info.json"
+    orphan_path.write_text("{}", encoding="utf-8")
+    relative_path = "channels/signal [UC_SIGNAL]/2026/json-only/video.info.json"
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        dry_run = await client.post(
+            "/api/storage/orphans/quarantine",
+            json={"relative_path": relative_path, "dry_run": True},
+        )
+        list_before_apply = await client.get("/api/storage/orphans/quarantine")
+
+    assert dry_run.status_code == 200
+    assert dry_run.json()["applied"] is False
+    assert orphan_path.exists() is True
+    assert list_before_apply.status_code == 200
+    assert list_before_apply.json()["count"] == 0
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        applied = await client.post(
+            "/api/storage/orphans/quarantine",
+            json={"relative_path": relative_path, "dry_run": False},
+        )
+        list_after_apply = await client.get("/api/storage/orphans/quarantine")
+        restore_preview = await client.post(
+            "/api/storage/orphans/quarantine/restore",
+            json={"quarantine_relative_path": applied.json()["destination_relative_path"], "dry_run": True},
+        )
+        scan = await client.get("/api/storage/scan")
+
+    assert orphan_path.exists() is False
+    assert applied.status_code == 200
+    assert applied.json()["applied"] is True
+    assert list_after_apply.status_code == 200
+    assert list_after_apply.json()["count"] == 1
+    assert restore_preview.status_code == 200
+    assert restore_preview.json()["destination_relative_path"] == relative_path
+    assert scan.json()["orphan_sidecars"] == []
 
 
 @pytest.mark.asyncio

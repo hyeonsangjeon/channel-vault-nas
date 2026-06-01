@@ -10,9 +10,11 @@ from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.main import app
 from app.models.archive import (
+    ArchiveEventLog,
     Channel,
     ChannelPolicy,
     DownloadJob,
+    DownloadSchedulerTick,
     DownloadWorkerRun,
     LibraryView,
     MediaFile,
@@ -33,6 +35,7 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     await init_db()
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
+        await session.execute(delete(ArchiveEventLog))
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(MetadataSyncTick))
         await session.execute(delete(SyncJob))
@@ -191,6 +194,7 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         )
         dashboard = await client.get("/api/dashboard")
         events = await client.get("/api/events/recent")
+        job_events = await client.get(f"/api/events/recent?type_prefix=download.&job_id={first_job_id}&limit=10")
 
     assert created.status_code == 200
     assert synced.status_code == 200
@@ -325,13 +329,104 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
         "download.cancelled",
         "policy.updated",
     }
+    assert job_events.status_code == 200
+    assert {event["type"] for event in job_events.json()} >= {"download.queued", "download.cancelled"}
+    assert all(event["type"].startswith("download.") for event in job_events.json())
 
     async with AsyncSessionLocal() as session:
         download_job_count = len((await session.execute(select(DownloadJob))).scalars().all())
         sync_job_count = len((await session.execute(select(SyncJob))).scalars().all())
+        event_log_count = len((await session.execute(select(ArchiveEventLog))).scalars().all())
 
     assert download_job_count == 2
     assert sync_job_count == 1
+    assert event_log_count >= len(events.json())
+
+
+@pytest.mark.asyncio
+async def test_audit_log_retention_prunes_to_latest_rows() -> None:
+    run_migrations()
+    await init_db()
+    base_time = datetime(2026, 6, 1, 3, 43, tzinfo=UTC)
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(DownloadSchedulerTick))
+        await session.execute(delete(ArchiveEventLog))
+        await session.execute(delete(MetadataSyncTick))
+        await session.commit()
+        for index in range(3):
+            occurred_at = base_time + timedelta(minutes=index)
+            session.add(
+                ArchiveEventLog(
+                    type="download.completed",
+                    data={"job_id": index + 1},
+                    occurred_at=occurred_at,
+                    created_at=occurred_at,
+                )
+            )
+            session.add(
+                DownloadSchedulerTick(
+                    trigger="scheduler",
+                    status="completed",
+                    scheduler_enabled=True,
+                    worker_enabled=True,
+                    interval_seconds=300,
+                    limit=1,
+                    started_count=index,
+                    completed_count=index,
+                    started_at=occurred_at,
+                    completed_at=occurred_at,
+                    created_at=occurred_at,
+                )
+            )
+            session.add(
+                MetadataSyncTick(
+                    trigger="scheduler",
+                    status="completed",
+                    scheduler_enabled=True,
+                    interval_seconds=900,
+                    limit=2,
+                    due_channel_count=index,
+                    synced_count=index,
+                    started_at=occurred_at,
+                    completed_at=occurred_at,
+                    created_at=occurred_at,
+                )
+            )
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        event_prune = await client.delete("/api/events/recent?keep_latest=1")
+        download_tick_prune = await client.delete("/api/jobs/downloads/scheduler/ticks?keep_latest=1")
+        metadata_tick_prune = await client.delete("/api/jobs/sync/scheduler/ticks?keep_latest=1")
+        events = await client.get("/api/events/recent?limit=5")
+        download_ticks = await client.get("/api/jobs/downloads/scheduler/ticks?limit=5")
+        metadata_ticks = await client.get("/api/jobs/sync/scheduler/ticks?limit=5")
+        event_export = await client.get("/api/events/recent/export?format=ndjson&limit=5")
+        download_tick_export = await client.get("/api/jobs/downloads/scheduler/ticks/export?format=csv&limit=5")
+        metadata_tick_export = await client.get("/api/jobs/sync/scheduler/ticks/export?format=ndjson&limit=5")
+
+    assert event_prune.status_code == 200
+    assert event_prune.json()["deleted"] == 2
+    assert download_tick_prune.status_code == 200
+    assert download_tick_prune.json()["deleted"] == 2
+    assert metadata_tick_prune.status_code == 200
+    assert metadata_tick_prune.json()["deleted"] == 2
+    assert len(events.json()) == 1
+    assert events.json()[0]["data"]["job_id"] == 3
+    assert len(download_ticks.json()) == 1
+    assert download_ticks.json()[0]["started_count"] == 2
+    assert len(metadata_ticks.json()) == 1
+    assert metadata_ticks.json()[0]["synced_count"] == 2
+    assert event_export.status_code == 200
+    assert event_export.headers["content-disposition"] == 'attachment; filename="archive-event-log.ndjson"'
+    assert "download.completed" in event_export.text
+    assert download_tick_export.status_code == 200
+    assert download_tick_export.headers["content-disposition"] == 'attachment; filename="download-scheduler-ticks.csv"'
+    assert "started_count" in download_tick_export.text
+    assert metadata_tick_export.status_code == 200
+    assert metadata_tick_export.headers["content-disposition"] == 'attachment; filename="metadata-sync-ticks.ndjson"'
+    assert "synced_count" in metadata_tick_export.text
 
 
 @pytest.mark.asyncio
@@ -340,6 +435,7 @@ async def test_queue_preflight_keeps_best_quality_in_review() -> None:
     await init_db()
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
+        await session.execute(delete(ArchiveEventLog))
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(MetadataSyncTick))
         await session.execute(delete(SyncJob))
@@ -412,6 +508,7 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
     await init_db()
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
+        await session.execute(delete(ArchiveEventLog))
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(MetadataSyncTick))
         await session.execute(delete(SyncJob))

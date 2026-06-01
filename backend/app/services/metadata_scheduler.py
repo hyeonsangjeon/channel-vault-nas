@@ -5,14 +5,18 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.archive import Channel, ChannelPolicy, MetadataSyncTick, SyncJob
 from app.schemas.jobs import ChannelSyncRequest
-from app.schemas.settings import MetadataSyncSchedulerStatus, MetadataSyncTickRead
+from app.schemas.settings import (
+    MetadataSyncSchedulerStatus,
+    MetadataSyncTickRead,
+    SchedulerTickPruneResult,
+)
 from app.services.channel_sync import run_channel_sync
 from app.services.download_queue import create_channel_download_candidates
 from app.services.event_bus import event_bus
@@ -268,6 +272,22 @@ async def list_metadata_sync_ticks(
             if tick.duration_seconds is not None and tick.duration_seconds >= min_duration_seconds
         ]
     return ticks[:effective_limit]
+
+
+async def prune_metadata_sync_ticks(*, db: AsyncSession, keep_latest: int = 200) -> SchedulerTickPruneResult:
+    """Trim metadata scheduler tick telemetry while keeping the newest rows."""
+    bounded_keep = max(1, min(keep_latest, 50_000))
+    keep_ids = select(MetadataSyncTick.id).order_by(
+        MetadataSyncTick.created_at.desc(),
+        MetadataSyncTick.id.desc(),
+    ).limit(bounded_keep)
+    result = await db.execute(delete(MetadataSyncTick).where(MetadataSyncTick.id.not_in(keep_ids)))
+    await db.commit()
+    return SchedulerTickPruneResult(
+        kind="metadata_sync_scheduler_ticks",
+        deleted=result.rowcount or 0,
+        keep_latest=bounded_keep,
+    )
 
 
 def get_metadata_sync_scheduler_status() -> MetadataSyncSchedulerStatus:

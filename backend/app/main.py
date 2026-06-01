@@ -22,6 +22,7 @@ from app.routers import (
 )
 from app.routers import settings as settings_router
 from app.services.download_scheduler import download_worker_scheduler
+from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import metadata_sync_scheduler
 from app.services.storage_guard import backup_sqlite_database
 
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         await metadata_sync_scheduler.stop()
         await download_worker_scheduler.stop()
+        await event_bus.flush_persistence(timeout=2.0)
 
 
 app = FastAPI(

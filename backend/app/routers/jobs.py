@@ -1,8 +1,8 @@
 """Job queue endpoints."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -18,7 +18,8 @@ from app.schemas.jobs import (
     QueuePreflightPlan,
     SyncJobRead,
 )
-from app.schemas.settings import MetadataSyncTickRead, SchedulerTickRead
+from app.schemas.settings import MetadataSyncTickRead, SchedulerTickPruneResult, SchedulerTickRead
+from app.services.audit_export import audit_export_response
 from app.services.channel_sync import list_sync_jobs
 from app.services.download_queue import (
     DownloadJobNotFoundError,
@@ -36,9 +37,10 @@ from app.services.download_worker import (
 )
 from app.services.metadata_scheduler import (
     list_metadata_sync_ticks,
+    prune_metadata_sync_ticks,
     run_metadata_sync_scheduler_tick,
 )
-from app.services.runtime_settings import list_scheduler_ticks
+from app.services.runtime_settings import list_scheduler_ticks, prune_scheduler_ticks
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -130,6 +132,41 @@ async def get_download_scheduler_ticks(
     )
 
 
+@router.get("/downloads/scheduler/ticks/export", response_class=Response)
+async def export_download_scheduler_ticks(
+    db: DbSession,
+    export_format: Literal["ndjson", "csv"] = Query(default="ndjson", alias="format"),
+    status: str | None = None,
+    min_duration_seconds: int | None = None,
+    interval_seconds: int | None = None,
+    worker_limit: int | None = None,
+    limit: int = Query(default=500, ge=1, le=2_000),
+) -> Response:
+    """Download persisted download scheduler tick telemetry as NDJSON or CSV."""
+    ticks = await list_scheduler_ticks(
+        db=db,
+        status=status,
+        min_duration_seconds=min_duration_seconds,
+        interval_seconds=interval_seconds,
+        worker_limit=worker_limit,
+        limit=limit,
+    )
+    return audit_export_response(
+        rows=[tick.model_dump(mode="json") for tick in ticks],
+        filename_prefix="download-scheduler-ticks",
+        export_format=export_format,
+    )
+
+
+@router.delete("/downloads/scheduler/ticks", response_model=SchedulerTickPruneResult)
+async def prune_download_scheduler_ticks(
+    db: DbSession,
+    keep_latest: int = Query(default=200, ge=1, le=50_000),
+) -> SchedulerTickPruneResult:
+    """Trim persisted download scheduler tick telemetry while keeping newest rows."""
+    return await prune_scheduler_ticks(db=db, keep_latest=keep_latest)
+
+
 @router.get("/sync/scheduler/ticks", response_model=list[MetadataSyncTickRead])
 async def get_metadata_sync_scheduler_ticks(
     db: DbSession,
@@ -148,6 +185,41 @@ async def get_metadata_sync_scheduler_ticks(
         scheduler_limit=scheduler_limit,
         limit=limit,
     )
+
+
+@router.get("/sync/scheduler/ticks/export", response_class=Response)
+async def export_metadata_sync_scheduler_ticks(
+    db: DbSession,
+    export_format: Literal["ndjson", "csv"] = Query(default="ndjson", alias="format"),
+    status: str | None = None,
+    min_duration_seconds: int | None = None,
+    interval_seconds: int | None = None,
+    scheduler_limit: int | None = None,
+    limit: int = Query(default=500, ge=1, le=2_000),
+) -> Response:
+    """Download persisted metadata scheduler tick telemetry as NDJSON or CSV."""
+    ticks = await list_metadata_sync_ticks(
+        db=db,
+        status=status,
+        min_duration_seconds=min_duration_seconds,
+        interval_seconds=interval_seconds,
+        scheduler_limit=scheduler_limit,
+        limit=limit,
+    )
+    return audit_export_response(
+        rows=[tick.model_dump(mode="json") for tick in ticks],
+        filename_prefix="metadata-sync-ticks",
+        export_format=export_format,
+    )
+
+
+@router.delete("/sync/scheduler/ticks", response_model=SchedulerTickPruneResult)
+async def prune_metadata_scheduler_ticks(
+    db: DbSession,
+    keep_latest: int = Query(default=200, ge=1, le=50_000),
+) -> SchedulerTickPruneResult:
+    """Trim persisted metadata scheduler tick telemetry while keeping newest rows."""
+    return await prune_metadata_sync_ticks(db=db, keep_latest=keep_latest)
 
 
 @router.post("/sync/scheduler/run-once", response_model=MetadataSyncTickRead)

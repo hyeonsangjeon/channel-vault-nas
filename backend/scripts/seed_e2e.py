@@ -100,6 +100,17 @@ async def seed() -> None:
     orphan_dir = archive_root / "channels/@signalvaultlab [UC_CVN_E2E]/2026/orphan-sidecars"
     orphan_dir.mkdir(parents=True, exist_ok=True)
     (orphan_dir / "video.ko.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nOrphan subtitle\n", encoding="utf-8")
+    quarantine_dir = (
+        archive_root
+        / ".channel-vault-quarantine"
+        / "20260601-191000-000000"
+        / "channels/@signalvaultlab [UC_CVN_E2E]/2026/restorable-sidecar"
+    )
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+    (quarantine_dir / "video.en.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nRestorable subtitle\n",
+        encoding="utf-8",
+    )
 
     async with Session() as session:
         channel = Channel(
