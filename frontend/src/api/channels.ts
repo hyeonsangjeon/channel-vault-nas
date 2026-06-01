@@ -317,6 +317,19 @@ export type ArchiveEvent = {
   occurred_at: string;
 };
 
+export type ArchiveEventFilters = {
+  type_prefix?: string;
+  channel_id?: number;
+  job_id?: number;
+  video_id?: number;
+};
+
+export type LogPruneResult = {
+  kind: string;
+  deleted: number;
+  keep_latest: number;
+};
+
 export type DashboardSnapshot = {
   coverage: {
     source: number;
@@ -690,6 +703,44 @@ export type StorageOrphanSidecar = {
   reason: string;
 };
 
+export type StorageOrphanQuarantineResult = {
+  action: string;
+  relative_path: string;
+  applied: boolean;
+  dry_run: boolean;
+  destination_relative_path: string | null;
+  size_bytes: number;
+  warnings: string[];
+};
+
+export type StorageQuarantineItem = {
+  relative_path: string;
+  original_relative_path: string;
+  kind: string;
+  size_bytes: number;
+  label: string;
+  quarantined_at: string | null;
+  restore_blocked_reason: string | null;
+};
+
+export type StorageQuarantineList = {
+  count: number;
+  total_bytes: number;
+  total_label: string;
+  items: StorageQuarantineItem[];
+  warnings: string[];
+};
+
+export type StorageQuarantineRestoreResult = {
+  action: string;
+  quarantine_relative_path: string;
+  destination_relative_path: string | null;
+  applied: boolean;
+  dry_run: boolean;
+  size_bytes: number;
+  warnings: string[];
+};
+
 export type StorageFolderNode = {
   relative_path: string;
   name: string;
@@ -711,6 +762,21 @@ export type StorageDrift = {
   indexed_missing_count: number;
   unindexed_media: StorageDriftItem[];
   indexed_missing: StorageDriftItem[];
+};
+
+export type StorageDriftActionResult = {
+  action: string;
+  relative_path: string;
+  applied: boolean;
+  dry_run: boolean;
+  deleted_media_files: number;
+  planned_media_files: number;
+  planned_info_json: number;
+  planned_subtitles: number;
+  planned_thumbnails: number;
+  planned_nfo: number;
+  rescan: RescanApplyResult | null;
+  warnings: string[];
 };
 
 export type StorageScan = {
@@ -862,8 +928,18 @@ export async function stopDownloadJob(jobId: number): Promise<{ job: DownloadJob
   return postJson(`/api/jobs/downloads/${jobId}/stop`, {});
 }
 
-export async function getRecentEvents(): Promise<ArchiveEvent[]> {
-  return getJson("/api/events/recent");
+export async function getRecentEvents(limit = 50, filters: ArchiveEventFilters = {}): Promise<ArchiveEvent[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (filters.type_prefix) params.set("type_prefix", filters.type_prefix);
+  if (typeof filters.channel_id === "number") params.set("channel_id", String(filters.channel_id));
+  if (typeof filters.job_id === "number") params.set("job_id", String(filters.job_id));
+  if (typeof filters.video_id === "number") params.set("video_id", String(filters.video_id));
+  return getJson(`/api/events/recent?${params}`);
+}
+
+export async function pruneRecentEvents(keepLatest = 500): Promise<LogPruneResult> {
+  return deleteJson(`/api/events/recent?keep_latest=${keepLatest}`);
 }
 
 export async function getDashboard(): Promise<DashboardSnapshot> {
@@ -926,6 +1002,10 @@ export async function getSchedulerTicks(limit = 24, filters: SchedulerTickFilter
   return getJson(`/api/jobs/downloads/scheduler/ticks?${params}`);
 }
 
+export async function pruneSchedulerTicks(keepLatest = 200): Promise<LogPruneResult> {
+  return deleteJson(`/api/jobs/downloads/scheduler/ticks?keep_latest=${keepLatest}`);
+}
+
 export async function getMetadataSyncTicks(
   limit = 24,
   filters: MetadataSyncTickFilters = {},
@@ -945,12 +1025,45 @@ export async function getMetadataSyncTicks(
   return getJson(`/api/jobs/sync/scheduler/ticks?${params}`);
 }
 
+export async function pruneMetadataSyncTicks(keepLatest = 200): Promise<LogPruneResult> {
+  return deleteJson(`/api/jobs/sync/scheduler/ticks?keep_latest=${keepLatest}`);
+}
+
 export async function runMetadataSyncSchedulerOnce(): Promise<MetadataSyncTick> {
   return postJson("/api/jobs/sync/scheduler/run-once", {});
 }
 
 export async function getStorageScan(): Promise<StorageScan> {
   return getJson("/api/storage/scan");
+}
+
+export async function recoverUnindexedStorageDrift(relativePath: string, dryRun = false): Promise<StorageDriftActionResult> {
+  return postJson("/api/storage/drift/recover-unindexed", { relative_path: relativePath, dry_run: dryRun });
+}
+
+export async function pruneMissingStorageIndex(relativePath: string, dryRun = false): Promise<StorageDriftActionResult> {
+  return postJson("/api/storage/drift/prune-missing-index", { relative_path: relativePath, dry_run: dryRun });
+}
+
+export async function quarantineStorageOrphanSidecar(
+  relativePath: string,
+  dryRun = true,
+): Promise<StorageOrphanQuarantineResult> {
+  return postJson("/api/storage/orphans/quarantine", { relative_path: relativePath, dry_run: dryRun });
+}
+
+export async function getStorageOrphanQuarantine(limit = 100): Promise<StorageQuarantineList> {
+  return getJson(`/api/storage/orphans/quarantine?limit=${limit}`);
+}
+
+export async function restoreStorageOrphanSidecar(
+  quarantineRelativePath: string,
+  dryRun = true,
+): Promise<StorageQuarantineRestoreResult> {
+  return postJson("/api/storage/orphans/quarantine/restore", {
+    quarantine_relative_path: quarantineRelativePath,
+    dry_run: dryRun,
+  });
 }
 
 export async function applyLibraryRescan(): Promise<RescanApplyResult> {
@@ -979,6 +1092,11 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
 
+  return readJsonResponse<T>(response);
+}
+
+async function deleteJson<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE" });
   return readJsonResponse<T>(response);
 }
 

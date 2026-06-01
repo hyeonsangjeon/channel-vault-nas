@@ -7,6 +7,8 @@ import {
   Bookmark,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   CirclePause,
   ClipboardList,
   Clock3,
@@ -34,6 +36,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Terminal,
   TimerReset,
   Trash2,
   Waves,
@@ -70,11 +73,19 @@ import {
   getRecentEvents,
   getRuntimeSettings,
   getSchedulerTicks,
+  getStorageOrphanQuarantine,
   getStorageScan,
   getSyncJobs,
   probeChannel,
+  pruneMissingStorageIndex,
+  pruneMetadataSyncTicks,
+  pruneRecentEvents,
+  pruneSchedulerTicks,
+  quarantineStorageOrphanSidecar,
   registerChannel,
   requestRuntimeRestart,
+  recoverUnindexedStorageDrift,
+  restoreStorageOrphanSidecar,
   retryDownloadJob,
   runDownloadWorkerOnce,
   runMetadataSyncSchedulerOnce,
@@ -86,6 +97,7 @@ import {
   updateRuntimeSettings,
   WS_EVENTS_URL,
   type ArchiveEvent,
+  type ArchiveEventFilters,
   type ChannelPolicy,
   type ChannelDetail,
   type ChannelCadence,
@@ -112,6 +124,13 @@ import {
   type MetadataSyncTick,
   type SchedulerTick,
   type SchedulerTickFilters,
+  type StorageDriftActionResult,
+  type StorageDriftItem,
+  type StorageOrphanQuarantineResult,
+  type StorageOrphanSidecar,
+  type StorageQuarantineItem,
+  type StorageQuarantineList,
+  type StorageQuarantineRestoreResult,
   type StorageScan,
   type SyncJob,
 } from "./api/channels";
@@ -137,7 +156,11 @@ import {
 } from "./data/observatory";
 import { languages, useI18n, type Language, type TranslationKey } from "./i18n";
 
-const navItems: { key: TranslationKey; id: string }[] = [
+const qualityOptions = ["720p", "1080p", "best"];
+type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
+type NavId = "dashboard" | "channels" | "library" | "queue" | "insights" | "settings";
+
+const navItems: { key: TranslationKey; id: NavId }[] = [
   { key: "nav.dashboard", id: "dashboard" },
   { key: "nav.channels", id: "channels" },
   { key: "nav.library", id: "library" },
@@ -146,12 +169,14 @@ const navItems: { key: TranslationKey; id: string }[] = [
   { key: "nav.settings", id: "settings" },
 ];
 
-const qualityOptions = ["720p", "1080p", "best"];
-type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
 type ChannelDetailTab = "overview" | "downloads" | "library" | "logs" | "policy";
 type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
+type ArchiveEventFilter = "all" | "download" | "sync" | "library" | "storage" | "policy" | "failure";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
+type AuditExportFormat = "ndjson" | "csv";
+type RetentionStatus = "idle" | "pruning" | "pruned" | "error";
+type StorageDriftActionStatus = "idle" | "running" | "done" | "error";
 type QueueStatusFilter = "launchable" | "all" | "candidate" | "queued" | "running" | "failed" | "cancelled";
 type QueuePreflightFilter = "all" | "ready" | "review" | "unchecked";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
@@ -189,6 +214,15 @@ const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey 
   { id: "failed", labelKey: "worker.history.filter.failed" },
   { id: "dry_run", labelKey: "worker.history.filter.dryRun" },
   { id: "live", labelKey: "worker.history.filter.live" },
+];
+const archiveEventFilters: { id: ArchiveEventFilter; labelKey: TranslationKey }[] = [
+  { id: "all", labelKey: "events.filter.all" },
+  { id: "download", labelKey: "events.filter.download" },
+  { id: "sync", labelKey: "events.filter.sync" },
+  { id: "library", labelKey: "events.filter.library" },
+  { id: "storage", labelKey: "events.filter.storage" },
+  { id: "policy", labelKey: "events.filter.policy" },
+  { id: "failure", labelKey: "events.filter.failure" },
 ];
 const channelDetailTabs: { id: ChannelDetailTab; labelKey: TranslationKey; icon: typeof ShieldCheck }[] = [
   { id: "overview", labelKey: "detail.tabs.overview", icon: ShieldCheck },
@@ -300,6 +334,7 @@ type RuntimeDraft = {
 
 function App() {
   const { language, setLanguage, t } = useI18n();
+  const [activeNavId, setActiveNavId] = useState<NavId>("dashboard");
   const [sourceValue, setSourceValue] = useState("https://www.youtube.com/@wingnut987s4");
   const [maxQuality, setMaxQuality] = useState("1080p");
   const [audioOnly, setAudioOnly] = useState(false);
@@ -319,6 +354,15 @@ function App() {
   const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [events, setEvents] = useState<ArchiveEvent[]>([]);
+  const [eventLogOpen, setEventLogOpen] = useState(false);
+  const [eventLogRows, setEventLogRows] = useState<ArchiveEvent[]>([]);
+  const [eventLogQuery, setEventLogQuery] = useState<ArchiveEventFilters>({});
+  const [eventLogScopeLabel, setEventLogScopeLabel] = useState("");
+  const [eventLogFilter, setEventLogFilter] = useState<ArchiveEventFilter>("all");
+  const [eventLogStatus, setEventLogStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [eventLogCopyStatus, setEventLogCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [eventLogRetentionStatus, setEventLogRetentionStatus] = useState<RetentionStatus>("idle");
+  const [eventLogRetentionKeep, setEventLogRetentionKeep] = useState("500");
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettings | null>(null);
   const [storageScan, setStorageScan] = useState<StorageScan | null>(null);
@@ -329,6 +373,19 @@ function App() {
   const [queueSearch, setQueueSearch] = useState("");
   const [queueStatusFilter, setQueueStatusFilter] = useState<QueueStatusFilter>("launchable");
   const [queuePreflightFilter, setQueuePreflightFilter] = useState<QueuePreflightFilter>("all");
+  const [globalDownloadJobs, setGlobalDownloadJobs] = useState<DownloadJob[]>([]);
+  const [queueConsoleSearch, setQueueConsoleSearch] = useState("");
+  const [queueConsoleStatusFilter, setQueueConsoleStatusFilter] = useState<QueueStatusFilter>("all");
+  const [queueConsolePreflightFilter, setQueueConsolePreflightFilter] = useState<QueuePreflightFilter>("all");
+  const [queueConsoleChannelFilter, setQueueConsoleChannelFilter] = useState("all");
+  const [queueConsoleSelectedJobIds, setQueueConsoleSelectedJobIds] = useState<number[]>([]);
+  const [queueConsoleWorkerPlan, setQueueConsoleWorkerPlan] = useState<DownloadWorkerPlan | null>(null);
+  const [queueConsoleWorkerRuns, setQueueConsoleWorkerRuns] = useState<DownloadWorkerRunAudit[]>([]);
+  const [queueConsoleStatus, setQueueConsoleStatus] = useState<"idle" | "loading" | "bulk" | "worker" | "error">("idle");
+  const [queueConsoleConfirmOpen, setQueueConsoleConfirmOpen] = useState(false);
+  const [expandedQueueConsoleJobId, setExpandedQueueConsoleJobId] = useState<number | null>(null);
+  const [queueConsoleFileMap, setQueueConsoleFileMap] = useState<Record<number, LibraryFile[]>>({});
+  const [queueConsoleFileStatus, setQueueConsoleFileStatus] = useState<Record<number, "idle" | "loading" | "error">>({});
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
   const [selectionSeedKey, setSelectionSeedKey] = useState("");
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
@@ -344,6 +401,19 @@ function App() {
   const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryDetailStatus, setLibraryDetailStatus] = useState<"idle" | "loading" | "error">("idle");
   const [storageOrphanKindFilter, setStorageOrphanKindFilter] = useState("all");
+  const [storageReportCopyStatus, setStorageReportCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [storageDriftActionStatus, setStorageDriftActionStatus] = useState<Record<string, StorageDriftActionStatus>>({});
+  const [selectedStorageDriftItem, setSelectedStorageDriftItem] = useState<StorageDriftItem | null>(null);
+  const [storageDriftPreview, setStorageDriftPreview] = useState<StorageDriftActionResult | null>(null);
+  const [storageDriftPreviewStatus, setStorageDriftPreviewStatus] = useState<"idle" | "planning" | "running" | "done" | "error">("idle");
+  const [selectedStorageOrphan, setSelectedStorageOrphan] = useState<StorageOrphanSidecar | null>(null);
+  const [storageOrphanQuarantinePlan, setStorageOrphanQuarantinePlan] = useState<StorageOrphanQuarantineResult | null>(null);
+  const [storageOrphanQuarantineStatus, setStorageOrphanQuarantineStatus] = useState<"idle" | "planning" | "running" | "done" | "error">("idle");
+  const [storageQuarantineOpen, setStorageQuarantineOpen] = useState(false);
+  const [storageQuarantine, setStorageQuarantine] = useState<StorageQuarantineList | null>(null);
+  const [storageQuarantineStatus, setStorageQuarantineStatus] = useState<"idle" | "loading" | "planning" | "running" | "done" | "error">("idle");
+  const [selectedStorageQuarantineItem, setSelectedStorageQuarantineItem] = useState<StorageQuarantineItem | null>(null);
+  const [storageQuarantineRestorePlan, setStorageQuarantineRestorePlan] = useState<StorageQuarantineRestoreResult | null>(null);
   const [rescanResult, setRescanResult] = useState<RescanApplyResult | null>(null);
   const [workerPlan, setWorkerPlan] = useState<DownloadWorkerPlan | null>(null);
   const [workerRuns, setWorkerRuns] = useState<DownloadWorkerRunAudit[]>([]);
@@ -357,12 +427,14 @@ function App() {
   const [schedulerDurationFilter, setSchedulerDurationFilter] = useState<SchedulerDurationFilter>("all");
   const [schedulerIntervalFilter, setSchedulerIntervalFilter] = useState("");
   const [schedulerLimitFilter, setSchedulerLimitFilter] = useState("");
+  const [schedulerRetentionKeep, setSchedulerRetentionKeep] = useState("200");
   const [metadataTickDrawerOpen, setMetadataTickDrawerOpen] = useState(false);
   const [metadataTickRows, setMetadataTickRows] = useState<MetadataSyncTick[]>([]);
   const [metadataTickStatusFilter, setMetadataTickStatusFilter] = useState<SchedulerTickStatusFilter>("all");
   const [metadataDurationFilter, setMetadataDurationFilter] = useState<SchedulerDurationFilter>("all");
   const [metadataIntervalFilter, setMetadataIntervalFilter] = useState("");
   const [metadataLimitFilter, setMetadataLimitFilter] = useState("");
+  const [metadataRetentionKeep, setMetadataRetentionKeep] = useState("200");
   const [metadataRunStatus, setMetadataRunStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -370,6 +442,8 @@ function App() {
   const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [schedulerTickRetentionStatus, setSchedulerTickRetentionStatus] = useState<RetentionStatus>("idle");
+  const [metadataTickRetentionStatus, setMetadataTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [runtimeRestartStatus, setRuntimeRestartStatus] = useState<"idle" | "requesting" | "requested" | "manual" | "error">("idle");
   const [runtimeRestartMessage, setRuntimeRestartMessage] = useState("");
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
@@ -523,6 +597,12 @@ function App() {
     : storageScan?.orphan_sidecars.length
       ? t("storage.triage.mode.sidecars")
       : t("storage.triage.mode.clean");
+  const storageReportRows = useMemo(() => buildStorageReportRows(storageScan), [storageScan]);
+  const storageQuarantineRows = useMemo(() => buildStorageQuarantineRows(storageQuarantine), [storageQuarantine]);
+  const storageQuarantineAgeSummary = useMemo(
+    () => summarizeStorageQuarantineAge(storageQuarantine?.items ?? [], t),
+    [storageQuarantine, t],
+  );
   const activeTimeline = useMemo<TimelineVideo[]>(
     () =>
       channelVideos.length
@@ -729,6 +809,125 @@ function App() {
   const launchRunwayFreeLabel = storageVolume?.free_label ?? "0 MB";
   const allVisibleJobsSelected =
     visibleActionableJobs.length > 0 && visibleActionableJobs.every((job) => selectedJobIds.includes(job.id));
+  const queueConsoleChannelOptions = useMemo(() => {
+    const channels = new Map<number, string>();
+    globalDownloadJobs.forEach((job) => channels.set(job.channel_id, job.channel_title));
+    return Array.from(channels, ([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title));
+  }, [globalDownloadJobs]);
+  const queueConsoleActionableJobs = useMemo(
+    () => globalDownloadJobs.filter(isSelectableQueueJob),
+    [globalDownloadJobs],
+  );
+  const filteredQueueConsoleJobs = useMemo(() => {
+    const query = queueConsoleSearch.trim().toLowerCase();
+    const statusFiltered =
+      queueConsoleStatusFilter === "launchable"
+        ? queueConsoleActionableJobs
+        : queueConsoleStatusFilter === "all"
+          ? globalDownloadJobs
+          : globalDownloadJobs.filter((job) => job.status === queueConsoleStatusFilter);
+    const preflightFiltered =
+      queueConsolePreflightFilter === "all"
+        ? statusFiltered
+        : statusFiltered.filter((job) => job.preflight_status === queueConsolePreflightFilter);
+    const channelFiltered =
+      queueConsoleChannelFilter === "all"
+        ? preflightFiltered
+        : preflightFiltered.filter((job) => String(job.channel_id) === queueConsoleChannelFilter);
+    if (!query) return channelFiltered;
+    return channelFiltered.filter((job) =>
+      [job.video_title, job.video_external_id, job.channel_title, job.quality, job.status, job.archive_path ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [
+    globalDownloadJobs,
+    queueConsoleActionableJobs,
+    queueConsoleChannelFilter,
+    queueConsolePreflightFilter,
+    queueConsoleSearch,
+    queueConsoleStatusFilter,
+  ]);
+  const visibleQueueConsoleActionableJobs = useMemo(
+    () => filteredQueueConsoleJobs.filter(isSelectableQueueJob),
+    [filteredQueueConsoleJobs],
+  );
+  const queueConsoleSelectedJobs = useMemo(
+    () => queueConsoleActionableJobs.filter((job) => queueConsoleSelectedJobIds.includes(job.id)),
+    [queueConsoleActionableJobs, queueConsoleSelectedJobIds],
+  );
+  const allVisibleQueueConsoleJobsSelected =
+    visibleQueueConsoleActionableJobs.length > 0 &&
+    visibleQueueConsoleActionableJobs.every((job) => queueConsoleSelectedJobIds.includes(job.id));
+  const queueConsoleCounts = useMemo(
+    () => ({
+      total: globalDownloadJobs.length,
+      candidate: globalDownloadJobs.filter((job) => job.status === "candidate").length,
+      queued: globalDownloadJobs.filter((job) => job.status === "queued").length,
+      running: globalDownloadJobs.filter((job) => job.status === "running").length,
+      completed: globalDownloadJobs.filter((job) => job.status === "completed").length,
+      failed: globalDownloadJobs.filter((job) => job.status === "failed").length,
+      cancelled: globalDownloadJobs.filter((job) => job.status === "cancelled").length,
+      review: globalDownloadJobs.filter((job) => job.preflight_status === "review").length,
+    }),
+    [globalDownloadJobs],
+  );
+  const queueConsoleSelectedBytesLabel = useMemo(
+    () => formatBytes(queueConsoleSelectedJobs.reduce((sum, job) => sum + (job.estimated_bytes ?? 0), 0)),
+    [queueConsoleSelectedJobs],
+  );
+  const queueConsoleRunningJobs = useMemo(
+    () =>
+      queueConsoleWorkerPlan?.running_jobs.length
+        ? queueConsoleWorkerPlan.running_jobs.map((item) => item.job)
+        : globalDownloadJobs.filter((job) => job.status === "running"),
+    [globalDownloadJobs, queueConsoleWorkerPlan],
+  );
+  const queueConsoleClaimableIds = useMemo(
+    () => new Set((queueConsoleWorkerPlan?.jobs ?? []).map((item) => item.job.id)),
+    [queueConsoleWorkerPlan],
+  );
+  const queueConsoleWorkerPlanByJobId = useMemo(() => {
+    const planItems = [...(queueConsoleWorkerPlan?.jobs ?? []), ...(queueConsoleWorkerPlan?.running_jobs ?? [])];
+    return new Map(planItems.map((item) => [item.job.id, item]));
+  }, [queueConsoleWorkerPlan]);
+  const queueConsoleConfirmJobs = queueConsoleWorkerPlan?.jobs.slice(0, 5) ?? [];
+  const queueConsoleSkippedCount = Math.max(
+    0,
+    (queueConsoleWorkerPlan?.queued_count ?? 0) - (queueConsoleWorkerPlan?.claimable_count ?? 0),
+  );
+  const queueConsoleActiveTelemetry = useMemo(() => {
+    const fromRunningJobs = queueConsoleRunningJobs.map((job) => {
+      const existing = telemetryByJobId.get(job.id);
+      return (
+        existing ?? {
+          jobId: job.id,
+          videoId: job.video_id,
+          videoTitle: job.video_title,
+          channelId: job.channel_id,
+          channelTitle: job.channel_title,
+          archiveDir: job.archive_path,
+          quality: job.quality,
+          percent: job.progress,
+          speed: null,
+          eta: null,
+          status: "running" as DownloadTelemetryStatus,
+          error: null,
+          updatedAt: job.updated_at,
+        }
+      );
+    });
+    const fromEvents = Object.values(downloadTelemetry).filter((item) => item.status === "running");
+    return dedupeDownloadTelemetry([...fromRunningJobs, ...fromEvents]).slice(0, 5);
+  }, [downloadTelemetry, queueConsoleRunningJobs, telemetryByJobId]);
+  const queueConsoleLatestTelemetry = useMemo(
+    () =>
+      queueConsoleActiveTelemetry[0] ??
+      Object.values(downloadTelemetry).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0] ??
+      null,
+    [downloadTelemetry, queueConsoleActiveTelemetry],
+  );
   const visibleLibraryItems = useMemo(() => {
     const query = libraryQuery.trim().toLowerCase();
     const codec = libraryCodecFilter.trim().toLowerCase();
@@ -901,6 +1100,12 @@ function App() {
   );
   const metadataDrawerSummary = useMemo(() => summarizeMetadataSyncTicks(metadataTickRows), [metadataTickRows]);
   const latestMetadataSyncTick = runtimeSettings?.metadata_sync_ticks[0] ?? null;
+  const eventLogSourceRows = eventLogRows.length ? eventLogRows : events;
+  const filteredEventLogRows = useMemo(
+    () => eventLogSourceRows.filter((event) => eventMatchesFilter(event, eventLogFilter)),
+    [eventLogFilter, eventLogSourceRows],
+  );
+  const eventLogSummary = useMemo(() => summarizeArchiveEvents(eventLogSourceRows), [eventLogSourceRows]);
   const activeSavedLibraryView = useMemo(
     () => savedLibraryViews.find((view) => view.id === activeSavedLibraryViewId) ?? null,
     [activeSavedLibraryViewId, savedLibraryViews],
@@ -983,15 +1188,23 @@ function App() {
       try {
         const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot] = await Promise.all([
           getDashboard(),
-          getRecentEvents(),
+          getRecentEvents(100),
           getRuntimeSettings(),
           getStorageScan(),
+        ]);
+        const [globalJobs, globalWorkerSnapshot, globalWorkerRunSnapshot] = await Promise.all([
+          getDownloadJobs(undefined, { limit: 200 }),
+          getDownloadWorkerPlan(undefined, 5),
+          getDownloadWorkerRuns(undefined, 8),
         ]);
         if (cancelled) return;
         setDashboard(snapshot);
         setEvents(recentEvents);
         setRuntimeSettings(runtimeSnapshot);
         setStorageScan(storageSnapshot);
+        setGlobalDownloadJobs(globalJobs);
+        setQueueConsoleWorkerPlan(globalWorkerSnapshot);
+        setQueueConsoleWorkerRuns(globalWorkerRunSnapshot);
       } catch {
         if (cancelled) return;
         setDashboard(null);
@@ -1003,10 +1216,13 @@ function App() {
     socket.onmessage = (message) => {
       try {
         const event = JSON.parse(message.data) as ArchiveEvent;
-        setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 8));
+        setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 100));
         applyDownloadTelemetryEvent(event);
         getDashboard().then(setDashboard).catch(() => undefined);
         getStorageScan().then(setStorageScan).catch(() => undefined);
+        if (event.type.startsWith("download.") || event.type === "library.rescan.applied") {
+          refreshQueueConsoleState().catch(() => undefined);
+        }
         const channelId = registeredChannelIdRef.current;
         if (channelId) {
           refreshChannelAfterEvent(channelId, event.type).catch(() => undefined);
@@ -1422,13 +1638,152 @@ function App() {
     }
   }
 
+  function handleToggleQueueConsoleJobSelection(jobId: number) {
+    if (!queueConsoleActionableJobs.some((job) => job.id === jobId)) return;
+    setQueueConsoleSelectedJobIds((current) =>
+      current.includes(jobId) ? current.filter((id) => id !== jobId) : [...current, jobId],
+    );
+  }
+
+  function handleSelectVisibleQueueConsoleJobs() {
+    if (allVisibleQueueConsoleJobsSelected) {
+      const visibleIds = new Set(visibleQueueConsoleActionableJobs.map((job) => job.id));
+      setQueueConsoleSelectedJobIds((current) => current.filter((id) => !visibleIds.has(id)));
+      return;
+    }
+    setQueueConsoleSelectedJobIds((current) =>
+      Array.from(new Set([...current, ...visibleQueueConsoleActionableJobs.map((job) => job.id)])),
+    );
+  }
+
+  async function handleToggleQueueConsoleDetails(job: DownloadJob) {
+    if (expandedQueueConsoleJobId === job.id) {
+      setExpandedQueueConsoleJobId(null);
+      return;
+    }
+    setExpandedQueueConsoleJobId(job.id);
+    if (queueConsoleFileMap[job.video_id] || queueConsoleFileStatus[job.video_id] === "loading") return;
+    setQueueConsoleFileStatus((current) => ({ ...current, [job.video_id]: "loading" }));
+    try {
+      const files = await getLibraryFiles(job.video_id);
+      setQueueConsoleFileMap((current) => ({ ...current, [job.video_id]: files }));
+      setQueueConsoleFileStatus((current) => ({ ...current, [job.video_id]: "idle" }));
+    } catch {
+      setQueueConsoleFileStatus((current) => ({ ...current, [job.video_id]: "error" }));
+    }
+  }
+
+  async function handleQueueConsoleBulkAction(action: "queue" | "cancel" | "prioritize" | "retry", priority?: number) {
+    const jobIds = queueConsoleSelectedJobIds;
+    if (jobIds.length === 0) {
+      setWorkflowMessage(t("queue.selection.empty"));
+      return;
+    }
+    setQueueConsoleStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = await bulkUpdateDownloadJobs({ job_ids: jobIds, action, priority });
+      await refreshQueueConsoleState();
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      const messageKey =
+        action === "queue"
+          ? "queue.bulk.queued"
+          : action === "cancel"
+            ? "queue.bulk.cancelled"
+            : action === "retry"
+              ? "queue.bulk.retried"
+              : "queue.bulk.prioritized";
+      setWorkflowMessage(t(messageKey as TranslationKey).replace("{count}", String(result.updated)));
+      setQueueConsoleStatus("idle");
+    } catch (error) {
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleQueueConsoleJobAction(job: DownloadJob, action: "retry" | "cancel" | "stop") {
+    setQueueConsoleStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      if (action === "retry") await retryDownloadJob(job.id);
+      if (action === "cancel") await cancelDownloadJob(job.id);
+      if (action === "stop") await stopDownloadJob(job.id);
+      await refreshQueueConsoleState();
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      setQueueConsoleStatus("idle");
+      setWorkflowMessage(action === "retry" ? t("job.retried") : action === "stop" ? t("job.stopped") : t("job.cancelled"));
+    } catch (error) {
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleOpenQueueConsoleRunConfirm() {
+    setQueueConsoleStatus("loading");
+    setWorkflowMessage("");
+    try {
+      await refreshQueueConsoleState();
+      setQueueConsoleStatus("idle");
+      setQueueConsoleConfirmOpen(true);
+    } catch (error) {
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleQueueConsoleRunWorker() {
+    if (!queueConsoleWorkerPlan?.enabled || queueConsoleWorkerPlan.locked_reason) return;
+    setQueueConsoleConfirmOpen(false);
+    setQueueConsoleStatus("worker");
+    setWorkflowStatus("downloading");
+    setWorkflowMessage("");
+    try {
+      const result = await runDownloadWorkerOnce({ limit: 5, dry_run: false });
+      await refreshQueueConsoleState();
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      setWorkflowStatus(result.failed > 0 ? "error" : "idle");
+      setQueueConsoleStatus(result.failed > 0 ? "error" : "idle");
+      setWorkflowMessage(
+        t("worker.liveComplete")
+          .replace("{completed}", String(result.completed))
+          .replace("{failed}", String(result.failed))
+          .replace("{candidates}", "0"),
+      );
+    } catch (error) {
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleRefreshQueueConsole() {
+    setQueueConsoleStatus("loading");
+    try {
+      await refreshQueueConsoleState();
+      setQueueConsoleStatus("idle");
+    } catch (error) {
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
   async function handleApplyRescan() {
     setWorkflowStatus("bulk");
     setWorkflowMessage("");
     try {
       const result = await applyLibraryRescan();
       setRescanResult(result);
-      const [snapshot, recentEvents, storageSnapshot] = await Promise.all([getDashboard(), getRecentEvents(), getStorageScan()]);
+      const [snapshot, recentEvents, storageSnapshot] = await Promise.all([getDashboard(), getRecentEvents(100), getStorageScan()]);
       setDashboard(snapshot);
       setEvents(recentEvents);
       setStorageScan(storageSnapshot);
@@ -1442,6 +1797,79 @@ function App() {
           .replace("{files}", String(result.media_files_indexed)),
       );
     } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handlePreviewStorageDrift(item: StorageDriftItem) {
+    const key = storageDriftActionKey(item);
+    const isRecover = item.kind === "unindexed_media";
+    setSelectedStorageDriftItem(item);
+    setStorageDriftPreview(null);
+    setStorageDriftPreviewStatus("planning");
+    setStorageDriftActionStatus((current) => ({ ...current, [key]: "running" }));
+    setWorkflowMessage("");
+    try {
+      const preview = isRecover
+        ? await recoverUnindexedStorageDrift(item.relative_path, true)
+        : await pruneMissingStorageIndex(item.relative_path, true);
+      setStorageDriftPreview(preview);
+      setStorageDriftPreviewStatus(preview.warnings.length ? "error" : "idle");
+      setStorageDriftActionStatus((current) => ({ ...current, [key]: preview.warnings.length ? "error" : "idle" }));
+      if (preview.warnings.length) {
+        setWorkflowStatus("error");
+        setWorkflowMessage(preview.warnings.join(" · "));
+      }
+    } catch (error) {
+      setStorageDriftPreviewStatus("error");
+      setStorageDriftActionStatus((current) => ({ ...current, [key]: "error" }));
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleApplyStorageDriftPreview() {
+    if (!selectedStorageDriftItem) return;
+    const item = selectedStorageDriftItem;
+    const key = storageDriftActionKey(item);
+    const isRecover = item.kind === "unindexed_media";
+    setStorageDriftActionStatus((current) => ({ ...current, [key]: "running" }));
+    setStorageDriftPreviewStatus("running");
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = isRecover
+        ? await recoverUnindexedStorageDrift(item.relative_path)
+        : await pruneMissingStorageIndex(item.relative_path);
+      const [snapshot, recentEvents, storageSnapshot] = await Promise.all([getDashboard(), getRecentEvents(100), getStorageScan()]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      setStorageScan(storageSnapshot);
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      const count = isRecover ? (result.rescan?.media_files_indexed ?? 0) : result.deleted_media_files;
+      setStorageDriftPreview(result);
+      setStorageDriftPreviewStatus(result.applied ? "done" : "error");
+      setStorageDriftActionStatus((current) => ({ ...current, [key]: "done" }));
+      setWorkflowStatus(result.applied ? "idle" : "error");
+      setWorkflowMessage(
+        result.applied
+          ? t(isRecover ? "storage.drift.recoverDone" : "storage.drift.pruneDone").replace("{count}", String(count))
+          : result.warnings.join(" · ") || t("workflow.error"),
+      );
+      if (result.applied) {
+        window.setTimeout(() => {
+          setSelectedStorageDriftItem(null);
+          setStorageDriftPreview(null);
+          setStorageDriftPreviewStatus("idle");
+          setStorageDriftActionStatus((current) => ({ ...current, [key]: "idle" }));
+        }, 1200);
+      }
+    } catch (error) {
+      setStorageDriftPreviewStatus("error");
+      setStorageDriftActionStatus((current) => ({ ...current, [key]: "error" }));
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
     }
@@ -1596,6 +2024,126 @@ function App() {
     } catch {
       setStatus("error");
       window.setTimeout(() => setStatus("idle"), 2200);
+    }
+  }
+
+  function handleDownloadTickRows(kind: "scheduler" | "metadata", format: AuditExportFormat) {
+    const rows = kind === "scheduler" ? schedulerTickRows : metadataTickRows;
+    const filenamePrefix = kind === "scheduler" ? "download-scheduler-ticks" : "metadata-sync-ticks";
+    downloadAuditRows(filenamePrefix, rows as unknown as Record<string, unknown>[], format);
+  }
+
+  async function handlePruneTickRows(kind: "scheduler" | "metadata") {
+    const confirmKey: TranslationKey =
+      kind === "scheduler" ? "runtime.ticks.retentionConfirm" : "runtime.metadataTicks.retentionConfirm";
+    const keep = normalizeRetentionKeep(kind === "scheduler" ? schedulerRetentionKeep : metadataRetentionKeep, 200);
+    if (!window.confirm(t(confirmKey).replace("{keep}", String(keep)))) return;
+    const setStatus = kind === "scheduler" ? setSchedulerTickRetentionStatus : setMetadataTickRetentionStatus;
+    setStatus("pruning");
+    try {
+      const result = kind === "scheduler" ? await pruneSchedulerTicks(keep) : await pruneMetadataSyncTicks(keep);
+      if (kind === "scheduler") {
+        await refreshSchedulerTicks();
+      } else {
+        await refreshMetadataTicks();
+      }
+      setStatus("pruned");
+      setWorkflowStatus("idle");
+      setWorkflowMessage(
+        t("runtime.ticks.retentionDone")
+          .replace("{count}", String(result.deleted))
+          .replace("{keep}", String(result.keep_latest)),
+      );
+      window.setTimeout(() => setStatus("idle"), 2200);
+    } catch (error) {
+      setStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+      window.setTimeout(() => setStatus("idle"), 2600);
+    }
+  }
+
+  async function loadEventLog(query: ArchiveEventFilters, scopeLabel: string) {
+    setEventLogQuery(query);
+    setEventLogScopeLabel(scopeLabel);
+    setEventLogStatus("loading");
+    try {
+      const rows = await getRecentEvents(200, query);
+      setEventLogRows(rows);
+      if (!scopeLabel) setEvents(rows.slice(0, 100));
+      setEventLogStatus("idle");
+    } catch {
+      setEventLogStatus("error");
+    }
+  }
+
+  async function handleRefreshEventLog() {
+    await loadEventLog(eventLogQuery, eventLogScopeLabel);
+  }
+
+  async function handleOpenEventLog() {
+    setEventLogFilter("all");
+    setEventLogOpen(true);
+    await loadEventLog({}, "");
+  }
+
+  async function handleOpenQueueJobEventLog(job: DownloadJob) {
+    setEventLogFilter("download");
+    setEventLogOpen(true);
+    await loadEventLog(
+      { type_prefix: "download.", job_id: job.id },
+      `${t("events.scopeJob")} #${job.id} · ${job.video_title}`,
+    );
+  }
+
+  async function handleCopyEventLog() {
+    try {
+      await copyTextToClipboard(
+        JSON.stringify(
+          {
+            kind: "archive_event_log",
+            filter: eventLogFilter,
+            query: eventLogQuery,
+            scope: eventLogScopeLabel || null,
+            count: filteredEventLogRows.length,
+            events: filteredEventLogRows,
+          },
+          null,
+          2,
+        ),
+      );
+      setEventLogCopyStatus("copied");
+      window.setTimeout(() => setEventLogCopyStatus("idle"), 1800);
+    } catch {
+      setEventLogCopyStatus("error");
+      window.setTimeout(() => setEventLogCopyStatus("idle"), 2200);
+    }
+  }
+
+  function handleDownloadEventLog(format: AuditExportFormat) {
+    downloadAuditRows("archive-event-log", filteredEventLogRows as unknown as Record<string, unknown>[], format);
+  }
+
+  async function handlePruneEventLog() {
+    const keep = normalizeRetentionKeep(eventLogRetentionKeep, 500);
+    if (!window.confirm(t("events.retentionConfirm").replace("{keep}", String(keep)))) return;
+    setEventLogRetentionStatus("pruning");
+    try {
+      const result = await pruneRecentEvents(keep);
+      await loadEventLog(eventLogQuery, eventLogScopeLabel);
+      setEventLogRetentionStatus("pruned");
+      setWorkflowStatus("idle");
+      setWorkflowMessage(
+        t("events.retentionDone")
+          .replace("{count}", String(result.deleted))
+          .replace("{keep}", String(result.keep_latest)),
+      );
+      window.setTimeout(() => setEventLogRetentionStatus("idle"), 2200);
+    } catch (error) {
+      setEventLogRetentionStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+      window.setTimeout(() => setEventLogRetentionStatus("idle"), 2600);
     }
   }
 
@@ -1930,6 +2478,181 @@ function App() {
     setLibrarySidecarFilter(target === "partial_sidecars" ? "any" : "all");
   }
 
+  async function handleCopyStorageReport() {
+    if (!storageScan) return;
+    try {
+      await copyTextToClipboard(
+        JSON.stringify(
+          {
+            kind: "storage_scan_report",
+            scanned_at: storageScan.scanned_at,
+            root: storageScan.volume.root,
+            row_count: storageReportRows.length,
+            rows: storageReportRows,
+          },
+          null,
+          2,
+        ),
+      );
+      setStorageReportCopyStatus("copied");
+      window.setTimeout(() => setStorageReportCopyStatus("idle"), 1800);
+    } catch {
+      setStorageReportCopyStatus("error");
+      window.setTimeout(() => setStorageReportCopyStatus("idle"), 2200);
+    }
+  }
+
+  function handleDownloadStorageReport(format: AuditExportFormat) {
+    downloadAuditRows("storage-scan", storageReportRows, format);
+  }
+
+  function handleDownloadStorageQuarantine(format: AuditExportFormat) {
+    downloadAuditRows("storage-quarantine", storageQuarantineRows, format);
+  }
+
+  async function handlePreviewOrphanQuarantine(sidecar: StorageOrphanSidecar) {
+    setSelectedStorageOrphan(sidecar);
+    setStorageOrphanQuarantinePlan(null);
+    setStorageOrphanQuarantineStatus("planning");
+    setWorkflowMessage("");
+    try {
+      const plan = await quarantineStorageOrphanSidecar(sidecar.relative_path, true);
+      setStorageOrphanQuarantinePlan(plan);
+      setStorageOrphanQuarantineStatus(plan.warnings.length ? "error" : "idle");
+      if (plan.warnings.length) {
+        setWorkflowStatus("error");
+        setWorkflowMessage(plan.warnings.join(" · "));
+      }
+    } catch (error) {
+      setStorageOrphanQuarantineStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleApplyOrphanQuarantine() {
+    if (!selectedStorageOrphan) return;
+    setStorageOrphanQuarantineStatus("running");
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = await quarantineStorageOrphanSidecar(selectedStorageOrphan.relative_path, false);
+      const [snapshot, recentEvents, storageSnapshot] = await Promise.all([getDashboard(), getRecentEvents(100), getStorageScan()]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      setStorageScan(storageSnapshot);
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      setStorageOrphanQuarantinePlan(result);
+      setStorageOrphanQuarantineStatus(result.applied ? "done" : "error");
+      setWorkflowStatus(result.applied ? "idle" : "error");
+      setWorkflowMessage(
+        result.applied
+          ? t("storage.orphan.quarantineDone")
+              .replace("{path}", compactArchivePath(result.destination_relative_path ?? selectedStorageOrphan.relative_path))
+              .replace("{size}", selectedStorageOrphan.label)
+          : result.warnings.join(" · ") || t("workflow.error"),
+      );
+      if (result.applied) {
+        window.setTimeout(() => {
+          setSelectedStorageOrphan(null);
+          setStorageOrphanQuarantinePlan(null);
+          setStorageOrphanQuarantineStatus("idle");
+        }, 1200);
+      }
+    } catch (error) {
+      setStorageOrphanQuarantineStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function refreshStorageQuarantine() {
+    const quarantine = await getStorageOrphanQuarantine(100);
+    setStorageQuarantine(quarantine);
+    return quarantine;
+  }
+
+  async function handleOpenStorageQuarantine() {
+    setStorageQuarantineOpen(true);
+    setSelectedStorageQuarantineItem(null);
+    setStorageQuarantineRestorePlan(null);
+    setStorageQuarantineStatus("loading");
+    setWorkflowMessage("");
+    try {
+      await refreshStorageQuarantine();
+      setStorageQuarantineStatus("idle");
+    } catch (error) {
+      setStorageQuarantineStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handlePreviewStorageQuarantineRestore(item: StorageQuarantineItem) {
+    setSelectedStorageQuarantineItem(item);
+    setStorageQuarantineRestorePlan(null);
+    setStorageQuarantineStatus("planning");
+    setWorkflowMessage("");
+    try {
+      const plan = await restoreStorageOrphanSidecar(item.relative_path, true);
+      setStorageQuarantineRestorePlan(plan);
+      setStorageQuarantineStatus(plan.warnings.length ? "error" : "idle");
+      if (plan.warnings.length) {
+        setWorkflowStatus("error");
+        setWorkflowMessage(plan.warnings.join(" · "));
+      }
+    } catch (error) {
+      setStorageQuarantineStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleApplyStorageQuarantineRestore() {
+    if (!selectedStorageQuarantineItem) return;
+    setStorageQuarantineStatus("running");
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = await restoreStorageOrphanSidecar(selectedStorageQuarantineItem.relative_path, false);
+      const [snapshot, recentEvents, storageSnapshot] = await Promise.all([
+        getDashboard(),
+        getRecentEvents(100),
+        getStorageScan(),
+        refreshStorageQuarantine(),
+      ]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      setStorageScan(storageSnapshot);
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      setStorageQuarantineRestorePlan(result);
+      setStorageQuarantineStatus(result.applied ? "done" : "error");
+      setWorkflowStatus(result.applied ? "idle" : "error");
+      setWorkflowMessage(
+        result.applied
+          ? t("storage.quarantine.restoreDone")
+              .replace("{path}", compactArchivePath(result.destination_relative_path ?? selectedStorageQuarantineItem.original_relative_path))
+              .replace("{size}", selectedStorageQuarantineItem.label)
+          : result.warnings.join(" · ") || t("workflow.error"),
+      );
+      if (result.applied) {
+        window.setTimeout(() => {
+          setSelectedStorageQuarantineItem(null);
+          setStorageQuarantineRestorePlan(null);
+          setStorageQuarantineStatus("idle");
+        }, 1200);
+      }
+    } catch (error) {
+      setStorageQuarantineStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
   async function handleSaveLibraryView() {
     const name = savedLibraryViewName.trim();
     if (!name) return;
@@ -2019,6 +2742,12 @@ function App() {
     setSelectedJobIds((current) => current.filter((id) => activeIds.has(id)));
   }
 
+  function applyGlobalDownloadJobs(jobs: DownloadJob[]) {
+    setGlobalDownloadJobs(jobs);
+    const activeIds = new Set(jobs.filter(isSelectableQueueJob).map((job) => job.id));
+    setQueueConsoleSelectedJobIds((current) => current.filter((id) => activeIds.has(id)));
+  }
+
   function applyDownloadTelemetryEvent(event: ArchiveEvent) {
     const status = downloadTelemetryStatusFromEvent(event.type);
     if (!status) return;
@@ -2069,6 +2798,17 @@ function App() {
     ) {
       await loadChannelState(channelId);
     }
+  }
+
+  async function refreshQueueConsoleState() {
+    const [jobs, workerSnapshot, workerRunSnapshot] = await Promise.all([
+      getDownloadJobs(undefined, { limit: 200 }),
+      getDownloadWorkerPlan(undefined, 5),
+      getDownloadWorkerRuns(undefined, 8),
+    ]);
+    applyGlobalDownloadJobs(jobs);
+    setQueueConsoleWorkerPlan(workerSnapshot);
+    setQueueConsoleWorkerRuns(workerRunSnapshot);
   }
 
   async function loadChannelState(channelId: number) {
@@ -2130,7 +2870,12 @@ function App() {
 
         <nav className="nav-list">
           {navItems.map((item) => (
-            <button className={item.id === "dashboard" ? "nav-item active" : "nav-item"} key={item.id}>
+            <button
+              className={item.id === activeNavId ? "nav-item active" : "nav-item"}
+              key={item.id}
+              onClick={() => setActiveNavId(item.id)}
+              type="button"
+            >
               {t(item.key)}
             </button>
           ))}
@@ -2148,8 +2893,8 @@ function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{t("topbar.eyebrow")}</p>
-            <h1>{t("topbar.title")}</h1>
+            <p className="eyebrow">{activeNavId === "queue" ? t("queue.console.kicker") : t("topbar.eyebrow")}</p>
+            <h1>{activeNavId === "queue" ? t("queue.console.title") : t("topbar.title")}</h1>
           </div>
           <div className="topbar-actions">
             <button className="icon-button" title={t("actions.search")} aria-label={t("actions.search")}>
@@ -2203,8 +2948,379 @@ function App() {
             ))}
             {events.length === 0 ? <span className="event-empty">{t("events.empty")}</span> : null}
           </div>
+          <button className="event-log-button" onClick={() => void handleOpenEventLog()} type="button">
+            <History size={14} />
+            {t("events.openLog")}
+          </button>
         </section>
 
+        {activeNavId === "queue" ? (
+          <section className="panel queue-console-panel" aria-label={t("queue.console.title")}>
+            <div className="queue-console-hero">
+              <div>
+                <p className="panel-kicker">{t("queue.console.kicker")}</p>
+                <h2>{t("queue.console.title")}</h2>
+                <span>{t("queue.console.subtitle")}</span>
+              </div>
+              <div className="queue-console-actions">
+                <button className="command-button" disabled={queueConsoleStatus === "loading"} onClick={() => void handleRefreshQueueConsole()} type="button">
+                  <RotateCcw size={16} />
+                  {queueConsoleStatus === "loading" ? t("queue.console.refreshing") : t("queue.console.refresh")}
+                </button>
+                <button
+                  className="primary-action"
+                  disabled={
+                    queueConsoleStatus === "worker" ||
+                    queueConsoleStatus === "loading" ||
+                    !queueConsoleWorkerPlan?.enabled ||
+                    Boolean(queueConsoleWorkerPlan?.locked_reason) ||
+                    (queueConsoleWorkerPlan?.claimable_count ?? 0) === 0
+                  }
+                  onClick={() => void handleOpenQueueConsoleRunConfirm()}
+                  type="button"
+                >
+                  <Rocket size={16} />
+                  {queueConsoleStatus === "worker" ? t("worker.liveRunning") : t("queue.console.runFive")}
+                </button>
+              </div>
+            </div>
+
+            <div className="queue-console-stats">
+              <article>
+                <span>{t("launch.jobs")}</span>
+                <strong>{queueConsoleCounts.total}</strong>
+              </article>
+              <article>
+                <span>{t("queue.queued")}</span>
+                <strong>{queueConsoleCounts.queued}</strong>
+              </article>
+              <article>
+                <span>{t("queue.running")}</span>
+                <strong>{queueConsoleCounts.running}</strong>
+              </article>
+              <article>
+                <span>{t("job.status.completed")}</span>
+                <strong>{queueConsoleCounts.completed}</strong>
+              </article>
+              <article className={queueConsoleCounts.failed ? "warn" : ""}>
+                <span>{t("queue.failed")}</span>
+                <strong>{queueConsoleCounts.failed}</strong>
+              </article>
+              <article>
+                <span>{t("worker.claimable")}</span>
+                <strong>{queueConsoleWorkerPlan?.claimable_count ?? 0}</strong>
+              </article>
+            </div>
+
+            {queueConsoleLatestTelemetry ? (
+              <div className={`queue-console-live ${queueConsoleLatestTelemetry.status}`}>
+                <div>
+                  <span>{t("worker.liveProgress")}</span>
+                  <strong>{queueConsoleLatestTelemetry.videoTitle}</strong>
+                  <small>
+                    {downloadTelemetrySummary(queueConsoleLatestTelemetry)}
+                    {queueConsoleLatestTelemetry.archiveDir ? ` · ${queueConsoleLatestTelemetry.archiveDir}` : ""}
+                  </small>
+                </div>
+                <em>{downloadTelemetryStatusLabel(queueConsoleLatestTelemetry.status, t)}</em>
+                <div aria-label={t("job.progress")}>
+                  <span style={{ width: `${Math.max(0, Math.min(queueConsoleLatestTelemetry.percent, 100))}%` }} />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="queue-console-toolbar">
+              <label className="queue-search">
+                <Search size={15} />
+                <input
+                  aria-label={t("queue.console.search")}
+                  onChange={(event) => setQueueConsoleSearch(event.target.value)}
+                  placeholder={t("queue.console.search")}
+                  value={queueConsoleSearch}
+                />
+              </label>
+              <label className="queue-console-select">
+                <ListFilter size={14} />
+                <select
+                  aria-label={t("queue.console.channel")}
+                  onChange={(event) => setQueueConsoleChannelFilter(event.target.value)}
+                  value={queueConsoleChannelFilter}
+                >
+                  <option value="all">{t("queue.console.allChannels")}</option>
+                  {queueConsoleChannelOptions.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="queue-console-filters" aria-label={t("queue.console.filters")}>
+              {queueStatusFilters.map((filter) => (
+                <button
+                  className={queueConsoleStatusFilter === filter.id ? "active" : ""}
+                  key={filter.id}
+                  onClick={() => setQueueConsoleStatusFilter(filter.id)}
+                  type="button"
+                >
+                  {t(filter.labelKey)}
+                </button>
+              ))}
+            </div>
+            <div className="queue-console-filters compact" aria-label={t("launch.preflightFilter.label")}>
+              {queuePreflightFilters.map((filter) => (
+                <button
+                  className={queueConsolePreflightFilter === filter.id ? "active" : ""}
+                  key={filter.id}
+                  onClick={() => setQueueConsolePreflightFilter(filter.id)}
+                  type="button"
+                >
+                  {t(filter.labelKey)}
+                </button>
+              ))}
+            </div>
+
+            <div className="queue-console-bulk">
+              <div>
+                <span>{t("launch.selected")}</span>
+                <strong>{queueConsoleSelectedJobs.length}</strong>
+                <small>{queueConsoleSelectedBytesLabel}</small>
+              </div>
+              <button className="command-button" disabled={visibleQueueConsoleActionableJobs.length === 0} onClick={handleSelectVisibleQueueConsoleJobs} type="button">
+                {allVisibleQueueConsoleJobsSelected ? <CheckCircle2 size={16} /> : <Square size={16} />}
+                {allVisibleQueueConsoleJobsSelected ? t("launch.clearVisible") : t("launch.selectVisible")}
+              </button>
+              <button className="command-button" disabled={queueConsoleStatus === "bulk" || queueConsoleSelectedJobs.length === 0} onClick={() => void handleQueueConsoleBulkAction("prioritize", 95)} type="button">
+                <Zap size={16} />
+                {t("launch.prioritize")}
+              </button>
+              <button className="command-button" disabled={queueConsoleStatus === "bulk" || queueConsoleSelectedJobs.length === 0} onClick={() => void handleQueueConsoleBulkAction("retry", 75)} type="button">
+                <RotateCcw size={16} />
+                {t("launch.retrySelected")}
+              </button>
+              <button className="primary-action" disabled={queueConsoleStatus === "bulk" || queueConsoleSelectedJobs.length === 0} onClick={() => void handleQueueConsoleBulkAction("queue", 85)} type="button">
+                <Rocket size={16} />
+                {t("launch.queueSelected")}
+              </button>
+              <button className="command-button danger-outline" disabled={queueConsoleStatus === "bulk" || queueConsoleSelectedJobs.length === 0} onClick={() => void handleQueueConsoleBulkAction("cancel")} type="button">
+                <XCircle size={16} />
+                {t("launch.cancelSelected")}
+              </button>
+            </div>
+
+            <div className="queue-console-layout">
+              <div className="queue-console-list">
+                {filteredQueueConsoleJobs.slice(0, 80).map((job) => {
+                  const selected = queueConsoleSelectedJobIds.includes(job.id);
+                  const actionable = isSelectableQueueJob(job);
+                  const telemetry = telemetryByJobId.get(job.id);
+                  const pausedLocked = job.status === "queued" && !queueConsoleClaimableIds.has(job.id);
+                  const expanded = expandedQueueConsoleJobId === job.id;
+                  const workerPlanItem = queueConsoleWorkerPlanByJobId.get(job.id);
+                  const files = queueConsoleFileMap[job.video_id] ?? [];
+                  const fileStatus = queueConsoleFileStatus[job.video_id] ?? "idle";
+                  const existingFileCount = files.filter((file) => file.exists).length;
+                  const jobEvents = events
+                    .filter((event) => {
+                      if (!event.type.startsWith("download.")) return false;
+                      return (
+                        readEventNumber(event.data, "job_id") === job.id ||
+                        readEventNumber(event.data, "video_id") === job.video_id
+                      );
+                    })
+                    .slice(0, 5);
+                  return (
+                    <article className={`queue-console-row ${job.status} ${selected ? "selected" : ""} ${expanded ? "expanded" : ""}`} key={job.id}>
+                      <button
+                        aria-label={selected ? t("launch.deselectJob") : t("launch.selectJob")}
+                        className="select-job"
+                        disabled={!actionable}
+                        onClick={() => handleToggleQueueConsoleJobSelection(job.id)}
+                        type="button"
+                      >
+                        {selected ? <CheckCircle2 size={16} /> : <Square size={16} />}
+                      </button>
+                      <div className="queue-console-main">
+                        <div>
+                          <strong>{job.video_title}</strong>
+                          <small>{job.channel_title} · {job.video_external_id} · {job.quality}</small>
+                        </div>
+                        {job.archive_path ? <code>{compactArchivePath(job.archive_path)}</code> : null}
+                        {telemetry || job.progress > 0 ? (
+                          <div className="queue-console-progress" aria-label={t("job.progress")}>
+                            <span style={{ width: `${Math.max(0, Math.min(telemetry?.percent ?? job.progress, 100))}%` }} />
+                            <em>{telemetry ? downloadTelemetrySummary(telemetry) : `${Math.round(job.progress)}%`}</em>
+                          </div>
+                        ) : null}
+                        {pausedLocked ? (
+                          <small className="queue-console-lock">
+                            <CirclePause size={12} />
+                            {t("queue.console.pausedLocked")}
+                          </small>
+                        ) : null}
+                      </div>
+                      <div className="queue-console-meta">
+                        <em className={`queue-status-pill ${telemetry?.status ?? job.status}`}>
+                          {telemetry ? downloadTelemetryStatusLabel(telemetry.status, t) : queueJobStatusLabel(job.status, t)}
+                        </em>
+                        <em className={`preflight-pill ${job.preflight_status}`}>{preflightLabel(job.preflight_status, t)}</em>
+                        <small>{formatBytes(job.estimated_bytes ?? 0)}</small>
+                      </div>
+                      <div className="queue-console-row-actions">
+                        <button
+                          aria-label={expanded ? t("queue.console.collapse") : t("queue.console.expand")}
+                          className={expanded ? "active" : ""}
+                          onClick={() => void handleToggleQueueConsoleDetails(job)}
+                          type="button"
+                        >
+                          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                        </button>
+                        <button
+                          aria-label={t("job.retry")}
+                          disabled={job.status === "running" || job.status === "completed"}
+                          onClick={() => void handleQueueConsoleJobAction(job, "retry")}
+                          type="button"
+                        >
+                          <RotateCcw size={13} />
+                        </button>
+                        <button
+                          aria-label={job.status === "running" ? t("job.stop") : t("job.cancel")}
+                          disabled={job.status !== "candidate" && job.status !== "queued" && job.status !== "running"}
+                          onClick={() => void handleQueueConsoleJobAction(job, job.status === "running" ? "stop" : "cancel")}
+                          type="button"
+                        >
+                          {job.status === "running" ? <Square size={13} /> : <XCircle size={13} />}
+                        </button>
+                      </div>
+                      {expanded ? (
+                        <div className="queue-console-detail">
+                          <section className="queue-console-detail-card">
+                            <h3>
+                              <Terminal size={14} />
+                              {t("queue.console.workerPlan")}
+                            </h3>
+                            <dl>
+                              <div>
+                                <dt>{t("queue.console.archive")}</dt>
+                                <dd>{workerPlanItem?.archive_dir ?? job.archive_path ?? "-"}</dd>
+                              </div>
+                              <div>
+                                <dt>{t("queue.console.output")}</dt>
+                                <dd>{workerPlanItem?.output_template ?? "video.%(ext)s"}</dd>
+                              </div>
+                              <div>
+                                <dt>{t("queue.console.reason")}</dt>
+                                <dd>{workerPlanItem?.status_note ?? (pausedLocked ? t("queue.console.pausedLocked") : queueJobStatusLabel(job.status, t))}</dd>
+                              </div>
+                            </dl>
+                            <code className="queue-console-command">
+                              {workerPlanItem?.command_preview ?? t("launch.commandEmpty")}
+                            </code>
+                          </section>
+                          <section className="queue-console-detail-card">
+                            <h3>
+                              <FileCheck2 size={14} />
+                              {t("queue.console.files")}
+                            </h3>
+                            <div className="queue-console-file-summary">
+                              <span>
+                                {existingFileCount}/{files.length} {t("library.detail.files")}
+                              </span>
+                              <span>{formatBytes(files.reduce((sum, file) => sum + (file.size_bytes ?? 0), 0))}</span>
+                            </div>
+                            {fileStatus === "loading" ? <p className="empty-copy">{t("queue.console.loadingFiles")}</p> : null}
+                            {fileStatus === "error" ? <p className="empty-copy">{t("queue.console.fileLoadError")}</p> : null}
+                            {fileStatus === "idle" && files.length === 0 ? <p className="empty-copy">{t("queue.console.noFiles")}</p> : null}
+                            <div className="queue-console-file-list">
+                              {files.slice(0, 4).map((file) => (
+                                <article className={file.exists ? "present" : "missing"} key={file.relative_path}>
+                                  <strong>{file.filename}</strong>
+                                  <small>{mediaFileProfileLabel(file) || integrityLabel(file.integrity_state, t)}</small>
+                                  <span>{file.size_label}</span>
+                                </article>
+                              ))}
+                            </div>
+                          </section>
+                          <section className="queue-console-detail-card">
+                            <h3>
+                              <Activity size={14} />
+                              {t("queue.console.telemetry")}
+                            </h3>
+                            <dl>
+                              <div>
+                                <dt>{t("job.progress")}</dt>
+                                <dd>{telemetry ? downloadTelemetrySummary(telemetry) : `${Math.round(job.progress)}%`}</dd>
+                              </div>
+                              <div>
+                                <dt>{t("queue.console.attempts")}</dt>
+                                <dd>{job.attempt_count}</dd>
+                              </div>
+                              <div>
+                                <dt>{t("queue.console.started")}</dt>
+                                <dd>{job.started_at ? formatEventTime(job.started_at) : "-"}</dd>
+                              </div>
+                              <div>
+                                <dt>{t("queue.console.completed")}</dt>
+                                <dd>{job.completed_at ? formatEventTime(job.completed_at) : "-"}</dd>
+                              </div>
+                            </dl>
+                            {telemetry?.error || job.error_message ? (
+                              <code className="queue-console-error">{telemetry?.error ?? job.error_message}</code>
+                            ) : null}
+                            <div className="queue-console-event-list" aria-label={t("queue.console.events")}>
+                              <div className="queue-console-event-head">
+                                <strong>{t("queue.console.events")}</strong>
+                                <button onClick={() => void handleOpenQueueJobEventLog(job)} type="button">
+                                  <History size={12} />
+                                  {t("queue.console.openJobLog")}
+                                </button>
+                              </div>
+                              {jobEvents.map((event) => (
+                                <article className={eventTone(event.type)} key={`${event.type}-${event.occurred_at}`}>
+                                  <span>{eventLabel(event, t)}</span>
+                                  <time>{formatEventTime(event.occurred_at)}</time>
+                                </article>
+                              ))}
+                              {jobEvents.length === 0 ? <p className="empty-copy">{t("queue.console.noEvents")}</p> : null}
+                            </div>
+                          </section>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+                {filteredQueueConsoleJobs.length === 0 ? <p className="empty-copy">{t("queue.empty")}</p> : null}
+              </div>
+
+              <aside className="queue-console-side">
+                <div>
+                  <span>{t("worker.title")}</span>
+                  <strong>{queueConsoleWorkerPlan?.enabled ? t("worker.enabled") : t("worker.locked")}</strong>
+                  <small>
+                    {queueConsoleWorkerPlan?.queued_count ?? 0} {t("queue.queued")} · {queueConsoleWorkerPlan?.running_count ?? 0} {t("queue.running")}
+                  </small>
+                  {queueConsoleWorkerPlan?.locked_reason ? <code>{queueConsoleWorkerPlan.locked_reason}</code> : null}
+                </div>
+                <div>
+                  <span>{t("worker.history")}</span>
+                  {queueConsoleWorkerRuns.slice(0, 5).map((run) => (
+                    <article key={run.id}>
+                      <strong>{run.status}</strong>
+                      <small>
+                        {run.channel_title ?? t("queue.console.allChannels")} · {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at)}
+                      </small>
+                      <code>{run.started_count}/{run.completed_count}/{run.failed_count}</code>
+                    </article>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          </section>
+        ) : null}
+
+        {activeNavId !== "queue" ? (
+          <>
         <section className="runtime-console" aria-label={t("runtime.title")}>
           <div className="runtime-header">
             <div>
@@ -3741,6 +4857,24 @@ function App() {
                     <FileCheck2 size={13} />
                     {t("storage.triage.actionSidecar")}
                   </button>
+                  <button disabled={!storageReportRows.length} onClick={() => void handleCopyStorageReport()} type="button">
+                    <ClipboardList size={13} />
+                    {storageReportCopyStatus === "copied"
+                      ? t("storage.triage.copyCopied")
+                      : storageReportCopyStatus === "error"
+                        ? t("runtime.ticks.copyError")
+                        : t("storage.triage.copyReport")}
+                  </button>
+                  <button disabled={!storageReportRows.length} onClick={() => handleDownloadStorageReport("csv")} type="button">
+                    <Download size={13} />
+                    {t("storage.triage.exportCsv")}
+                  </button>
+                  <button onClick={() => void handleOpenStorageQuarantine()} type="button">
+                    <FileArchive size={13} />
+                    {storageQuarantine?.count
+                      ? t("storage.quarantine.openWithCount").replace("{count}", String(storageQuarantine.count))
+                      : t("storage.quarantine.open")}
+                  </button>
                 </div>
                 {storageScan.orphan_sidecars.length ? (
                   <div className="storage-orphan-kind-filter" aria-label={t("storage.triage.kindFilter")}>
@@ -3805,17 +4939,37 @@ function App() {
             ) : null}
             {storageScan && (storageDrift.unindexed_media.length || storageDrift.indexed_missing.length) ? (
               <div className="storage-drift-list" aria-label={t("storage.scan.drift")}>
-                {[...storageDrift.unindexed_media, ...storageDrift.indexed_missing].slice(0, 4).map((item) => (
-                  <article className={item.kind} key={`${item.kind}-${item.relative_path}`}>
-                    <span>
-                      {item.kind === "unindexed_media"
-                        ? t("storage.scan.unindexed")
-                        : t("storage.scan.indexedMissing")}
-                    </span>
-                    <code>{item.relative_path}</code>
-                    <em>{item.label}</em>
-                  </article>
-                ))}
+                {[...storageDrift.unindexed_media, ...storageDrift.indexed_missing].slice(0, 4).map((item) => {
+                  const actionStatus = storageDriftActionStatus[storageDriftActionKey(item)] ?? "idle";
+                  const isRecover = item.kind === "unindexed_media";
+                  const DriftActionIcon = isRecover ? RotateCcw : Trash2;
+                  return (
+                    <article className={item.kind} key={`${item.kind}-${item.relative_path}`}>
+                      <span>
+                        {isRecover ? t("storage.scan.unindexed") : t("storage.scan.indexedMissing")}
+                      </span>
+                      <code>{item.relative_path}</code>
+                      <div className="storage-drift-actions">
+                        <em>{item.label}</em>
+                        <button
+                          disabled={actionStatus === "running" || workflowStatus === "bulk"}
+                          onClick={() => void handlePreviewStorageDrift(item)}
+                          type="button"
+                        >
+                          <DriftActionIcon size={12} />
+                          {actionStatus === "running"
+                            ? t("storage.drift.running")
+                            : isRecover
+                              ? t("storage.drift.recover")
+                              : t("storage.drift.pruneIndex")}
+                        </button>
+                        {actionStatus === "done" || actionStatus === "error" ? (
+                          <small className={actionStatus}>{actionStatus === "done" ? t("storage.drift.done") : t("workflow.error")}</small>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             ) : null}
             {storageScan?.warnings.length ? (
@@ -3837,9 +4991,19 @@ function App() {
                   </strong>
                 </div>
                 {filteredStorageOrphans.slice(0, 5).map((sidecar) => (
-                  <code key={sidecar.relative_path}>
-                    {sidecar.kind} · {sidecar.relative_path}
-                  </code>
+                  <article className="storage-orphan-row" key={sidecar.relative_path}>
+                    <code>
+                      {sidecar.kind} · {sidecar.relative_path}
+                    </code>
+                    <button
+                      disabled={storageOrphanQuarantineStatus === "planning" || storageOrphanQuarantineStatus === "running"}
+                      onClick={() => void handlePreviewOrphanQuarantine(sidecar)}
+                      type="button"
+                    >
+                      <Archive size={12} />
+                      {t("storage.orphan.quarantinePlan")}
+                    </button>
+                  </article>
                 ))}
               </div>
             ) : null}
@@ -3892,7 +5056,443 @@ function App() {
             </button>
           </motion.div>
         </section>
+          </>
+        ) : null}
       </section>
+      {selectedStorageDriftItem ? (
+        <div
+          className="download-confirm-backdrop"
+          onClick={() => {
+            setSelectedStorageDriftItem(null);
+            setStorageDriftPreview(null);
+            setStorageDriftPreviewStatus("idle");
+          }}
+          role="presentation"
+        >
+          <section
+            aria-label={t("storage.drift.previewTitle")}
+            className="download-confirm-modal storage-drift-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="download-confirm-head">
+              <div>
+                <p className="panel-kicker">{t("storage.recovery.title")}</p>
+                <h2>{t("storage.drift.previewTitle")}</h2>
+                <span>
+                  {selectedStorageDriftItem.kind === "unindexed_media"
+                    ? t("storage.drift.previewRecoverSubtitle")
+                    : t("storage.drift.previewPruneSubtitle")}
+                </span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => {
+                  setSelectedStorageDriftItem(null);
+                  setStorageDriftPreview(null);
+                  setStorageDriftPreviewStatus("idle");
+                }}
+                title={t("actions.close")}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="download-confirm-list storage-drift-preview">
+              <span>
+                <strong>{t("storage.drift.previewAction")}</strong>
+                <em>
+                  {selectedStorageDriftItem.kind === "unindexed_media"
+                    ? t("storage.drift.recover")
+                    : t("storage.drift.pruneIndex")}
+                </em>
+              </span>
+              <span>
+                <strong>{t("storage.orphan.source")}</strong>
+                <em>{selectedStorageDriftItem.relative_path}</em>
+              </span>
+              <span>
+                <strong>{t("storage.drift.previewCount")}</strong>
+                <em>
+                  {storageDriftPreviewStatus === "planning"
+                    ? t("events.refreshing")
+                    : selectedStorageDriftItem.kind === "unindexed_media"
+                      ? t("storage.drift.previewRecoverCount").replace("{count}", "1")
+                      : t("storage.drift.previewPruneCount").replace(
+                          "{count}",
+                          String(storageDriftPreview?.deleted_media_files ?? 0),
+                        )}
+                </em>
+              </span>
+              {selectedStorageDriftItem.kind === "unindexed_media" ? (
+                <span>
+                  <strong>{t("storage.drift.previewSidecars")}</strong>
+                  <em>
+                    {t("storage.drift.sidecarBreakdown")
+                      .replace("{json}", String(storageDriftPreview?.planned_info_json ?? 0))
+                      .replace("{subtitles}", String(storageDriftPreview?.planned_subtitles ?? 0))
+                      .replace("{thumbnails}", String(storageDriftPreview?.planned_thumbnails ?? 0))
+                      .replace("{nfo}", String(storageDriftPreview?.planned_nfo ?? 0))}
+                  </em>
+                </span>
+              ) : null}
+              <span>
+                <strong>{t("storage.orphan.size")}</strong>
+                <em>{selectedStorageDriftItem.label}</em>
+              </span>
+              {storageDriftPreview?.warnings.length ? (
+                <span className="warning">
+                  <strong>{t("storage.scan.warnings")}</strong>
+                  <em>{storageDriftPreview.warnings.join(" · ")}</em>
+                </span>
+              ) : null}
+            </div>
+            <div className="download-confirm-actions">
+              <button
+                onClick={() => {
+                  setSelectedStorageDriftItem(null);
+                  setStorageDriftPreview(null);
+                  setStorageDriftPreviewStatus("idle");
+                }}
+                type="button"
+              >
+                {t("actions.cancel")}
+              </button>
+              <button
+                className="primary-action"
+                disabled={
+                  !storageDriftPreview ||
+                  storageDriftPreview.warnings.length > 0 ||
+                  storageDriftPreviewStatus === "planning" ||
+                  storageDriftPreviewStatus === "running"
+                }
+                onClick={() => void handleApplyStorageDriftPreview()}
+                type="button"
+              >
+                {selectedStorageDriftItem.kind === "unindexed_media" ? <RotateCcw size={14} /> : <Trash2 size={14} />}
+                {storageDriftPreviewStatus === "running"
+                  ? t("storage.drift.running")
+                  : selectedStorageDriftItem.kind === "unindexed_media"
+                    ? t("storage.drift.recoverApply")
+                    : t("storage.drift.pruneApply")}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {selectedStorageOrphan ? (
+        <div className="download-confirm-backdrop" onClick={() => setSelectedStorageOrphan(null)} role="presentation">
+          <section
+            aria-label={t("storage.orphan.quarantineTitle")}
+            className="download-confirm-modal storage-orphan-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="download-confirm-head">
+              <div>
+                <p className="panel-kicker">{t("storage.triage.title")}</p>
+                <h2>{t("storage.orphan.quarantineTitle")}</h2>
+                <span>{t("storage.orphan.quarantineSubtitle")}</span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => setSelectedStorageOrphan(null)}
+                title={t("actions.close")}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="download-confirm-list storage-orphan-preview">
+              <span>
+                <strong>{t("storage.orphan.source")}</strong>
+                <em>{selectedStorageOrphan.relative_path}</em>
+              </span>
+              <span>
+                <strong>{t("storage.orphan.destination")}</strong>
+                <em>
+                  {storageOrphanQuarantinePlan?.destination_relative_path ??
+                    (storageOrphanQuarantineStatus === "planning" ? t("events.refreshing") : t("storage.triage.none"))}
+                </em>
+              </span>
+              <span>
+                <strong>{t("storage.orphan.size")}</strong>
+                <em>{selectedStorageOrphan.label}</em>
+              </span>
+              {storageOrphanQuarantinePlan?.warnings.length ? (
+                <span className="warning">
+                  <strong>{t("storage.scan.warnings")}</strong>
+                  <em>{storageOrphanQuarantinePlan.warnings.join(" · ")}</em>
+                </span>
+              ) : null}
+            </div>
+            <div className="download-confirm-actions">
+              <button onClick={() => setSelectedStorageOrphan(null)} type="button">
+                {t("actions.cancel")}
+              </button>
+              <button
+                className="primary-action"
+                disabled={
+                  !storageOrphanQuarantinePlan ||
+                  storageOrphanQuarantinePlan.warnings.length > 0 ||
+                  storageOrphanQuarantineStatus === "planning" ||
+                  storageOrphanQuarantineStatus === "running"
+                }
+                onClick={() => void handleApplyOrphanQuarantine()}
+                type="button"
+              >
+                <Archive size={14} />
+                {storageOrphanQuarantineStatus === "running"
+                  ? t("storage.orphan.quarantining")
+                  : t("storage.orphan.quarantineApply")}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {storageQuarantineOpen ? (
+        <div
+          className="download-confirm-backdrop"
+          onClick={() => {
+            setStorageQuarantineOpen(false);
+            setSelectedStorageQuarantineItem(null);
+            setStorageQuarantineRestorePlan(null);
+          }}
+          role="presentation"
+        >
+          <section
+            aria-label={t("storage.quarantine.title")}
+            className="download-confirm-modal storage-quarantine-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="download-confirm-head">
+              <div>
+                <p className="panel-kicker">{t("storage.triage.title")}</p>
+                <h2>{t("storage.quarantine.title")}</h2>
+                <span>{t("storage.quarantine.subtitle")}</span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => {
+                  setStorageQuarantineOpen(false);
+                  setSelectedStorageQuarantineItem(null);
+                  setStorageQuarantineRestorePlan(null);
+                }}
+                title={t("actions.close")}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="storage-quarantine-summary">
+              <article>
+                <span>{t("storage.quarantine.files")}</span>
+                <strong>{storageQuarantine?.count ?? 0}</strong>
+              </article>
+              <article>
+                <span>{t("storage.quarantine.bytes")}</span>
+                <strong>{storageQuarantine?.total_label ?? "0 MB"}</strong>
+              </article>
+              <article>
+                <span>{t("storage.quarantine.age")}</span>
+                <strong>{storageQuarantineAgeSummary}</strong>
+              </article>
+              <button
+                disabled={storageQuarantineStatus === "loading" || storageQuarantineStatus === "running"}
+                onClick={() => void handleOpenStorageQuarantine()}
+                type="button"
+              >
+                <RotateCcw size={13} />
+                {storageQuarantineStatus === "loading" ? t("events.refreshing") : t("storage.quarantine.refresh")}
+              </button>
+              <button disabled={!storageQuarantineRows.length} onClick={() => handleDownloadStorageQuarantine("csv")} type="button">
+                <Download size={13} />
+                {t("runtime.ticks.exportCsv")}
+              </button>
+              <button disabled={!storageQuarantineRows.length} onClick={() => handleDownloadStorageQuarantine("ndjson")} type="button">
+                <FileText size={13} />
+                {t("runtime.ticks.exportNdjson")}
+              </button>
+            </div>
+            <div className="storage-quarantine-list">
+              {storageQuarantineStatus === "loading" ? (
+                <span className="empty-copy">{t("events.refreshing")}</span>
+              ) : storageQuarantine?.items.length ? (
+                storageQuarantine.items.slice(0, 8).map((item) => (
+                  <article className={item.restore_blocked_reason ? "blocked" : ""} key={item.relative_path}>
+                    <div>
+                      <code>{item.kind} · {item.original_relative_path}</code>
+                      <small>
+                        {formatDateTimeLabel(item.quarantined_at, t("storage.quarantine.unknownTime"))} · {item.label}
+                      </small>
+                    </div>
+                    <button
+                      disabled={storageQuarantineStatus === "planning" || storageQuarantineStatus === "running"}
+                      onClick={() => void handlePreviewStorageQuarantineRestore(item)}
+                      type="button"
+                    >
+                      <RotateCcw size={12} />
+                      {t("storage.quarantine.restorePlan")}
+                    </button>
+                  </article>
+                ))
+              ) : (
+                <span className="empty-copy">{t("storage.quarantine.empty")}</span>
+              )}
+            </div>
+            {selectedStorageQuarantineItem ? (
+              <div className="download-confirm-list storage-orphan-preview">
+                <span>
+                  <strong>{t("storage.quarantine.heldFile")}</strong>
+                  <em>{selectedStorageQuarantineItem.relative_path}</em>
+                </span>
+                <span>
+                  <strong>{t("storage.orphan.destination")}</strong>
+                  <em>
+                    {storageQuarantineRestorePlan?.destination_relative_path ??
+                      (storageQuarantineStatus === "planning"
+                        ? t("events.refreshing")
+                        : selectedStorageQuarantineItem.original_relative_path)}
+                  </em>
+                </span>
+                <span>
+                  <strong>{t("storage.orphan.size")}</strong>
+                  <em>{selectedStorageQuarantineItem.label}</em>
+                </span>
+                {storageQuarantineRestorePlan?.warnings.length || selectedStorageQuarantineItem.restore_blocked_reason ? (
+                  <span className="warning">
+                    <strong>{t("storage.scan.warnings")}</strong>
+                    <em>
+                      {storageQuarantineRestorePlan?.warnings.join(" · ") ||
+                        selectedStorageQuarantineItem.restore_blocked_reason}
+                    </em>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {storageQuarantine?.warnings.length ? (
+              <div className="storage-warning-list">
+                {storageQuarantine.warnings.slice(0, 3).map((warning) => (
+                  <span key={warning}>
+                    <AlertTriangle size={13} />
+                    {warning}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="download-confirm-actions">
+              <button
+                onClick={() => {
+                  setStorageQuarantineOpen(false);
+                  setSelectedStorageQuarantineItem(null);
+                  setStorageQuarantineRestorePlan(null);
+                }}
+                type="button"
+              >
+                {t("actions.close")}
+              </button>
+              <button
+                className="primary-action"
+                disabled={
+                  !selectedStorageQuarantineItem ||
+                  !storageQuarantineRestorePlan ||
+                  storageQuarantineRestorePlan.warnings.length > 0 ||
+                  storageQuarantineStatus === "planning" ||
+                  storageQuarantineStatus === "running"
+                }
+                onClick={() => void handleApplyStorageQuarantineRestore()}
+                type="button"
+              >
+                <RotateCcw size={14} />
+                {storageQuarantineStatus === "running"
+                  ? t("storage.quarantine.restoring")
+                  : t("storage.quarantine.restoreApply")}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {queueConsoleConfirmOpen ? (
+        <div className="download-confirm-backdrop" onClick={() => setQueueConsoleConfirmOpen(false)} role="presentation">
+          <aside
+            aria-label={t("queue.console.confirmTitle")}
+            className="download-confirm-modal queue-confirm-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="download-confirm-head">
+              <div>
+                <p className="panel-kicker">{t("queue.console.kicker")}</p>
+                <h2>{t("queue.console.confirmTitle")}</h2>
+                <span>{t("queue.console.confirmSubtitle")}</span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                onClick={() => setQueueConsoleConfirmOpen(false)}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="download-confirm-grid">
+              <article>
+                <span>{t("worker.liveConfirm.limit")}</span>
+                <strong>5</strong>
+              </article>
+              <article>
+                <span>{t("queue.console.confirmClaimable")}</span>
+                <strong>{queueConsoleWorkerPlan?.claimable_count ?? 0}</strong>
+              </article>
+              <article>
+                <span>{t("queue.console.confirmSkipped")}</span>
+                <strong>{queueConsoleSkippedCount}</strong>
+              </article>
+            </div>
+            <div className="download-confirm-list">
+              {queueConsoleConfirmJobs.map((item) => (
+                <span key={item.job.id}>
+                  <CheckCircle2 size={13} />
+                  <strong>{item.job.video_title}</strong>
+                  <em>{item.job.channel_title}</em>
+                </span>
+              ))}
+              {queueConsoleConfirmJobs.length === 0 ? <p className="empty-copy">{t("queue.console.confirmEmpty")}</p> : null}
+            </div>
+            {queueConsoleConfirmJobs.length ? (
+              <div className="queue-confirm-command-list" aria-label={t("queue.console.confirmCommandPreview")}>
+                <strong>
+                  <Terminal size={13} />
+                  {t("queue.console.confirmCommandPreview")}
+                </strong>
+                {queueConsoleConfirmJobs.slice(0, 3).map((item) => (
+                  <code key={item.job.id}>{item.command_preview}</code>
+                ))}
+              </div>
+            ) : null}
+            {queueConsoleWorkerPlan?.locked_reason ? <code className="worker-lock">{queueConsoleWorkerPlan.locked_reason}</code> : null}
+            <div className="download-confirm-actions">
+              <button className="command-button" onClick={() => setQueueConsoleConfirmOpen(false)} type="button">
+                {t("worker.liveCancel")}
+              </button>
+              <button
+                className="primary-action"
+                disabled={
+                  queueConsoleStatus === "worker" ||
+                  !queueConsoleWorkerPlan?.enabled ||
+                  Boolean(queueConsoleWorkerPlan?.locked_reason) ||
+                  queueConsoleConfirmJobs.length === 0
+                }
+                onClick={() => void handleQueueConsoleRunWorker()}
+                type="button"
+              >
+                <Rocket size={16} />
+                {queueConsoleStatus === "worker" ? t("worker.liveRunning") : t("queue.console.confirmStart")}
+              </button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
       {liveDownloadConfirmOpen ? (
         <div className="download-confirm-backdrop" onClick={() => setLiveDownloadConfirmOpen(false)} role="presentation">
           <aside
@@ -4278,6 +5878,158 @@ function App() {
           </aside>
         </div>
       ) : null}
+      {eventLogOpen ? (
+        <div className="worker-history-backdrop" onClick={() => setEventLogOpen(false)} role="presentation">
+          <aside
+            aria-label={t("events.drawerTitle")}
+            className="worker-history-drawer event-log-drawer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="worker-history-header">
+              <div>
+                <p className="panel-kicker">{t("events.title")}</p>
+                <h2>{t("events.drawerTitle")}</h2>
+                <span>{t("events.drawerSubtitle")}</span>
+              </div>
+              <div className="runtime-heading-actions">
+                <button
+                  className="runtime-apply-button"
+                  disabled={eventLogStatus === "loading"}
+                  onClick={() => void handleRefreshEventLog()}
+                  type="button"
+                >
+                  <RotateCcw size={14} />
+                  {eventLogStatus === "loading" ? t("events.refreshing") : t("events.refresh")}
+                </button>
+                <button
+                  className="runtime-apply-button"
+                  disabled={!filteredEventLogRows.length}
+                  onClick={() => void handleCopyEventLog()}
+                  type="button"
+                >
+                  <ClipboardList size={14} />
+                  {eventLogCopyStatus === "copied"
+                    ? t("runtime.ticks.copyCopied")
+                    : eventLogCopyStatus === "error"
+                      ? t("runtime.ticks.copyError")
+                      : t("runtime.ticks.copyJson")}
+                </button>
+                <button
+                  className="runtime-apply-button"
+                  disabled={!filteredEventLogRows.length}
+                  onClick={() => handleDownloadEventLog("ndjson")}
+                  type="button"
+                >
+                  <Download size={14} />
+                  {t("events.exportNdjson")}
+                </button>
+                <button
+                  className="runtime-apply-button"
+                  disabled={!filteredEventLogRows.length}
+                  onClick={() => handleDownloadEventLog("csv")}
+                  type="button"
+                >
+                  <Download size={14} />
+                  {t("events.exportCsv")}
+                </button>
+                <label className="retention-keep-control">
+                  <span>{t("runtime.retention.keepLatest")}</span>
+                  <input
+                    min={1}
+                    onChange={(event) => setEventLogRetentionKeep(event.target.value)}
+                    type="number"
+                    value={eventLogRetentionKeep}
+                  />
+                </label>
+                <button
+                  className="runtime-apply-button danger"
+                  disabled={eventLogRetentionStatus === "pruning"}
+                  onClick={() => void handlePruneEventLog()}
+                  type="button"
+                >
+                  <Trash2 size={14} />
+                  {eventLogRetentionStatus === "pruning"
+                    ? t("events.retentionPruning")
+                    : eventLogRetentionStatus === "pruned"
+                      ? t("events.retentionPruned")
+                      : t("events.retention")}
+                </button>
+                <button
+                  aria-label={t("actions.close")}
+                  className="icon-button"
+                  onClick={() => setEventLogOpen(false)}
+                  title={t("actions.close")}
+                  type="button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="worker-history-filters event-log-filters">
+              <ListFilter size={14} />
+              {archiveEventFilters.map((filter) => (
+                <button
+                  className={eventLogFilter === filter.id ? "active" : ""}
+                  key={filter.id}
+                  onClick={() => setEventLogFilter(filter.id)}
+                  type="button"
+                >
+                  {t(filter.labelKey)}
+                </button>
+              ))}
+            </div>
+
+            {eventLogScopeLabel ? (
+              <div className="event-log-scope">
+                <span>{eventLogScopeLabel}</span>
+                <button onClick={() => void handleOpenEventLog()} type="button">
+                  {t("events.scopeClear")}
+                </button>
+              </div>
+            ) : null}
+
+            <div className="worker-history-summary event-log-summary">
+              <article>
+                <span>{t("events.filter.all")}</span>
+                <strong>{eventLogSummary.total}</strong>
+              </article>
+              <article>
+                <span>{t("events.filter.download")}</span>
+                <strong>{eventLogSummary.download}</strong>
+              </article>
+              <article>
+                <span>{t("events.filter.sync")}</span>
+                <strong>{eventLogSummary.sync}</strong>
+              </article>
+              <article>
+                <span>{t("events.filter.storage")}</span>
+                <strong>{eventLogSummary.storage}</strong>
+              </article>
+              <article>
+                <span>{t("events.filter.failure")}</span>
+                <strong>{eventLogSummary.failure}</strong>
+              </article>
+            </div>
+
+            {eventLogStatus === "error" ? <div className="runtime-copy-status error">{t("events.loadError")}</div> : null}
+            <div className="event-log-list">
+              {filteredEventLogRows.map((event, index) => (
+                <article className={`event-log-card ${eventTone(event.type)}`} key={`${event.type}-${event.occurred_at}-${index}`}>
+                  <div className="event-log-card-head">
+                    <em>{event.type}</em>
+                    <time>{formatEventTime(event.occurred_at)}</time>
+                  </div>
+                  <strong>{eventLabel(event, t)}</strong>
+                  <small>{eventEntityLabel(event, t)}</small>
+                  <code className="event-log-data">{eventDataDigest(event)}</code>
+                </article>
+              ))}
+              {filteredEventLogRows.length === 0 ? <p className="empty-copy">{t("events.logEmpty")}</p> : null}
+            </div>
+          </aside>
+        </div>
+      ) : null}
       {schedulerTickDrawerOpen ? (
         <div className="scheduler-tick-backdrop" onClick={() => setSchedulerTickDrawerOpen(false)} role="presentation">
           <aside
@@ -4304,6 +6056,37 @@ function App() {
                     : schedulerTickCopyStatus === "error"
                       ? t("runtime.ticks.copyError")
                       : t("runtime.ticks.copyJson")}
+                </button>
+                <button
+                  className="runtime-apply-button"
+                  disabled={!schedulerTickRows.length}
+                  onClick={() => handleDownloadTickRows("scheduler", "ndjson")}
+                  type="button"
+                >
+                  <Download size={14} />
+                  {t("runtime.ticks.exportNdjson")}
+                </button>
+                <button
+                  className="runtime-apply-button"
+                  disabled={!schedulerTickRows.length}
+                  onClick={() => handleDownloadTickRows("scheduler", "csv")}
+                  type="button"
+                >
+                  <Download size={14} />
+                  {t("runtime.ticks.exportCsv")}
+                </button>
+                <button
+                  className="runtime-apply-button danger"
+                  disabled={schedulerTickRetentionStatus === "pruning"}
+                  onClick={() => void handlePruneTickRows("scheduler")}
+                  type="button"
+                >
+                  <Trash2 size={14} />
+                  {schedulerTickRetentionStatus === "pruning"
+                    ? t("runtime.ticks.retentionPruning")
+                    : schedulerTickRetentionStatus === "pruned"
+                      ? t("runtime.ticks.retentionPruned")
+                      : t("runtime.ticks.retention")}
                 </button>
                 <button
                   aria-label={t("actions.close")}
@@ -4362,6 +6145,15 @@ function App() {
                     placeholder={String(runtimeSettings?.download_worker_scheduler_limit ?? 1)}
                     type="number"
                     value={schedulerLimitFilter}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.retention.keepLatest")}</span>
+                  <input
+                    min={1}
+                    onChange={(event) => setSchedulerRetentionKeep(event.target.value)}
+                    type="number"
+                    value={schedulerRetentionKeep}
                   />
                 </label>
               </div>
@@ -4455,6 +6247,37 @@ function App() {
                       : t("runtime.ticks.copyJson")}
                 </button>
                 <button
+                  className="runtime-apply-button"
+                  disabled={!metadataTickRows.length}
+                  onClick={() => handleDownloadTickRows("metadata", "ndjson")}
+                  type="button"
+                >
+                  <Download size={14} />
+                  {t("runtime.ticks.exportNdjson")}
+                </button>
+                <button
+                  className="runtime-apply-button"
+                  disabled={!metadataTickRows.length}
+                  onClick={() => handleDownloadTickRows("metadata", "csv")}
+                  type="button"
+                >
+                  <Download size={14} />
+                  {t("runtime.ticks.exportCsv")}
+                </button>
+                <button
+                  className="runtime-apply-button danger"
+                  disabled={metadataTickRetentionStatus === "pruning"}
+                  onClick={() => void handlePruneTickRows("metadata")}
+                  type="button"
+                >
+                  <Trash2 size={14} />
+                  {metadataTickRetentionStatus === "pruning"
+                    ? t("runtime.ticks.retentionPruning")
+                    : metadataTickRetentionStatus === "pruned"
+                      ? t("runtime.ticks.retentionPruned")
+                      : t("runtime.ticks.retention")}
+                </button>
+                <button
                   aria-label={t("actions.close")}
                   className="icon-button"
                   onClick={() => setMetadataTickDrawerOpen(false)}
@@ -4511,6 +6334,15 @@ function App() {
                     placeholder={String(runtimeSettings?.metadata_sync_scheduler_limit ?? 2)}
                     type="number"
                     value={metadataLimitFilter}
+                  />
+                </label>
+                <label>
+                  <span>{t("runtime.retention.keepLatest")}</span>
+                  <input
+                    min={1}
+                    onChange={(event) => setMetadataRetentionKeep(event.target.value)}
+                    type="number"
+                    value={metadataRetentionKeep}
                   />
                 </label>
               </div>
@@ -5049,11 +6881,210 @@ function normalizeMetricTone(value: string): MetricTone {
   return "info";
 }
 
+function storageDriftActionKey(item: StorageDriftItem) {
+  return `${item.kind}:${item.relative_path}`;
+}
+
+function normalizeRetentionKeep(value: string, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
+  return Math.min(50_000, parsed);
+}
+
+function buildStorageReportRows(scan: StorageScan | null): Record<string, unknown>[] {
+  if (!scan) return [];
+  return [
+    {
+      section: "volume",
+      scanned_at: scan.scanned_at,
+      root: scan.volume.root,
+      archive_bytes: scan.volume.archive_bytes,
+      archive_label: scan.volume.archive_label,
+      pressure_percent: scan.volume.pressure_percent,
+      file_count: scan.volume.file_count,
+      dir_count: scan.volume.dir_count,
+      warnings: scan.warnings.length,
+    },
+    ...scan.channels.map((channel) => ({
+      section: "channel",
+      relative_path: channel.relative_path,
+      title: channel.title,
+      bytes: channel.bytes,
+      label: channel.label,
+      file_count: channel.file_count,
+      media_count: channel.media_count,
+      sidecar_count: channel.sidecar_count,
+      orphan_sidecar_count: channel.orphan_sidecar_count,
+      video_folder_count: channel.video_folder_count,
+      pressure_score: channel.pressure_score,
+    })),
+    ...scan.top_extensions.map((extension) => ({
+      section: "extension",
+      extension: extension.extension,
+      bytes: extension.bytes,
+      label: extension.label,
+      count: extension.count,
+    })),
+    ...scan.orphan_sidecars.map((sidecar) => ({
+      section: "orphan_sidecar",
+      relative_path: sidecar.relative_path,
+      kind: sidecar.kind,
+      size_bytes: sidecar.size_bytes,
+      label: sidecar.label,
+      reason: sidecar.reason,
+    })),
+    ...scan.drift.unindexed_media.map((item) => ({
+      section: "drift",
+      drift_kind: item.kind,
+      relative_path: item.relative_path,
+      label: item.label,
+      reason: item.reason,
+    })),
+    ...scan.drift.indexed_missing.map((item) => ({
+      section: "drift",
+      drift_kind: item.kind,
+      relative_path: item.relative_path,
+      label: item.label,
+      reason: item.reason,
+    })),
+    ...scan.warnings.map((warning) => ({
+      section: "warning",
+      warning,
+    })),
+  ];
+}
+
+function buildStorageQuarantineRows(quarantine: StorageQuarantineList | null): Record<string, unknown>[] {
+  if (!quarantine) return [];
+  return quarantine.items.map((item) => ({
+    section: "quarantine",
+    relative_path: item.relative_path,
+    original_relative_path: item.original_relative_path,
+    kind: item.kind,
+    size_bytes: item.size_bytes,
+    label: item.label,
+    quarantined_at: item.quarantined_at,
+    restore_blocked_reason: item.restore_blocked_reason,
+  }));
+}
+
+function summarizeStorageQuarantineAge(items: StorageQuarantineItem[], t: (key: TranslationKey) => string) {
+  if (!items.length) return t("storage.triage.none");
+  const now = Date.now();
+  const buckets = items.reduce(
+    (summary, item) => {
+      if (!item.quarantined_at) {
+        summary.unknown += 1;
+        return summary;
+      }
+      const ageDays = Math.max(0, Math.floor((now - new Date(item.quarantined_at).getTime()) / 86_400_000));
+      if (ageDays <= 7) summary.fresh += 1;
+      else if (ageDays <= 30) summary.warm += 1;
+      else summary.old += 1;
+      return summary;
+    },
+    { fresh: 0, warm: 0, old: 0, unknown: 0 },
+  );
+  return t("storage.quarantine.ageSummary")
+    .replace("{fresh}", String(buckets.fresh))
+    .replace("{warm}", String(buckets.warm))
+    .replace("{old}", String(buckets.old))
+    .replace("{unknown}", String(buckets.unknown));
+}
+
+function downloadAuditRows(prefix: string, rows: Record<string, unknown>[], format: AuditExportFormat) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const body = format === "csv" ? rowsToCsv(rows) : rowsToNdjson(rows);
+  const mime = format === "csv" ? "text/csv;charset=utf-8" : "application/x-ndjson;charset=utf-8";
+  downloadTextFile(`${prefix}-${timestamp}.${format}`, body, mime);
+}
+
+function rowsToNdjson(rows: Record<string, unknown>[]) {
+  return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+}
+
+function rowsToCsv(rows: Record<string, unknown>[]) {
+  const columns = Array.from(
+    rows.reduce((set, row) => {
+      Object.keys(row).forEach((key) => set.add(key));
+      return set;
+    }, new Set<string>()),
+  );
+  if (!columns.length) return "";
+  return [columns.map(csvCell).join(","), ...rows.map((row) => columns.map((column) => csvCell(row[column])).join(","))].join("\n") + "\n";
+}
+
+function csvCell(value: unknown) {
+  const text =
+    value === null || value === undefined
+      ? ""
+      : typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadTextFile(filename: string, body: string, mime: string) {
+  const blob = new Blob([body], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function eventTone(type: string) {
   if (type.includes("failed") || type.includes("cancelled")) return "bad";
-  if (type.includes("completed") || type.includes("updated")) return "good";
+  if (
+    type.includes("completed") ||
+    type.includes("updated") ||
+    type.includes("recovered") ||
+    type.includes("pruned") ||
+    type.includes("quarantined") ||
+    type.includes("restored")
+  ) return "good";
   if (type.includes("queued") || type.includes("started")) return "active";
   return "info";
+}
+
+function eventMatchesFilter(event: ArchiveEvent, filter: ArchiveEventFilter) {
+  if (filter === "all") return true;
+  if (filter === "download") return event.type.startsWith("download.");
+  if (filter === "sync") return event.type.startsWith("sync.") || event.type.startsWith("channel.");
+  if (filter === "library") return event.type.startsWith("library.");
+  if (filter === "storage") return event.type.startsWith("storage.");
+  if (filter === "policy") return event.type.startsWith("policy.");
+  return event.type.includes("failed") || event.type.includes("cancelled") || typeof event.data.error_message === "string";
+}
+
+function summarizeArchiveEvents(events: ArchiveEvent[]) {
+  return {
+    total: events.length,
+    download: events.filter((event) => event.type.startsWith("download.")).length,
+    sync: events.filter((event) => event.type.startsWith("sync.") || event.type.startsWith("channel.")).length,
+    storage: events.filter((event) => event.type.startsWith("storage.")).length,
+    failure: events.filter((event) => eventMatchesFilter(event, "failure")).length,
+  };
+}
+
+function eventEntityLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
+  const parts = [
+    readEventNumber(event.data, "channel_id") ? `${t("events.channel")} #${readEventNumber(event.data, "channel_id")}` : "",
+    readEventNumber(event.data, "job_id") ? `${t("events.job")} #${readEventNumber(event.data, "job_id")}` : "",
+    readEventNumber(event.data, "video_id") ? `${t("events.video")} #${readEventNumber(event.data, "video_id")}` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || t("events.noEntity");
+}
+
+function eventDataDigest(event: ArchiveEvent) {
+  try {
+    return JSON.stringify(event.data);
+  } catch {
+    return "{}";
+  }
 }
 
 function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
@@ -5097,6 +7128,16 @@ function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
     const count = typeof event.data.media_files_indexed === "number" ? event.data.media_files_indexed : 0;
     return t("event.library.rescan").replace("{count}", String(count));
   }
+  if (event.type === "storage.drift.recovered") {
+    const count = typeof event.data.media_files_indexed === "number" ? event.data.media_files_indexed : 0;
+    return t("event.storage.recovered").replace("{count}", String(count));
+  }
+  if (event.type === "storage.drift.pruned") {
+    const count = typeof event.data.deleted_media_files === "number" ? event.data.deleted_media_files : 0;
+    return t("event.storage.pruned").replace("{count}", String(count));
+  }
+  if (event.type === "storage.orphan.quarantined") return t("event.storage.orphanQuarantined");
+  if (event.type === "storage.orphan.restored") return t("event.storage.orphanRestored");
   if (event.type === "channel.settings.updated") return t("event.channel.settings");
   if (event.type === "policy.updated") return t("event.policy.updated");
   return event.type;

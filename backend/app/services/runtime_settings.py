@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from shutil import which
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BACKEND_ROOT, settings
@@ -26,6 +26,7 @@ from app.schemas.settings import (
     RuntimeSettingsApplyResult,
     RuntimeSettingsRead,
     RuntimeSettingsUpdate,
+    SchedulerTickPruneResult,
     SchedulerTickRead,
 )
 from app.services.download_scheduler import get_download_worker_scheduler_status
@@ -370,6 +371,22 @@ async def list_scheduler_ticks(
             if tick.duration_seconds is not None and tick.duration_seconds >= min_duration_seconds
         ]
     return ticks[:effective_limit]
+
+
+async def prune_scheduler_ticks(*, db: AsyncSession, keep_latest: int = 200) -> SchedulerTickPruneResult:
+    """Trim download worker scheduler tick telemetry while keeping the newest rows."""
+    bounded_keep = max(1, min(keep_latest, 50_000))
+    keep_ids = select(DownloadSchedulerTick.id).order_by(
+        DownloadSchedulerTick.created_at.desc(),
+        DownloadSchedulerTick.id.desc(),
+    ).limit(bounded_keep)
+    result = await db.execute(delete(DownloadSchedulerTick).where(DownloadSchedulerTick.id.not_in(keep_ids)))
+    await db.commit()
+    return SchedulerTickPruneResult(
+        kind="download_worker_scheduler_ticks",
+        deleted=result.rowcount or 0,
+        keep_latest=bounded_keep,
+    )
 
 
 def _binary_health(*, name: str, command: str) -> BinaryHealth:

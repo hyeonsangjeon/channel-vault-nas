@@ -106,6 +106,14 @@ class MetadataSyncTickRead(BaseModel):
     created_at: datetime
 
 
+class SchedulerTickPruneResult(BaseModel):
+    """Result of trimming persisted scheduler tick telemetry rows."""
+
+    kind: str
+    deleted: int
+    keep_latest: int
+
+
 class RuntimeEnvOverride(BaseModel):
     """Managed runtime env override persisted for the next restart."""
 

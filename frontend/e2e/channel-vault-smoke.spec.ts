@@ -138,8 +138,83 @@ test("registration command bar can probe and commit without external YouTube cal
 
 test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired", async ({ page }, testInfo) => {
   const errors = watchBrowserErrors(page);
+  let globalWorkerPlanOverride = false;
+  const enabledGlobalWorkerPlan = {
+    enabled: true,
+    dry_run: true,
+    channel_id: null,
+    limit: 5,
+    queued_count: 2,
+    claimable_count: 1,
+    running_count: 0,
+    locked_reason: null,
+    running_jobs: [],
+    jobs: [
+      {
+        job: {
+          id: 700,
+          video_id: 2,
+          video_external_id: "newArchive02",
+          video_title: "Scheduler found this first",
+          channel_id: 1,
+          channel_title: "Signal Lab",
+          status: "queued",
+          progress: 0,
+          quality: "1080p",
+          priority: 95,
+          preflight_status: "ready",
+          estimated_bytes: 715000000,
+          preflight_checked_at: new Date().toISOString(),
+          error_message: null,
+          attempt_count: 0,
+          archive_path: "channels/@signalvaultlab/2026/Scheduler found this first [newArchive02]",
+          started_at: null,
+          completed_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        archive_dir: "archive/channels/@signalvaultlab/2026/Scheduler found this first [newArchive02]",
+        output_template: "video.%(ext)s",
+        command_preview: "yt-dlp --no-overwrites -f 1080p https://www.youtube.com/watch?v=newArchive02",
+        status_note: "ready for confirmation",
+      },
+    ],
+  };
+
+  await page.route("**/api/jobs/downloads/worker/plan?limit=5", async (route) => {
+    if (!globalWorkerPlanOverride) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(enabledGlobalWorkerPlan) });
+  });
 
   await openKoreanVault(page);
+  await page.getByRole("button", { name: "큐", exact: true }).click();
+  const queueConsole = page.getByLabel("전체 큐 관제");
+  await expect(queueConsole).toBeVisible();
+  await expect(queueConsole.getByRole("button", { name: "큐 새로고침" })).toBeVisible();
+  await expect(queueConsole.getByRole("button", { name: "대기 5개 실행" })).toBeDisabled();
+  globalWorkerPlanOverride = true;
+  await queueConsole.getByRole("button", { name: "큐 새로고침" }).click();
+  await expect(queueConsole.getByRole("button", { name: "대기 5개 실행" })).toBeEnabled();
+  await queueConsole.getByRole("button", { name: "대기 5개 실행" }).click();
+  const queueConfirm = page.getByLabel("전역 큐 실행 확인");
+  await expect(queueConfirm).toBeVisible();
+  await expect(queueConfirm).toContainText("명령 미리보기");
+  await expect(queueConfirm).toContainText("Scheduler found this first");
+  await queueConfirm.getByRole("button", { name: "취소" }).click();
+  globalWorkerPlanOverride = false;
+  await expect(queueConsole.getByLabel("채널 필터")).toBeVisible();
+  await expect(queueConsole.locator(".queue-console-row").first()).toBeVisible();
+  await queueConsole.locator(".queue-console-row").first().getByRole("button", { name: "작업 상세 열기" }).click();
+  await expect(queueConsole.getByText("Worker 실행 계획")).toBeVisible();
+  await expect(queueConsole.getByText("인덱스된 파일")).toBeVisible();
+  await expect(queueConsole.getByText("최근 작업 로그")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("queue-console.png"), fullPage: true });
+  await page.getByRole("button", { name: "대시보드", exact: true }).click();
+  await expect(queueConsole).toBeHidden();
+
   await page.screenshot({ path: testInfo.outputPath("runtime-console.png"), fullPage: true });
   await page.getByRole("button", { name: "Env 가이드" }).click();
   const runtimeGuide = page.getByLabel("런타임 env 매니페스트");
@@ -163,6 +238,11 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(schedulerDrawer.getByText("interval seconds")).toBeVisible();
   await schedulerDrawer.getByRole("button", { name: "JSON 복사" }).click();
   await expect(schedulerDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
+  const schedulerExport = page.waitForEvent("download");
+  await schedulerDrawer.getByRole("button", { name: "NDJSON" }).click();
+  expect((await schedulerExport).suggestedFilename()).toContain("download-scheduler-ticks");
+  await expect(schedulerDrawer.getByRole("button", { name: "CSV" })).toBeVisible();
+  await expect(schedulerDrawer.getByRole("button", { name: "보존 정리" })).toBeVisible();
   await schedulerDrawer.getByRole("button", { name: "필터 초기화" }).click();
   await expect(schedulerDrawer.locator(".worker-history-filters").getByRole("button", { name: "전체" })).toHaveClass(/active/);
   await expect(schedulerDrawer.locator(".scheduler-tick-list.expanded")).toContainText("#");
@@ -177,6 +257,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("1");
   await metadataDrawer.getByRole("button", { name: "JSON 복사" }).click();
   await expect(metadataDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
+  await expect(metadataDrawer.getByRole("button", { name: "NDJSON" })).toBeVisible();
+  await expect(metadataDrawer.getByRole("button", { name: "CSV" })).toBeVisible();
+  await expect(metadataDrawer.getByRole("button", { name: "보존 정리" })).toBeVisible();
   await metadataDrawer.getByRole("button", { name: "필터 초기화" }).click();
   await expect(metadataDrawer.locator(".worker-history-filters").getByRole("button", { name: "전체" })).toHaveClass(/active/);
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("#");
@@ -213,14 +296,46 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.locator(".storage-extension-rail").first()).toContainText(".mp4");
   await expect(page.locator(".storage-scan-grid").first()).toContainText("미인덱스 미디어");
   await expect(page.getByText("드리프트 대응")).toBeVisible();
-  await expect(page.getByRole("button", { name: "인덱스 복구" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "인덱스 복구" }).first()).toBeVisible();
+  const storageDriftList = page.getByLabel("인덱스 드리프트");
+  if ((await storageDriftList.count()) > 0) {
+    await expect(storageDriftList.first()).toContainText("미인덱스 미디어");
+    await storageDriftList.first().getByRole("button", { name: "인덱스 복구" }).first().click();
+    const driftPreview = page.getByLabel("드리프트 작업 미리보기");
+    await expect(driftPreview).toBeVisible();
+    await expect(driftPreview).toContainText("예정 변경");
+    await expect(driftPreview).toContainText("Sidecar 구성");
+    await driftPreview.getByRole("button", { name: "취소" }).click();
+  }
   await expect(page.locator(".storage-tree-panel").first()).toContainText("@signalvaultlab");
   await expect(page.locator(".storage-orphan-list").first()).toContainText("video.ko.srt");
+  await page.locator(".storage-orphan-list").first().getByRole("button", { name: "격리 계획" }).first().click();
+  const orphanQuarantine = page.getByLabel("Orphan sidecar 격리");
+  await expect(orphanQuarantine).toBeVisible();
+  await expect(orphanQuarantine).toContainText(".channel-vault-quarantine");
+  await orphanQuarantine.getByRole("button", { name: "취소" }).click();
   await page.getByLabel("Orphan 종류 필터").getByRole("button", { name: "subtitle" }).click();
   await expect(page.getByLabel("Orphan sidecar 목록")).toContainText("subtitle");
   const storageTriage = page.getByLabel("Storage triage console");
   await expect(storageTriage).toContainText("청소 후보");
+  await storageTriage.getByRole("button", { name: "격리 보관함" }).click();
+  const quarantineVault = page.getByLabel("Sidecar 격리 보관함");
+  await expect(quarantineVault).toBeVisible();
+  await expect(quarantineVault).toContainText("restorable-sidecar");
+  await expect(quarantineVault).toContainText("보관 기간");
+  const quarantineExport = page.waitForEvent("download");
+  await quarantineVault.getByRole("button", { name: "CSV" }).click();
+  expect((await quarantineExport).suggestedFilename()).toContain("storage-quarantine");
+  await expect(quarantineVault.getByRole("button", { name: "NDJSON" })).toBeVisible();
+  await quarantineVault.getByRole("button", { name: "복원 계획" }).click();
+  await expect(quarantineVault).toContainText("channels/@signalvaultlab [UC_CVN_E2E]/2026/restorable-sidecar/video.en.srt");
+  await quarantineVault.getByRole("button", { name: "닫기" }).last().click();
   await storageTriage.getByRole("button", { name: "Sidecar 누락 보기" }).click();
+  await storageTriage.getByRole("button", { name: "보고서 복사" }).click();
+  await expect(storageTriage.getByRole("button", { name: "복사됨" })).toBeVisible();
+  const storageExport = page.waitForEvent("download");
+  await storageTriage.getByRole("button", { name: "CSV 저장" }).click();
+  expect((await storageExport).suggestedFilename()).toContain("storage-scan");
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("아무거나");
   await expect(page.getByText("Queue calibration pass").first()).toBeVisible();
   await expect(page.getByText("Golden hour archive").first()).toBeVisible();
@@ -297,6 +412,22 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.getByRole("button", { name: "선택 큐 등록" }).click();
   const bulkPayload = (await (await bulkResponse).json()) as { updated: number };
   expect(bulkPayload.updated).toBe(2);
+
+  await page.getByRole("button", { name: "로그 보기" }).click();
+  const eventLog = page.getByLabel("운영 이벤트 로그");
+  await expect(eventLog).toBeVisible();
+  await expect(eventLog.getByRole("button", { name: "다운로드" })).toBeVisible();
+  await expect(eventLog.getByRole("button", { name: "스토리지" })).toBeVisible();
+  await eventLog.getByRole("button", { name: "다운로드" }).click();
+  await expect(eventLog.locator(".event-log-card").first()).toBeVisible();
+  await expect(eventLog).toContainText("download.");
+  const eventExport = page.waitForEvent("download");
+  await eventLog.getByRole("button", { name: "CSV" }).click();
+  expect((await eventExport).suggestedFilename()).toContain("archive-event-log");
+  await expect(eventLog.getByRole("button", { name: "NDJSON" })).toBeVisible();
+  await expect(eventLog.getByRole("button", { name: "보존 정리" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("event-log.png"), fullPage: true });
+  await eventLog.getByRole("button", { name: "닫기" }).click();
 
   const rescanResponse = page.waitForResponse(
     (response) => response.url().endsWith("/api/library/_rescan/apply") && response.request().method() === "POST",

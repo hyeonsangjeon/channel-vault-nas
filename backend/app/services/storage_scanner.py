@@ -27,6 +27,8 @@ from app.services.archive_rescan import (
     THUMBNAIL_EXTENSIONS,
 )
 
+QUARANTINE_DIR_NAME = ".channel-vault-quarantine"
+
 
 @dataclass
 class FolderStat:
@@ -74,6 +76,8 @@ def build_storage_scan(download_dir: str | Path, indexed_media_paths: set[str] |
     file_size_by_relative: dict[str, int] = {}
     dir_count = 0
     for path in root.rglob("*"):
+        if QUARANTINE_DIR_NAME in path.relative_to(root).parts:
+            continue
         if path.is_dir():
             dir_count += 1
             continue
@@ -145,6 +149,71 @@ def build_storage_scan(download_dir: str | Path, indexed_media_paths: set[str] |
         drift=_drift_read(media_paths=media_paths, indexed_paths=indexed_paths),
         warnings=warnings,
     )
+
+
+def storage_scan_export_rows(scan: StorageScanRead) -> list[dict[str, object]]:
+    """Flatten a storage scan into operator-friendly audit export rows."""
+    return [
+        {
+            "section": "volume",
+            "scanned_at": scan.scanned_at.isoformat(),
+            "root": scan.volume.root,
+            "archive_bytes": scan.volume.archive_bytes,
+            "archive_label": scan.volume.archive_label,
+            "pressure_percent": scan.volume.pressure_percent,
+            "file_count": scan.volume.file_count,
+            "dir_count": scan.volume.dir_count,
+            "warnings": len(scan.warnings),
+        },
+        *[
+            {
+                "section": "channel",
+                "relative_path": channel.relative_path,
+                "title": channel.title,
+                "bytes": channel.bytes,
+                "label": channel.label,
+                "file_count": channel.file_count,
+                "media_count": channel.media_count,
+                "sidecar_count": channel.sidecar_count,
+                "orphan_sidecar_count": channel.orphan_sidecar_count,
+                "video_folder_count": channel.video_folder_count,
+                "pressure_score": channel.pressure_score,
+            }
+            for channel in scan.channels
+        ],
+        *[
+            {
+                "section": "extension",
+                "extension": extension.extension,
+                "bytes": extension.bytes,
+                "label": extension.label,
+                "count": extension.count,
+            }
+            for extension in scan.top_extensions
+        ],
+        *[
+            {
+                "section": "orphan_sidecar",
+                "relative_path": sidecar.relative_path,
+                "kind": sidecar.kind,
+                "size_bytes": sidecar.size_bytes,
+                "label": sidecar.label,
+                "reason": sidecar.reason,
+            }
+            for sidecar in scan.orphan_sidecars
+        ],
+        *[
+            {
+                "section": "drift",
+                "drift_kind": item.kind,
+                "relative_path": item.relative_path,
+                "label": item.label,
+                "reason": item.reason,
+            }
+            for item in [*scan.drift.unindexed_media, *scan.drift.indexed_missing]
+        ],
+        *[{"section": "warning", "warning": warning} for warning in scan.warnings],
+    ]
 
 
 def _volume(*, root: Path, archive_bytes: int, file_count: int, dir_count: int, exists: bool) -> StorageVolumeRead:

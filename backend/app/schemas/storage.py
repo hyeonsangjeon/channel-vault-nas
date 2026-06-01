@@ -2,7 +2,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.library import RescanApplyResult
 
 
 class StorageVolumeRead(BaseModel):
@@ -97,3 +99,87 @@ class StorageScanRead(BaseModel):
     folder_tree: list[StorageFolderNodeRead]
     drift: StorageDriftRead
     warnings: list[str]
+
+
+class StorageDriftActionRequest(BaseModel):
+    """Request to resolve one storage drift item without deleting archive files."""
+
+    relative_path: str = Field(min_length=1, max_length=2000)
+    dry_run: bool = False
+
+
+class StorageDriftActionResult(BaseModel):
+    """Result of a storage drift recovery or stale-index cleanup action."""
+
+    action: str
+    relative_path: str
+    applied: bool
+    dry_run: bool
+    deleted_media_files: int = 0
+    planned_media_files: int = 0
+    planned_info_json: int = 0
+    planned_subtitles: int = 0
+    planned_thumbnails: int = 0
+    planned_nfo: int = 0
+    rescan: RescanApplyResult | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class StorageOrphanActionRequest(BaseModel):
+    """Request to preview or apply a safe orphan-sidecar quarantine move."""
+
+    relative_path: str = Field(min_length=1, max_length=2000)
+    dry_run: bool = True
+
+
+class StorageOrphanQuarantineResult(BaseModel):
+    """Result of moving one orphan sidecar into the archive quarantine folder."""
+
+    action: str
+    relative_path: str
+    applied: bool
+    dry_run: bool
+    destination_relative_path: str | None = None
+    size_bytes: int = 0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class StorageQuarantineItemRead(BaseModel):
+    """One sidecar currently stored under the hidden quarantine folder."""
+
+    relative_path: str
+    original_relative_path: str
+    kind: str
+    size_bytes: int
+    label: str
+    quarantined_at: datetime | None = None
+    restore_blocked_reason: str | None = None
+
+
+class StorageQuarantineListRead(BaseModel):
+    """Quarantined sidecars available for inspection or restore."""
+
+    count: int
+    total_bytes: int
+    total_label: str
+    items: list[StorageQuarantineItemRead]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class StorageQuarantineRestoreRequest(BaseModel):
+    """Request to preview or apply a quarantined sidecar restore."""
+
+    quarantine_relative_path: str = Field(min_length=1, max_length=2400)
+    dry_run: bool = True
+
+
+class StorageQuarantineRestoreResult(BaseModel):
+    """Result of restoring one quarantined sidecar back to its original path."""
+
+    action: str
+    quarantine_relative_path: str
+    destination_relative_path: str | None = None
+    applied: bool
+    dry_run: bool
+    size_bytes: int = 0
+    warnings: list[str] = Field(default_factory=list)
