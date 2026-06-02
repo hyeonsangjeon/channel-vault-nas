@@ -247,6 +247,28 @@ class ArchiveEventLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class StoragePressureSnapshot(Base):
+    """Point-in-time NAS archive storage pressure snapshot."""
+
+    __tablename__ = "storage_pressure_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    root: Mapped[str] = mapped_column(Text)
+    archive_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    used_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    free_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    total_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    pressure_percent: Mapped[float] = mapped_column(Float, default=0.0)
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    dir_count: Mapped[int] = mapped_column(Integer, default=0)
+    channel_count: Mapped[int] = mapped_column(Integer, default=0)
+    orphan_sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
+    unindexed_media_count: Mapped[int] = mapped_column(Integer, default=0)
+    indexed_missing_count: Mapped[int] = mapped_column(Integer, default=0)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+
 class LibraryView(Base):
     """User-saved reusable library filter view."""
 

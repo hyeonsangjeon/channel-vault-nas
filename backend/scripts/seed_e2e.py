@@ -58,6 +58,7 @@ async def seed() -> None:
         LibraryView,
         MediaFile,
         MetadataSyncTick,
+        StoragePressureSnapshot,
         SyncJob,
         Video,
     )
@@ -111,6 +112,14 @@ async def seed() -> None:
         "1\n00:00:00,000 --> 00:00:01,000\nRestorable subtitle\n",
         encoding="utf-8",
     )
+    old_quarantine_dir = (
+        archive_root
+        / ".channel-vault-quarantine"
+        / "20260401-000000-000000"
+        / "channels/@signalvaultlab [UC_CVN_E2E]/2026/old-held-sidecar"
+    )
+    old_quarantine_dir.mkdir(parents=True, exist_ok=True)
+    (old_quarantine_dir / "video.nfo").write_text("<episodedetails>old held sidecar</episodedetails>", encoding="utf-8")
 
     async with Session() as session:
         channel = Channel(
@@ -386,6 +395,32 @@ async def seed() -> None:
                 created_at=now - timedelta(days=1),
                 updated_at=now - timedelta(days=1),
             )
+        )
+        pressure_points = [
+            (now - timedelta(days=7), 4_800, 61.2, 410_000_000_000),
+            (now - timedelta(days=3), 5_900, 61.4, 408_000_000_000),
+            (now - timedelta(hours=3), 6_200, 61.5, 407_000_000_000),
+        ]
+        session.add_all(
+            [
+                StoragePressureSnapshot(
+                    root=str(archive_root),
+                    archive_bytes=archive_bytes,
+                    used_bytes=612_000_000_000 + archive_bytes,
+                    free_bytes=free_bytes,
+                    total_bytes=1_000_000_000_000,
+                    pressure_percent=pressure_percent,
+                    file_count=18 + index,
+                    dir_count=11 + index,
+                    channel_count=2,
+                    orphan_sidecar_count=1,
+                    unindexed_media_count=1,
+                    indexed_missing_count=0,
+                    scanned_at=scanned_at,
+                    created_at=scanned_at,
+                )
+                for index, (scanned_at, archive_bytes, pressure_percent, free_bytes) in enumerate(pressure_points)
+            ]
         )
         await session.commit()
 

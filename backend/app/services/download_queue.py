@@ -260,8 +260,13 @@ async def build_queue_preflight_plan(
     if launchable:
         now = datetime.now(UTC)
         rows = await _download_job_rows(db, [job.id for job in launchable])
+        status_by_id = {job.id: "review" if job.id in review_job_ids else "ready" for job in launchable}
+        for plan_job in launchable:
+            plan_job.preflight_status = status_by_id[plan_job.id]
+            plan_job.preflight_checked_at = now
+            plan_job.estimated_bytes = plan_job.estimated_bytes or _estimate_job_bytes(plan_job.quality)
         for job, _video, _channel in rows:
-            job.preflight_status = "review" if job.id in review_job_ids else "ready"
+            job.preflight_status = status_by_id[job.id]
             job.preflight_checked_at = now
             job.estimated_bytes = job.estimated_bytes or _estimate_job_bytes(job.quality)
         await event_bus.publish(

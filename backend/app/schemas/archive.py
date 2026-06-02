@@ -77,3 +77,35 @@ class ImportSource(BaseModel):
     description: str
     trust_level: str
     status: str
+
+
+class ArchiveTxtPreviewRequest(BaseModel):
+    """Raw youtube-dl/yt-dlp archive.txt content to compare with the DB index."""
+
+    content: str
+    channel_id: int | None = None
+
+
+class ArchiveTxtPreviewItem(BaseModel):
+    """One parsed archive.txt row and its local archive state."""
+
+    line_number: int
+    raw: str
+    video_external_id: str | None
+    state: str
+    title: str | None = None
+    channel_title: str | None = None
+    reason: str
+
+
+class ArchiveTxtPreviewResult(BaseModel):
+    """Summary of archive.txt IDs compared with the current vault index."""
+
+    total_lines: int
+    parsed_count: int
+    archived_count: int
+    known_missing_count: int
+    unknown_count: int
+    duplicate_count: int
+    invalid_count: int
+    items: list[ArchiveTxtPreviewItem]

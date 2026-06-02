@@ -29,6 +29,9 @@ async function openKoreanVault(page: Page) {
   });
   await page.goto("/");
   await expect(page.getByText("Signal Lab").first()).toBeVisible();
+  const opsBoard = page.getByLabel("오늘의 아카이브 미션");
+  await expect(opsBoard).toContainText("준비도");
+  await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
   await expect(page.getByText("런타임 설정")).toBeVisible();
   await expect(page.locator(".runtime-card").filter({ hasText: "300s 간격" })).toContainText("스케줄러 비활성");
   await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("메타데이터 스케줄러 비활성");
@@ -127,7 +130,7 @@ test("registration command bar can probe and commit without external YouTube cal
 
   await openKoreanVault(page);
   await page.getByLabel("채널 URL 또는 ID").fill("https://www.youtube.com/@e2evault");
-  await page.getByRole("button", { name: "미리보기" }).click();
+  await page.getByRole("button", { name: "미리보기", exact: true }).click();
   await expect(page.getByText("E2E Vault Signal").first()).toBeVisible();
   await page.getByRole("button", { name: "점화하기" }).click();
   await expect(page.getByRole("button", { name: "등록 완료" })).toBeVisible();
@@ -190,6 +193,12 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   });
 
   await openKoreanVault(page);
+  const opsStorageAction = page.getByLabel("오늘의 아카이브 미션").getByRole("button", { name: "스캔 열기" }).first();
+  if ((await opsStorageAction.count()) > 0) {
+    await opsStorageAction.click();
+    await expect(page.locator(".storage-panel")).toBeVisible();
+    await page.getByRole("button", { name: "대시보드", exact: true }).click();
+  }
   await page.getByRole("button", { name: "큐", exact: true }).click();
   const queueConsole = page.getByLabel("전체 큐 관제");
   await expect(queueConsole).toBeVisible();
@@ -292,6 +301,10 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   expect((await (await intervalPatch).json()).sync_interval_minutes).toBe(120);
   await expect(page.getByText("120분 간격")).toBeVisible();
   await expect(page.getByText("아카이브 루트").first()).toBeVisible();
+  const storageTrend = page.getByLabel("스토리지 추세", { exact: true });
+  await expect(storageTrend).toContainText("최근 스냅샷");
+  await storageTrend.getByRole("button", { name: "스냅샷 저장" }).click();
+  await expect(storageTrend.getByRole("button", { name: "저장됨" })).toBeVisible();
   await expect(page.getByText("실제 저장소 트리").first()).toBeVisible();
   await expect(page.locator(".storage-extension-rail").first()).toContainText(".mp4");
   await expect(page.locator(".storage-scan-grid").first()).toContainText("미인덱스 미디어");
@@ -323,11 +336,20 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(quarantineVault).toBeVisible();
   await expect(quarantineVault).toContainText("restorable-sidecar");
   await expect(quarantineVault).toContainText("보관 기간");
+  await expect(quarantineVault).toContainText("오래된 격리 파일 삭제");
+  await quarantineVault.getByRole("button", { name: "삭제 계획" }).click();
+  await expect(quarantineVault).toContainText("삭제 후보");
+  await expect(quarantineVault).toContainText("old-held-sidecar");
+  await expect(quarantineVault.getByRole("button", { name: "영구 삭제" })).toBeDisabled();
   const quarantineExport = page.waitForEvent("download");
   await quarantineVault.getByRole("button", { name: "CSV" }).click();
   expect((await quarantineExport).suggestedFilename()).toContain("storage-quarantine");
   await expect(quarantineVault.getByRole("button", { name: "NDJSON" })).toBeVisible();
-  await quarantineVault.getByRole("button", { name: "복원 계획" }).click();
+  await quarantineVault
+    .locator(".storage-quarantine-list article")
+    .filter({ hasText: "restorable-sidecar" })
+    .getByRole("button", { name: "복원 계획" })
+    .click();
   await expect(quarantineVault).toContainText("channels/@signalvaultlab [UC_CVN_E2E]/2026/restorable-sidecar/video.en.srt");
   await quarantineVault.getByRole("button", { name: "닫기" }).last().click();
   await storageTriage.getByRole("button", { name: "Sidecar 누락 보기" }).click();
@@ -336,6 +358,13 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const storageExport = page.waitForEvent("download");
   await storageTriage.getByRole("button", { name: "CSV 저장" }).click();
   expect((await storageExport).suggestedFilename()).toContain("storage-scan");
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "라이브러리" }).click();
+  const channelStorageLens = page.getByLabel("채널 NAS 발자국");
+  await expect(channelStorageLens).toBeVisible();
+  await expect(channelStorageLens).toContainText("아카이브 점유");
+  await expect(channelStorageLens).toContainText("미디어");
+  await channelStorageLens.getByRole("button", { name: "경로 복사" }).click();
+  await expect(channelStorageLens.getByRole("button", { name: "복사됨" })).toBeVisible();
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("아무거나");
   await expect(page.getByText("Queue calibration pass").first()).toBeVisible();
   await expect(page.getByText("Golden hour archive").first()).toBeVisible();
@@ -429,6 +458,15 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.screenshot({ path: testInfo.outputPath("event-log.png"), fullPage: true });
   await eventLog.getByRole("button", { name: "닫기" }).click();
 
+  const archivePathway = page.getByLabel("새 영상 확인, 기존 영상 스킵, 큐 진행 보기");
+  await expect(archivePathway).toContainText("스킵 장부");
+  await expect(archivePathway).toContainText("큐 런웨이");
+  const archiveTxtConsole = page.getByLabel("archive.txt 스킵 장부");
+  await expect(archiveTxtConsole).toBeVisible();
+  await archiveTxtConsole.getByRole("button", { name: "스킵 미리보기" }).click();
+  await expect(archiveTxtConsole).toContainText("볼트 신규");
+  await expect(archiveTxtConsole).toContainText("중복");
+  await expect(archiveTxtConsole).toContainText("새 항목");
   const rescanResponse = page.waitForResponse(
     (response) => response.url().endsWith("/api/library/_rescan/apply") && response.request().method() === "POST",
   );

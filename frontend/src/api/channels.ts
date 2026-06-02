@@ -377,6 +377,45 @@ export type DashboardSnapshot = {
   }[];
 };
 
+export type OperationSeverity = "critical" | "warning" | "info" | "good";
+export type OperationStatus = "blocked" | "action" | "watch" | "done";
+export type OperationActionKind =
+  | "register"
+  | "storage"
+  | "snapshot"
+  | "runtime"
+  | "downloads"
+  | "library"
+  | "refresh"
+  | "none";
+
+export type OperationMetric = {
+  key: string;
+  value: string;
+  raw_value: number | null;
+  tone: OperationSeverity;
+};
+
+export type OperationMission = {
+  id: string;
+  severity: OperationSeverity;
+  status: OperationStatus;
+  action_kind: OperationActionKind;
+  count: number;
+  primary_value: string;
+  secondary_value: string;
+  resolved: boolean;
+};
+
+export type OperationsReadiness = {
+  generated_at: string;
+  score: number;
+  stage: "setup" | "attention" | "ready" | "excellent" | string;
+  metrics: OperationMetric[];
+  missions: OperationMission[];
+  warnings: string[];
+};
+
 export type LibraryFidelity = {
   info_json: boolean;
   media: boolean;
@@ -659,6 +698,27 @@ export type RescanApplyResult = {
   warnings: string[];
 };
 
+export type ArchiveTxtPreviewItem = {
+  line_number: number;
+  raw: string;
+  video_external_id: string | null;
+  state: "archived" | "known_missing" | "unknown" | "duplicate" | "invalid" | string;
+  title: string | null;
+  channel_title: string | null;
+  reason: string;
+};
+
+export type ArchiveTxtPreviewResult = {
+  total_lines: number;
+  parsed_count: number;
+  archived_count: number;
+  known_missing_count: number;
+  unknown_count: number;
+  duplicate_count: number;
+  invalid_count: number;
+  items: ArchiveTxtPreviewItem[];
+};
+
 export type StorageVolume = {
   root: string;
   exists: boolean;
@@ -741,6 +801,24 @@ export type StorageQuarantineRestoreResult = {
   warnings: string[];
 };
 
+export type StorageQuarantinePurgeResult = {
+  action: string;
+  applied: boolean;
+  dry_run: boolean;
+  min_age_days: number;
+  cutoff_at: string;
+  required_confirmation: string;
+  candidate_count: number;
+  retained_count: number;
+  planned_bytes: number;
+  planned_label: string;
+  deleted_files: number;
+  deleted_bytes: number;
+  deleted_label: string;
+  items: StorageQuarantineItem[];
+  warnings: string[];
+};
+
 export type StorageFolderNode = {
   relative_path: string;
   name: string;
@@ -788,6 +866,42 @@ export type StorageScan = {
   folder_tree: StorageFolderNode[];
   drift: StorageDrift;
   warnings: string[];
+};
+
+export type StoragePressureSnapshot = {
+  id: number;
+  root: string;
+  archive_bytes: number;
+  archive_label: string;
+  used_bytes: number;
+  used_label: string;
+  free_bytes: number;
+  free_label: string;
+  total_bytes: number;
+  total_label: string;
+  pressure_percent: number;
+  file_count: number;
+  dir_count: number;
+  channel_count: number;
+  orphan_sidecar_count: number;
+  unindexed_media_count: number;
+  indexed_missing_count: number;
+  scanned_at: string;
+  created_at: string;
+};
+
+export type StoragePressureTrend = {
+  snapshots: StoragePressureSnapshot[];
+  latest: StoragePressureSnapshot | null;
+  previous: StoragePressureSnapshot | null;
+  delta_archive_bytes: number;
+  delta_archive_label: string;
+  delta_pressure_percent: number;
+  daily_growth_bytes: number;
+  daily_growth_label: string;
+  runway_days: number | null;
+  runway_label: string;
+  warning: string | null;
 };
 
 export async function probeChannel(payload: ChannelRegistrationPayload): Promise<ChannelProbeResult> {
@@ -946,6 +1060,10 @@ export async function getDashboard(): Promise<DashboardSnapshot> {
   return getJson("/api/dashboard");
 }
 
+export async function getOperationsReadiness(): Promise<OperationsReadiness> {
+  return getJson("/api/ops/readiness");
+}
+
 export async function getLibrary(channelId?: number, query?: string, filters: LibraryFilters = {}): Promise<LibrarySnapshot> {
   const params = new URLSearchParams();
   if (typeof channelId === "number") params.set("channel_id", String(channelId));
@@ -1037,6 +1155,14 @@ export async function getStorageScan(): Promise<StorageScan> {
   return getJson("/api/storage/scan");
 }
 
+export async function getStoragePressureTrend(limit = 24): Promise<StoragePressureTrend> {
+  return getJson(`/api/storage/pressure/trend?limit=${limit}`);
+}
+
+export async function captureStoragePressureSnapshot(limit = 24): Promise<StoragePressureTrend> {
+  return postJson(`/api/storage/pressure/snapshots?limit=${limit}`, {});
+}
+
 export async function recoverUnindexedStorageDrift(relativePath: string, dryRun = false): Promise<StorageDriftActionResult> {
   return postJson("/api/storage/drift/recover-unindexed", { relative_path: relativePath, dry_run: dryRun });
 }
@@ -1066,8 +1192,24 @@ export async function restoreStorageOrphanSidecar(
   });
 }
 
+export async function purgeStorageOrphanQuarantine(
+  minAgeDays: number,
+  dryRun = true,
+  confirmText = "",
+): Promise<StorageQuarantinePurgeResult> {
+  return postJson("/api/storage/orphans/quarantine/purge", {
+    min_age_days: minAgeDays,
+    dry_run: dryRun,
+    confirm_text: confirmText,
+  });
+}
+
 export async function applyLibraryRescan(): Promise<RescanApplyResult> {
   return postJson("/api/library/_rescan/apply", {});
+}
+
+export async function previewArchiveTxt(content: string, channelId?: number | null): Promise<ArchiveTxtPreviewResult> {
+  return postJson("/api/imports/archive-txt/preview", { content, channel_id: channelId ?? null });
 }
 
 async function getJson<T>(path: string): Promise<T> {
