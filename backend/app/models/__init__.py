@@ -10,6 +10,7 @@ from app.models.archive import (
     LibraryView,
     MediaFile,
     MetadataSyncTick,
+    StoragePressureSnapshot,
     SyncJob,
     Video,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "LibraryView",
     "MediaFile",
     "MetadataSyncTick",
+    "StoragePressureSnapshot",
     "SyncJob",
     "Video",
 ]

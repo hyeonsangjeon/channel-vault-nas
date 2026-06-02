@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.schemas.storage import (
     StorageOrphanQuarantineResult,
     StorageQuarantineItemRead,
     StorageQuarantineListRead,
+    StorageQuarantinePurgeResult,
     StorageQuarantineRestoreResult,
 )
 from app.services.archive_rescan import (
@@ -21,6 +22,8 @@ from app.services.archive_rescan import (
 )
 from app.services.event_bus import event_bus
 from app.services.storage_scanner import QUARANTINE_DIR_NAME
+
+QUARANTINE_PURGE_CONFIRMATION = "PURGE QUARANTINE"
 
 
 async def quarantine_orphan_sidecar(
@@ -217,6 +220,114 @@ async def restore_quarantined_sidecar(
     )
 
 
+async def purge_quarantined_sidecars(
+    *,
+    download_dir: str | Path,
+    min_age_days: int = 30,
+    dry_run: bool = True,
+    confirm_text: str = "",
+    now: datetime | None = None,
+) -> StorageQuarantinePurgeResult:
+    """Preview or permanently delete old sidecars from the hidden quarantine folder."""
+    root = Path(download_dir).expanduser().resolve()
+    current_time = now or datetime.now(UTC)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=UTC)
+    cutoff_at = current_time - timedelta(days=min_age_days)
+    candidates: list[StorageQuarantineItemRead] = []
+    warnings: list[str] = []
+    retained_count = 0
+    planned_bytes = 0
+
+    quarantine_root = root / QUARANTINE_DIR_NAME
+    if quarantine_root.exists():
+        for path in sorted(quarantine_root.rglob("*")):
+            if not path.is_file() or not _is_sidecar(path):
+                continue
+            item, item_warnings = _quarantine_item_from_path(path=path, root=root)
+            warnings.extend(item_warnings)
+            if item is None:
+                retained_count += 1
+                continue
+            if item.quarantined_at is None:
+                retained_count += 1
+                if len(warnings) < 8:
+                    warnings.append(f"{item.relative_path} has no parseable quarantine timestamp")
+                continue
+            if item.quarantined_at <= cutoff_at:
+                candidates.append(item)
+                planned_bytes += item.size_bytes
+            else:
+                retained_count += 1
+
+    if dry_run:
+        return _purge_result(
+            dry_run=True,
+            min_age_days=min_age_days,
+            cutoff_at=cutoff_at,
+            candidate_count=len(candidates),
+            retained_count=retained_count,
+            planned_bytes=planned_bytes,
+            items=candidates,
+            warnings=warnings,
+        )
+
+    if confirm_text != QUARANTINE_PURGE_CONFIRMATION:
+        return _purge_result(
+            dry_run=False,
+            min_age_days=min_age_days,
+            cutoff_at=cutoff_at,
+            candidate_count=len(candidates),
+            retained_count=retained_count,
+            planned_bytes=planned_bytes,
+            items=candidates,
+            warnings=[f'type "{QUARANTINE_PURGE_CONFIRMATION}" to purge old quarantine files', *warnings],
+        )
+
+    deleted_files = 0
+    deleted_bytes = 0
+    for item in candidates:
+        path = (root / item.relative_path).resolve()
+        try:
+            path.relative_to(quarantine_root)
+        except ValueError:
+            warnings.append(f"{item.relative_path} is outside quarantine; skipped")
+            continue
+        try:
+            path.unlink()
+        except OSError as exc:
+            warnings.append(f"cannot delete {item.relative_path}: {exc}")
+            continue
+        deleted_files += 1
+        deleted_bytes += item.size_bytes
+        _remove_empty_quarantine_parents(path.parent, stop=quarantine_root)
+
+    if deleted_files:
+        await event_bus.publish(
+            "storage.orphan.purged",
+            {
+                "min_age_days": min_age_days,
+                "cutoff_at": cutoff_at.isoformat(),
+                "candidate_count": len(candidates),
+                "deleted_files": deleted_files,
+                "deleted_bytes": deleted_bytes,
+            },
+        )
+
+    return _purge_result(
+        dry_run=False,
+        min_age_days=min_age_days,
+        cutoff_at=cutoff_at,
+        candidate_count=len(candidates),
+        retained_count=retained_count,
+        planned_bytes=planned_bytes,
+        deleted_files=deleted_files,
+        deleted_bytes=deleted_bytes,
+        items=candidates,
+        warnings=warnings,
+    )
+
+
 def _result(
     *,
     relative_path: str,
@@ -245,6 +356,38 @@ def _restore_result(
         destination_relative_path=destination_relative_path,
         applied=False,
         dry_run=dry_run,
+        warnings=warnings,
+    )
+
+
+def _purge_result(
+    *,
+    dry_run: bool,
+    min_age_days: int,
+    cutoff_at: datetime,
+    candidate_count: int,
+    retained_count: int,
+    planned_bytes: int,
+    deleted_files: int = 0,
+    deleted_bytes: int = 0,
+    items: list[StorageQuarantineItemRead],
+    warnings: list[str],
+) -> StorageQuarantinePurgeResult:
+    return StorageQuarantinePurgeResult(
+        action="purge_quarantined_sidecars",
+        applied=not dry_run and deleted_files > 0,
+        dry_run=dry_run,
+        min_age_days=min_age_days,
+        cutoff_at=cutoff_at,
+        required_confirmation=QUARANTINE_PURGE_CONFIRMATION,
+        candidate_count=candidate_count,
+        retained_count=retained_count,
+        planned_bytes=planned_bytes,
+        planned_label=_format_bytes(planned_bytes),
+        deleted_files=deleted_files,
+        deleted_bytes=deleted_bytes,
+        deleted_label=_format_bytes(deleted_bytes),
+        items=items,
         warnings=warnings,
     )
 
@@ -345,6 +488,34 @@ def _remove_empty_quarantine_parents(path: Path, *, stop: Path) -> None:
         except OSError:
             return
         path = path.parent
+
+
+def _quarantine_item_from_path(*, path: Path, root: Path) -> tuple[StorageQuarantineItemRead | None, list[str]]:
+    warnings: list[str] = []
+    try:
+        relative_path = path.relative_to(root).as_posix()
+    except ValueError:
+        return None, ["quarantine item is outside download root"]
+    original_relative_path, stamp = _original_relative_path(path=path, root=root)
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        return None, [f"cannot stat {relative_path}: {exc}"]
+    destination = root / original_relative_path if original_relative_path else None
+    return (
+        StorageQuarantineItemRead(
+            relative_path=relative_path,
+            original_relative_path=original_relative_path or "",
+            kind=_sidecar_kind(path),
+            size_bytes=size,
+            label=_format_bytes(size),
+            quarantined_at=_parse_quarantine_stamp(stamp),
+            restore_blocked_reason="restore target already exists"
+            if destination is not None and destination.exists()
+            else None,
+        ),
+        warnings,
+    )
 
 
 def _format_bytes(value: int) -> str:

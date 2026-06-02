@@ -17,18 +17,26 @@ from app.models.archive import (
     DownloadJob,
     DownloadWorkerRun,
     MediaFile,
+    StoragePressureSnapshot,
     SyncJob,
     Video,
 )
 from app.services.archive_rescan import apply_rescan_plan, apply_rescan_target, build_rescan_plan
+from app.services.event_bus import event_bus
 from app.services.library_index import list_library_files
 from app.services.media_probe import MediaProbe
 from app.services.storage_drift import prune_missing_media_index, recover_unindexed_media
 from app.services.storage_guard import backup_sqlite_database, sqlite_path_from_url
 from app.services.storage_orphans import (
+    QUARANTINE_PURGE_CONFIRMATION,
     list_quarantined_sidecars,
+    purge_quarantined_sidecars,
     quarantine_orphan_sidecar,
     restore_quarantined_sidecar,
+)
+from app.services.storage_pressure import (
+    build_storage_pressure_trend,
+    capture_storage_pressure_snapshot,
 )
 from app.services.storage_scanner import build_storage_scan, storage_scan_export_rows
 
@@ -150,6 +158,42 @@ def test_storage_scan_summarizes_real_archive_and_orphan_sidecars(tmp_path: Path
     unindexed_scan = build_storage_scan(tmp_path, indexed_media_paths=set())
     assert unindexed_scan.drift.unindexed_media_count == 1
     assert unindexed_scan.drift.unindexed_media[0].relative_path == indexed_path
+
+
+@pytest.mark.asyncio
+async def test_storage_pressure_snapshots_track_growth(tmp_path: Path) -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(StoragePressureSnapshot))
+        await session.commit()
+
+    video_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Signal clip [sig01]"
+    video_dir.mkdir(parents=True)
+    (video_dir / "video.mp4").write_bytes(b"0" * 1024)
+
+    first_scan = build_storage_scan(tmp_path)
+    first_scan.scanned_at = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
+    async with AsyncSessionLocal() as session:
+        first = await capture_storage_pressure_snapshot(db=session, scan=first_scan)
+        await session.commit()
+
+    (video_dir / "video-2.mp4").write_bytes(b"1" * 2048)
+    second_scan = build_storage_scan(tmp_path)
+    second_scan.scanned_at = datetime(2026, 6, 2, 0, 0, tzinfo=UTC)
+    async with AsyncSessionLocal() as session:
+        second = await capture_storage_pressure_snapshot(db=session, scan=second_scan)
+        trend = await build_storage_pressure_trend(db=session, limit=10)
+        await session.commit()
+
+    assert first.archive_bytes == 1024
+    assert second.archive_bytes == 3072
+    assert trend.latest is not None
+    assert trend.previous is not None
+    assert trend.delta_archive_bytes == 2048
+    assert trend.daily_growth_bytes == 2048
+    assert trend.runway_label != ""
+    assert [snapshot.id for snapshot in trend.snapshots] == [first.id, second.id]
 
 
 @pytest.mark.asyncio
@@ -357,6 +401,7 @@ async def test_storage_drift_action_endpoints_recover_and_prune_indexes(
         await session.execute(delete(DownloadWorkerRun))
         await session.execute(delete(SyncJob))
         await session.execute(delete(ChannelPolicy))
+        await session.execute(delete(StoragePressureSnapshot))
         await session.execute(delete(MediaFile))
         await session.execute(delete(Video))
         await session.execute(delete(Channel))
@@ -440,6 +485,38 @@ async def test_storage_drift_action_endpoints_recover_and_prune_indexes(
 
 
 @pytest.mark.asyncio
+async def test_storage_pressure_snapshot_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(StoragePressureSnapshot))
+        await session.commit()
+
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    video_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "Endpoint pressure [pressure01]"
+    video_dir.mkdir(parents=True)
+    (video_dir / "video.mp4").write_bytes(b"media")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        empty = await client.get("/api/storage/pressure/trend")
+        captured = await client.post("/api/storage/pressure/snapshots")
+        await event_bus.flush_persistence()
+        trend = await client.get("/api/storage/pressure/trend")
+
+    assert empty.status_code == 200
+    assert empty.json()["snapshots"] == []
+    assert captured.status_code == 200
+    assert captured.json()["latest"]["archive_bytes"] == len("media")
+    assert captured.json()["latest"]["file_count"] == 1
+    assert trend.status_code == 200
+    assert trend.json()["latest"]["archive_label"] == "5 B"
+
+
+@pytest.mark.asyncio
 async def test_storage_orphan_sidecar_quarantine_preview_and_apply(tmp_path: Path) -> None:
     orphan_dir = tmp_path / "channels" / "signal [UC_SIGNAL]" / "2026" / "subtitle-only"
     orphan_dir.mkdir(parents=True)
@@ -517,6 +594,78 @@ async def test_storage_orphan_quarantine_list_and_restore(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_storage_orphan_quarantine_purge_requires_confirmation(tmp_path: Path) -> None:
+    old_sidecar = (
+        tmp_path
+        / ".channel-vault-quarantine"
+        / "20260401-000000-000000"
+        / "channels"
+        / "signal [UC_SIGNAL]"
+        / "2026"
+        / "old-subtitle"
+        / "video.ko.srt"
+    )
+    fresh_sidecar = (
+        tmp_path
+        / ".channel-vault-quarantine"
+        / "20260530-000000-000000"
+        / "channels"
+        / "signal [UC_SIGNAL]"
+        / "2026"
+        / "fresh-subtitle"
+        / "video.ko.srt"
+    )
+    old_sidecar.parent.mkdir(parents=True)
+    fresh_sidecar.parent.mkdir(parents=True)
+    old_sidecar.write_text("old subtitle", encoding="utf-8")
+    fresh_sidecar.write_text("fresh subtitle", encoding="utf-8")
+
+    dry_run = await purge_quarantined_sidecars(
+        download_dir=tmp_path,
+        min_age_days=30,
+        dry_run=True,
+        now=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+
+    assert dry_run.applied is False
+    assert dry_run.candidate_count == 1
+    assert dry_run.retained_count == 1
+    assert dry_run.planned_bytes == len("old subtitle")
+    assert dry_run.items[0].relative_path.endswith("old-subtitle/video.ko.srt")
+    assert old_sidecar.exists() is True
+
+    blocked = await purge_quarantined_sidecars(
+        download_dir=tmp_path,
+        min_age_days=30,
+        dry_run=False,
+        confirm_text="DELETE",
+        now=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+
+    assert blocked.applied is False
+    assert blocked.deleted_files == 0
+    assert blocked.required_confirmation == QUARANTINE_PURGE_CONFIRMATION
+    assert blocked.warnings[0].startswith('type "PURGE QUARANTINE"')
+    assert old_sidecar.exists() is True
+
+    applied = await purge_quarantined_sidecars(
+        download_dir=tmp_path,
+        min_age_days=30,
+        dry_run=False,
+        confirm_text=QUARANTINE_PURGE_CONFIRMATION,
+        now=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    await event_bus.flush_persistence()
+
+    assert applied.applied is True
+    assert applied.deleted_files == 1
+    assert applied.deleted_bytes == len("old subtitle")
+    assert old_sidecar.exists() is False
+    assert fresh_sidecar.exists() is True
+    assert list_quarantined_sidecars(download_dir=tmp_path).count == 1
+
+
+@pytest.mark.asyncio
 async def test_storage_orphan_quarantine_endpoint_respects_dry_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -564,6 +713,56 @@ async def test_storage_orphan_quarantine_endpoint_respects_dry_run(
     assert restore_preview.status_code == 200
     assert restore_preview.json()["destination_relative_path"] == relative_path
     assert scan.json()["orphan_sidecars"] == []
+
+
+@pytest.mark.asyncio
+async def test_storage_orphan_quarantine_purge_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    old_sidecar = (
+        tmp_path
+        / ".channel-vault-quarantine"
+        / "20260401-000000-000000"
+        / "channels"
+        / "signal [UC_SIGNAL]"
+        / "2026"
+        / "json-only"
+        / "video.info.json"
+    )
+    old_sidecar.parent.mkdir(parents=True)
+    old_sidecar.write_text("{}", encoding="utf-8")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        dry_run = await client.post(
+            "/api/storage/orphans/quarantine/purge",
+            json={"min_age_days": 30, "dry_run": True},
+        )
+        blocked = await client.post(
+            "/api/storage/orphans/quarantine/purge",
+            json={"min_age_days": 30, "dry_run": False, "confirm_text": "DELETE"},
+        )
+        applied = await client.post(
+            "/api/storage/orphans/quarantine/purge",
+            json={"min_age_days": 30, "dry_run": False, "confirm_text": QUARANTINE_PURGE_CONFIRMATION},
+        )
+        await event_bus.flush_persistence()
+        listed = await client.get("/api/storage/orphans/quarantine")
+
+    assert dry_run.status_code == 200
+    assert dry_run.json()["candidate_count"] == 1
+    assert dry_run.json()["required_confirmation"] == QUARANTINE_PURGE_CONFIRMATION
+    assert blocked.status_code == 200
+    assert blocked.json()["applied"] is False
+    assert old_sidecar.exists() is False
+    assert applied.status_code == 200
+    assert applied.json()["applied"] is True
+    assert applied.json()["deleted_files"] == 1
+    assert listed.json()["count"] == 0
 
 
 @pytest.mark.asyncio

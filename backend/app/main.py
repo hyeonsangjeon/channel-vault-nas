@@ -17,6 +17,7 @@ from app.routers import (
     imports,
     jobs,
     library,
+    operations,
     storage,
     videos,
 )
@@ -71,6 +72,7 @@ app.include_router(dashboard.router)
 app.include_router(channels.router)
 app.include_router(imports.router)
 app.include_router(library.router)
+app.include_router(operations.router)
 app.include_router(storage.router)
 app.include_router(jobs.router)
 app.include_router(videos.router)

@@ -183,3 +183,71 @@ class StorageQuarantineRestoreResult(BaseModel):
     dry_run: bool
     size_bytes: int = 0
     warnings: list[str] = Field(default_factory=list)
+
+
+class StorageQuarantinePurgeRequest(BaseModel):
+    """Request to preview or permanently purge old quarantined sidecars."""
+
+    min_age_days: int = Field(default=30, ge=1, le=3650)
+    dry_run: bool = True
+    confirm_text: str = Field(default="", max_length=120)
+
+
+class StorageQuarantinePurgeResult(BaseModel):
+    """Dry-run or apply result for permanently deleting old quarantine files."""
+
+    action: str
+    applied: bool
+    dry_run: bool
+    min_age_days: int
+    cutoff_at: datetime
+    required_confirmation: str
+    candidate_count: int
+    retained_count: int
+    planned_bytes: int
+    planned_label: str
+    deleted_files: int = 0
+    deleted_bytes: int = 0
+    deleted_label: str = "0 MB"
+    items: list[StorageQuarantineItemRead] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class StoragePressureSnapshotRead(BaseModel):
+    """One persisted storage pressure point for trend charts."""
+
+    id: int
+    root: str
+    archive_bytes: int
+    archive_label: str
+    used_bytes: int
+    used_label: str
+    free_bytes: int
+    free_label: str
+    total_bytes: int
+    total_label: str
+    pressure_percent: float
+    file_count: int
+    dir_count: int
+    channel_count: int
+    orphan_sidecar_count: int
+    unindexed_media_count: int
+    indexed_missing_count: int
+    scanned_at: datetime
+    created_at: datetime
+
+
+class StoragePressureTrendRead(BaseModel):
+    """Storage pressure history plus growth/runway summary."""
+
+    snapshots: list[StoragePressureSnapshotRead]
+    latest: StoragePressureSnapshotRead | None = None
+    previous: StoragePressureSnapshotRead | None = None
+    delta_archive_bytes: int = 0
+    delta_archive_label: str = "0 MB"
+    delta_pressure_percent: float = 0.0
+    daily_growth_bytes: float = 0.0
+    daily_growth_label: str = "0 MB"
+    runway_days: float | None = None
+    runway_label: str
+    warning: str | None = None
