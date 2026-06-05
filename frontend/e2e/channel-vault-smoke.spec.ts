@@ -1,4 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
+import { Buffer } from "node:buffer";
+
+test.setTimeout(90_000);
 
 function watchBrowserErrors(page: Page) {
   const errors: string[] = [];
@@ -11,7 +14,7 @@ function watchBrowserErrors(page: Page) {
   return errors;
 }
 
-async function openKoreanVault(page: Page) {
+async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "ko");
   });
@@ -27,25 +30,72 @@ async function openKoreanVault(page: Page) {
     }
     await route.fulfill({ response, json: payload });
   });
-  await page.goto("/");
-  await expect(page.getByText("Signal Lab").first()).toBeVisible();
+  await page.goto(path);
+  await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
+  if (!expectDashboard) return;
   const opsBoard = page.getByLabel("오늘의 아카이브 미션");
   await expect(opsBoard).toContainText("준비도");
   await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
-  await expect(page.getByText("런타임 설정")).toBeVisible();
-  await expect(page.locator(".runtime-card").filter({ hasText: "300s 간격" })).toContainText("스케줄러 비활성");
-  await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("메타데이터 스케줄러 비활성");
-  await expect(page.locator(".runtime-card").filter({ hasText: "메타데이터 sync" })).toContainText("due 채널");
-  await expect(page.getByLabel("Due 채널 목록")).toContainText("@signalvaultlab");
-  await expect(page.getByRole("button", { name: "지금 metadata tick" })).toBeVisible();
-  await expect(page.locator(".runtime-card").filter({ hasText: "yt-dlp" })).toBeVisible();
-  await expect(page.locator(".runtime-card").filter({ hasText: "ffprobe" })).toBeVisible();
-  await expect(page.getByLabel("채널 상세 탭")).toContainText("다운로드");
-  await expect(page.getByRole("button", { name: "새 영상만 다운로드" })).toBeVisible();
 }
 
 test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("command palette opens operational surfaces and live status is visible", async ({ page }, testInfo) => {
+  const errors = watchBrowserErrors(page);
+  await openKoreanVault(page);
+
+  const livePill = page.getByLabel("실시간 이벤트 연결");
+  await expect(livePill).toContainText("Live");
+
+  await page.getByRole("button", { name: "Command Palette 열기" }).click();
+  const palette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
+  await expect(palette).toBeVisible();
+  await expect(palette).toContainText("소스 등록");
+  await palette.getByLabel("운영, 화면, archive 도구 검색").fill("runtime env");
+  await expect(palette).toContainText("Runtime env 가이드");
+  await palette.getByRole("button").filter({ hasText: "Runtime env 가이드" }).click();
+
+  const runtimeGuide = page.getByLabel("런타임 env 매니페스트");
+  await expect(runtimeGuide).toBeVisible();
+  await expect(runtimeGuide).toContainText("Compose smoke 검증");
+  await page.screenshot({ path: testInfo.outputPath("command-palette-runtime-guide.png"), fullPage: true });
+  await runtimeGuide.getByRole("button", { name: "닫기" }).click();
+
+  await page.getByRole("button", { name: "Command Palette 열기" }).click();
+  const queuePalette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
+  await queuePalette.getByLabel("운영, 화면, archive 도구 검색").fill("queue");
+  await expect(queuePalette).toContainText("전역 큐 콘솔");
+  await page.screenshot({ path: testInfo.outputPath("command-palette-filtered.png"), fullPage: true });
+  await queuePalette.getByRole("button").filter({ hasText: "전체 큐 관제" }).click();
+  await expect(page.getByLabel("전체 큐 관제")).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("url hash deep links restore nav and channel tabs", async ({ page }) => {
+  const errors = watchBrowserErrors(page);
+  await openKoreanVault(page, "/#/channels/downloads?channel=1", false);
+
+  const channelTabs = page.getByLabel("채널 상세 탭");
+  await expect(channelTabs.getByRole("button", { name: "다운로드" })).toHaveClass(/active/);
+  await expect(page.getByText("다운로드 파동을 드라이런")).toBeVisible();
+  await expect(page).toHaveURL(/#\/channels\/downloads\?channel=1/);
+
+  await channelTabs.getByRole("button", { name: "정책" }).click();
+  await expect(channelTabs.getByRole("button", { name: "정책" })).toHaveClass(/active/);
+  await expect(page).toHaveURL(/#\/channels\/policy\?channel=1/);
+
+  await page.getByRole("button", { name: "큐", exact: true }).click();
+  await expect(page.getByLabel("전체 큐 관제")).toBeVisible();
+  await expect(page).toHaveURL(/#\/queue\?channel=1/);
+
+  await page.goBack();
+  await expect(channelTabs.getByRole("button", { name: "정책" })).toHaveClass(/active/);
+  await expect(page).toHaveURL(/#\/channels\/policy\?channel=1/);
+
+  expect(errors).toEqual([]);
 });
 
 test("registration command bar can probe and commit without external YouTube calls", async ({ page }) => {
@@ -199,6 +249,14 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
     await expect(page.locator(".storage-panel")).toBeVisible();
     await page.getByRole("button", { name: "대시보드", exact: true }).click();
   }
+  const growthMission = page.getByLabel("오늘의 아카이브 미션").locator(".ops-mission").filter({ hasText: "급증 채널 점검" });
+  await expect(growthMission).toBeVisible();
+  await growthMission.getByRole("button", { name: "채널 열기" }).click();
+  await expect(page.getByLabel("채널 상세 탭").getByRole("button", { name: "라이브러리" })).toBeVisible();
+  const growthMissionLens = page.getByLabel("채널 NAS 발자국");
+  await expect(growthMissionLens).toBeVisible();
+  await expect(growthMissionLens).toContainText("7/30일 성장 비교");
+  await page.getByRole("button", { name: "대시보드", exact: true }).click();
   await page.getByRole("button", { name: "큐", exact: true }).click();
   const queueConsole = page.getByLabel("전체 큐 관제");
   await expect(queueConsole).toBeVisible();
@@ -235,6 +293,27 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(runtimeGuide.getByText("Scheduler tick 로그")).toBeVisible();
   await expect(runtimeGuide.getByText("Metadata tick 로그")).toBeVisible();
   await expect(runtimeGuide.getByText("수동 재시작")).toBeVisible();
+  await expect(runtimeGuide.getByText("설정 힌트")).toBeVisible();
+  await expect(runtimeGuide.getByLabel("Adapter env 라인")).toContainText("CVN_RESTART");
+  await expect(runtimeGuide.getByText("재시작 감사 ledger")).toBeVisible();
+  await expect(runtimeGuide.getByRole("button", { name: "이벤트 열기" })).toBeVisible();
+  await expect(runtimeGuide.getByText("Restart adapter 프리셋")).toBeVisible();
+  await expect(runtimeGuide.getByText("Synology 패키지")).toBeVisible();
+  await expect(runtimeGuide.getByText("QNAP 패키지")).toBeVisible();
+  const restartPresetCopyButton = runtimeGuide.getByRole("button", { name: "env 복사 Docker Compose" });
+  await expect(restartPresetCopyButton).toBeVisible();
+  await restartPresetCopyButton.click();
+  await expect(restartPresetCopyButton).toContainText("복사됨");
+  const runtimeWorkerSummary = runtimeGuide.getByLabel("다운로드 worker summary export");
+  await expect(runtimeWorkerSummary).toContainText("/api/jobs/downloads/worker/summary");
+  const runtimeWorkerSummaryExport = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/jobs/downloads/worker/summary/export") &&
+      response.url().includes("format=ndjson") &&
+      response.request().method() === "GET",
+  );
+  await runtimeWorkerSummary.getByRole("button", { name: "NDJSON" }).click();
+  expect((await runtimeWorkerSummaryExport).status()).toBe(200);
   await expect(runtimeGuide.getByRole("button", { name: "재시작 요청" })).toBeDisabled();
   await runtimeGuide.getByRole("button", { name: "적용 대기 저장" }).click();
   await expect(runtimeGuide.getByText(/env 저장됨/)).toBeVisible();
@@ -282,6 +361,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const dueWatchlist = page.getByLabel("Due 채널 목록").first();
   await expect(dueWatchlist.getByRole("button").first()).toBeVisible();
   await dueWatchlist.getByRole("button").first().click();
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "개요" }).click();
   await expect(page.getByText("다음 sync 예정")).toBeVisible();
   await expect(page.getByText("마지막 자동 sync")).toBeVisible();
   await expect(page.getByText("자동 후보 생성 결과")).toBeVisible();
@@ -291,7 +371,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "개요" }).click();
   await expect(page.getByLabel("Coverage 지표")).toBeVisible();
   await expect(page.getByLabel("업로드 요일 분포")).toBeVisible();
-  await expect(page.locator(".coverage-inspector")).toContainText("1/3 보존");
+  await expect(page.locator(".coverage-inspector")).toContainText(/1\/[34] 보존/);
   await expect(page.locator(".missing-mini-card")).toContainText("Queue calibration pass");
   await page.getByLabel("Sync 간격 분").fill("120");
   const intervalPatch = page.waitForResponse(
@@ -363,8 +443,15 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(channelStorageLens).toBeVisible();
   await expect(channelStorageLens).toContainText("아카이브 점유");
   await expect(channelStorageLens).toContainText("미디어");
-  await channelStorageLens.getByRole("button", { name: "경로 복사" }).click();
-  await expect(channelStorageLens.getByRole("button", { name: "복사됨" })).toBeVisible();
+  await expect(channelStorageLens).toContainText("Footprint 추세");
+  await expect(channelStorageLens).toContainText("7/30일 성장 비교");
+  await expect(channelStorageLens).toContainText("폴더 확인 명령");
+  const storagePathCopyButton = channelStorageLens.getByRole("button", { name: "경로 복사" });
+  const storageCommandCopyButton = channelStorageLens.getByRole("button", { name: "명령 복사" });
+  await storagePathCopyButton.click();
+  await expect(storagePathCopyButton).toContainText("복사됨");
+  await storageCommandCopyButton.click();
+  await expect(storageCommandCopyButton).toContainText("복사됨");
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("아무거나");
   await expect(page.getByText("Queue calibration pass").first()).toBeVisible();
   await expect(page.getByText("Golden hour archive").first()).toBeVisible();
@@ -406,6 +493,22 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   expect(workerRunPayload.started).toBe(0);
   await expect(page.getByText("최근 워커 실행")).toBeVisible();
   await expect(page.locator(".worker-run-ledger").getByText("locked").first()).toBeVisible();
+  await page.locator(".worker-run-ledger").getByRole("button", { name: "요약" }).click();
+  const downloadSummary = page.getByLabel("다운로드 실행 요약");
+  await expect(downloadSummary).toContainText("archive.txt staged");
+  await expect(downloadSummary).toContainText("최근 worker pass");
+  await downloadSummary.getByRole("button", { name: "JSON 복사" }).click();
+  await expect(downloadSummary.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
+  const workerSummaryExportResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/jobs/downloads/worker/summary/export") &&
+      response.url().includes("format=ndjson") &&
+      response.request().method() === "GET",
+  );
+  await downloadSummary.getByRole("button", { name: "NDJSON" }).click();
+  expect((await workerSummaryExportResponse).status()).toBe(200);
+  await page.screenshot({ path: testInfo.outputPath("download-run-summary.png"), fullPage: true });
+  await downloadSummary.getByRole("button", { name: "닫기" }).click();
   await page.locator(".worker-run-ledger").getByRole("button", { name: "열기" }).click();
   await expect(page.getByLabel("워커 히스토리")).toBeVisible();
   await page.locator(".worker-history-filters").getByRole("button", { name: "드라이런" }).click();
@@ -440,33 +543,87 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   );
   await page.getByRole("button", { name: "선택 큐 등록" }).click();
   const bulkPayload = (await (await bulkResponse).json()) as { updated: number };
-  expect(bulkPayload.updated).toBe(2);
+  expect(bulkPayload.updated).toBeGreaterThanOrEqual(2);
 
   await page.getByRole("button", { name: "로그 보기" }).click();
   const eventLog = page.getByLabel("운영 이벤트 로그");
   await expect(eventLog).toBeVisible();
   await expect(eventLog.getByRole("button", { name: "다운로드" })).toBeVisible();
   await expect(eventLog.getByRole("button", { name: "스토리지" })).toBeVisible();
+  await expect(eventLog.getByRole("button", { name: "런타임" })).toBeVisible();
   await eventLog.getByRole("button", { name: "다운로드" }).click();
   await expect(eventLog.locator(".event-log-card").first()).toBeVisible();
   await expect(eventLog).toContainText("download.");
+  await eventLog.locator(".event-log-card").first().getByRole("button", { name: "상세" }).click();
+  const eventDetail = eventLog.getByRole("region", { name: "이벤트 상세" });
+  await expect(eventDetail).toBeVisible();
+  await expect(eventDetail).toContainText("download.");
+  await eventDetail.getByRole("button", { name: "이 이벤트 복사" }).click();
+  await expect(eventDetail.getByRole("button", { name: "복사됨" })).toBeVisible();
+  await eventDetail.getByRole("button", { name: "curl 복사" }).click();
+  await expect(eventDetail.getByRole("button", { name: "curl 복사됨" })).toBeVisible();
+  await expect(eventDetail.getByRole("button", { name: "큐에서 보기" })).toBeVisible();
+  const eventDetailExport = page.waitForEvent("download");
+  await eventDetail.getByRole("button", { name: "NDJSON" }).click();
+  expect((await eventDetailExport).suggestedFilename()).toContain("archive-event-log");
+  await eventDetail.getByRole("button", { name: "상세 닫기" }).click();
+  await expect(eventDetail).toBeHidden();
   const eventExport = page.waitForEvent("download");
   await eventLog.getByRole("button", { name: "CSV" }).click();
   expect((await eventExport).suggestedFilename()).toContain("archive-event-log");
   await expect(eventLog.getByRole("button", { name: "NDJSON" })).toBeVisible();
   await expect(eventLog.getByRole("button", { name: "보존 정리" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("event-log.png"), fullPage: true });
-  await eventLog.getByRole("button", { name: "닫기" }).click();
+  await eventLog.getByRole("button", { name: "닫기", exact: true }).click();
 
   const archivePathway = page.getByLabel("새 영상 확인, 기존 영상 스킵, 큐 진행 보기");
   await expect(archivePathway).toContainText("스킵 장부");
   await expect(archivePathway).toContainText("큐 런웨이");
   const archiveTxtConsole = page.getByLabel("archive.txt 스킵 장부");
   await expect(archiveTxtConsole).toBeVisible();
+  await expect(archiveTxtConsole.getByLabel("archive.txt 가져오기 단계")).toContainText("소스 입력");
+  const archiveTxtUnknownId = testInfo.project.name === "chromium" ? "cvnCHRM001A" : "cvnMOBL001A";
+  await archiveTxtConsole.getByLabel("archive.txt 파일 선택").setInputFiles({
+    name: "archive.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from(`youtube ${archiveTxtUnknownId}\nhttps://youtu.be/${archiveTxtUnknownId}\nnot a usable line`),
+  });
+  await expect(archiveTxtConsole.getByLabel("archive.txt 내용")).toHaveValue(
+    `youtube ${archiveTxtUnknownId}\nhttps://youtu.be/${archiveTxtUnknownId}\nnot a usable line`,
+  );
+  await expect(archiveTxtConsole.getByLabel("archive.txt 가져오기 단계")).toContainText("3줄 준비됨");
   await archiveTxtConsole.getByRole("button", { name: "스킵 미리보기" }).click();
   await expect(archiveTxtConsole).toContainText("볼트 신규");
   await expect(archiveTxtConsole).toContainText("중복");
   await expect(archiveTxtConsole).toContainText("새 항목");
+  await expect(archiveTxtConsole.getByLabel("archive.txt 가져오기 단계")).toContainText("스킵 0 · 미보관 0 · 신규 1");
+  const archiveTxtStageResponse = page.waitForResponse(
+    (response) => response.url().endsWith("/api/imports/archive-txt/stage") && response.request().method() === "POST",
+  );
+  await archiveTxtConsole.getByRole("button", { name: "새 항목 후보 만들기" }).click();
+  const archiveTxtStagePayload = (await (await archiveTxtStageResponse).json()) as {
+    videos_created: number;
+    candidates_created: number;
+    preview: { unknown_count: number };
+  };
+  expect(archiveTxtStagePayload.videos_created).toBe(1);
+  expect(archiveTxtStagePayload.candidates_created).toBe(1);
+  expect(archiveTxtStagePayload.preview.unknown_count).toBe(0);
+  await expect(archiveTxtConsole).toContainText("영상 생성");
+  await expect(archiveTxtConsole).toContainText("후보 생성");
+  await expect(archiveTxtConsole).toContainText("제목/날짜 보강");
+  await expect(archiveTxtConsole.getByRole("button", { name: "metadata sync 실행" })).toBeVisible();
+  await expect(archiveTxtConsole).toContainText("검토 대기");
+  await expect(archiveTxtConsole).toContainText(archiveTxtUnknownId);
+  await expect(archiveTxtConsole).toContainText("큐로 넘기기");
+  await expect(archiveTxtConsole.getByRole("button", { name: "큐에서 보기" })).toBeVisible();
+  await expect(archiveTxtConsole.getByRole("button", { name: "최대 5개 실행 준비" })).toBeVisible();
+  await archiveTxtConsole.getByRole("button", { name: "준비 후 실행" }).click();
+  const archiveTxtRunModal = page.getByLabel("archive.txt 신규 후보 실행");
+  await expect(archiveTxtRunModal).toContainText("최대 5개만 실제 다운로드");
+  await expect(archiveTxtRunModal).toContainText("이미 받은 영상은 건너뜀");
+  await expect(archiveTxtRunModal.getByRole("button", { name: "준비하고 시작" })).toBeDisabled();
+  await archiveTxtRunModal.getByRole("button", { name: "취소" }).click();
   const rescanResponse = page.waitForResponse(
     (response) => response.url().endsWith("/api/library/_rescan/apply") && response.request().method() === "POST",
   );

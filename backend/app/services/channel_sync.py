@@ -125,6 +125,7 @@ async def run_channel_sync(
         job.completed_at = datetime.now(UTC)
         job.videos_seen = summary.videos_seen
         job.videos_created = summary.videos_created
+        job.videos_enriched = summary.videos_enriched
         await event_bus.publish(
             "sync.completed",
             {
@@ -133,6 +134,7 @@ async def run_channel_sync(
                 "channel_title": channel.title,
                 "videos_seen": summary.videos_seen,
                 "videos_created": summary.videos_created,
+                "videos_enriched": summary.videos_enriched,
             },
         )
     except ChannelProbeError as exc:
@@ -154,6 +156,7 @@ async def run_channel_sync(
         channel=_to_registered_channel(channel),
         videos_seen=job.videos_seen,
         videos_created=job.videos_created,
+        videos_enriched=job.videos_enriched,
         candidates_created=job.candidates_created,
     )
 
@@ -239,6 +242,7 @@ def to_sync_job(job: SyncJob, channel: Channel) -> SyncJobRead:
         completed_at=job.completed_at,
         videos_seen=job.videos_seen,
         videos_created=job.videos_created,
+        videos_enriched=job.videos_enriched,
         candidates_created=job.candidates_created,
         error_message=job.error_message,
         created_at=job.created_at,

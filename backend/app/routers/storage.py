@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.archive import MediaFile
 from app.schemas.storage import (
+    StorageChannelPressureTrendRead,
     StorageDriftActionRequest,
     StorageDriftActionResult,
     StorageOrphanActionRequest,
@@ -31,6 +32,7 @@ from app.services.storage_orphans import (
     restore_quarantined_sidecar,
 )
 from app.services.storage_pressure import (
+    build_storage_channel_pressure_trend,
     build_storage_pressure_trend,
     capture_storage_pressure_snapshot,
 )
@@ -67,6 +69,16 @@ async def get_storage_pressure_trend(
 ) -> StoragePressureTrendRead:
     """Return persisted storage pressure snapshots and growth/runway summary."""
     return await build_storage_pressure_trend(db=db, limit=limit)
+
+
+@router.get("/pressure/channels/trend", response_model=StorageChannelPressureTrendRead)
+async def get_storage_channel_pressure_trend(
+    db: DbSession,
+    relative_path: str = Query(min_length=1, max_length=2000),
+    limit: int = Query(default=24, ge=2, le=200),
+) -> StorageChannelPressureTrendRead:
+    """Return persisted per-channel storage footprint snapshots."""
+    return await build_storage_channel_pressure_trend(db=db, relative_path=relative_path, limit=limit)
 
 
 @router.post("/pressure/snapshots", response_model=StoragePressureTrendRead)

@@ -96,6 +96,7 @@ class MetadataSyncTickRead(BaseModel):
     failed_count: int
     videos_seen_count: int
     videos_created_count: int
+    videos_enriched_count: int
     candidates_created_count: int
     skipped_reason: str | None
     error_message: str | None
@@ -133,6 +134,9 @@ class RuntimeRestartAdapter(BaseModel):
     executable: bool
     manual_required: bool
     reason: str
+    command_available: bool = True
+    setup_hints: list[str] = Field(default_factory=list)
+    env_lines: list[str] = Field(default_factory=list)
     service_name: str | None = None
     compose_file: str | None = None
 

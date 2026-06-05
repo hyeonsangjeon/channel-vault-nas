@@ -251,3 +251,53 @@ class StoragePressureTrendRead(BaseModel):
     runway_days: float | None = None
     runway_label: str
     warning: str | None = None
+
+
+class StorageChannelPressureSnapshotRead(BaseModel):
+    """One persisted per-channel storage footprint point."""
+
+    id: int
+    snapshot_id: int
+    root: str
+    channel_relative_path: str
+    title: str
+    bytes: int
+    label: str
+    file_count: int
+    media_count: int
+    sidecar_count: int
+    orphan_sidecar_count: int
+    video_folder_count: int
+    pressure_score: int
+    scanned_at: datetime
+    created_at: datetime
+
+
+class StorageChannelPressureComparisonRead(BaseModel):
+    """Growth comparison for one per-channel footprint window."""
+
+    window_days: int
+    label: str
+    snapshot_count: int
+    baseline: StorageChannelPressureSnapshotRead | None = None
+    delta_bytes: int = 0
+    delta_label: str = "0 MB"
+    daily_growth_bytes: float = 0.0
+    daily_growth_label: str = "0 MB"
+    growth_percent: float = 0.0
+    warning: str | None = None
+
+
+class StorageChannelPressureTrendRead(BaseModel):
+    """Per-channel NAS footprint history and growth summary."""
+
+    relative_path: str
+    snapshots: list[StorageChannelPressureSnapshotRead]
+    latest: StorageChannelPressureSnapshotRead | None = None
+    previous: StorageChannelPressureSnapshotRead | None = None
+    delta_bytes: int = 0
+    delta_label: str = "0 MB"
+    peak_bytes: int = 0
+    peak_label: str = "0 MB"
+    comparisons: list[StorageChannelPressureComparisonRead] = Field(default_factory=list)
+    warning: str | None = None

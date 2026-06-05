@@ -1,6 +1,6 @@
 """Tests for the operator readiness mission board."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -11,12 +11,14 @@ from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.main import app
 from app.models.archive import (
+    ArchiveEventLog,
     Channel,
     ChannelPolicy,
     DownloadJob,
     DownloadSchedulerTick,
     DownloadWorkerRun,
     MediaFile,
+    StorageChannelPressureSnapshot,
     StoragePressureSnapshot,
     SyncJob,
     Video,
@@ -135,6 +137,19 @@ async def test_operations_readiness_detects_drift_sidecars_and_worker_lock(
                 updated_at=datetime.now(UTC),
             )
         )
+        failed_job = DownloadJob(
+            video_id=video.id,
+            status="failed",
+            progress=0,
+            quality="1080p",
+            priority=70,
+            preflight_status="review",
+            estimated_bytes=1000,
+            error_message="test failure",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        session.add(failed_job)
         session.add(
             StoragePressureSnapshot(
                 root=str(tmp_path),
@@ -159,17 +174,144 @@ async def test_operations_readiness_detects_drift_sidecars_and_worker_lock(
     assert response.status_code == 200
     data = response.json()
     mission_ids = {mission["id"] for mission in data["missions"]}
+    missions_by_id = {mission["id"]: mission for mission in data["missions"]}
     assert data["stage"] in {"attention", "ready"}
     assert "recover_storage_drift" in mission_ids
     assert "quarantine_sidecars" in mission_ids
+    assert "clear_failed_downloads" in mission_ids
     assert "arm_worker" in mission_ids
     assert "resume_paused_channels" in mission_ids
+    assert missions_by_id["recover_storage_drift"]["target_path"].endswith("video.mp4")
+    assert missions_by_id["recover_storage_drift"]["target_kind"] == "unindexed_media"
+    assert missions_by_id["clear_failed_downloads"]["target_kind"] == "download_job"
+    assert missions_by_id["clear_failed_downloads"]["target_channel_id"] == channel.id
+    assert missions_by_id["resume_paused_channels"]["target_kind"] == "channel_policy"
+    assert missions_by_id["resume_paused_channels"]["target_channel_id"] == channel.id
     assert next(metric for metric in data["metrics"] if metric["key"] == "drift")["raw_value"] == 1
     assert next(metric for metric in data["metrics"] if metric["key"] == "orphans")["raw_value"] == 1
 
 
+@pytest.mark.asyncio
+async def test_operations_readiness_surfaces_rapid_channel_growth(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_archive_tables()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    now = datetime(2026, 6, 3, 7, 0, tzinfo=UTC)
+
+    async with AsyncSessionLocal() as session:
+        channel = Channel(
+            source_type="channel",
+            source_url="https://www.youtube.com/@growth",
+            external_id="UC_GROWTH",
+            handle="@growth",
+            title="Growth Lab",
+            description=None,
+            thumbnail_url=None,
+            status="active",
+            source_video_count=0,
+            archived_count=0,
+            missing_count=0,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(channel)
+        await session.flush()
+        for days_ago, channel_bytes in ((5, 1_000), (0, 2_000)):
+            scanned_at = now - timedelta(days=days_ago)
+            snapshot = StoragePressureSnapshot(
+                root=str(tmp_path),
+                archive_bytes=channel_bytes,
+                used_bytes=channel_bytes,
+                free_bytes=10_000,
+                total_bytes=12_000,
+                pressure_percent=20,
+                file_count=1,
+                dir_count=1,
+                channel_count=1,
+                scanned_at=scanned_at,
+                created_at=scanned_at,
+            )
+            session.add(snapshot)
+            await session.flush()
+            session.add(
+                StorageChannelPressureSnapshot(
+                    snapshot_id=snapshot.id,
+                    root=str(tmp_path),
+                    channel_relative_path="channels/@growth [UC_GROWTH]",
+                    title="Growth Lab",
+                    bytes=channel_bytes,
+                    file_count=1,
+                    media_count=1,
+                    sidecar_count=0,
+                    orphan_sidecar_count=0,
+                    video_folder_count=1,
+                    pressure_score=20,
+                    scanned_at=scanned_at,
+                    created_at=scanned_at,
+                )
+            )
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/ops/readiness")
+
+    assert response.status_code == 200
+    missions_by_id = {mission["id"]: mission for mission in response.json()["missions"]}
+    assert "review_channel_growth" in missions_by_id
+    assert missions_by_id["review_channel_growth"]["target_kind"] == "channel_storage_growth"
+    assert missions_by_id["review_channel_growth"]["target_channel_id"] == channel.id
+    assert missions_by_id["review_channel_growth"]["target_path"] == "channels/@growth [UC_GROWTH]"
+    assert missions_by_id["review_channel_growth"]["primary_value"] == "+1000 B"
+    assert missions_by_id["review_channel_growth"]["secondary_value"] == "100.0%"
+
+
+@pytest.mark.asyncio
+async def test_operations_readiness_surfaces_runtime_restart_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_archive_tables()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    now = datetime(2026, 6, 3, 8, 0, tzinfo=UTC)
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            ArchiveEventLog(
+                type="runtime.restart.failed",
+                data={
+                    "adapter": "synology-package",
+                    "message": "Restart command failed.",
+                    "reason": "operator requested runtime restart after env apply",
+                },
+                occurred_at=now,
+                created_at=now,
+            )
+        )
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/ops/readiness")
+
+    assert response.status_code == 200
+    missions_by_id = {mission["id"]: mission for mission in response.json()["missions"]}
+    assert missions_by_id["resolve_runtime_restart"]["severity"] == "critical"
+    assert missions_by_id["resolve_runtime_restart"]["status"] == "action"
+    assert missions_by_id["resolve_runtime_restart"]["action_kind"] == "runtime"
+    assert missions_by_id["resolve_runtime_restart"]["primary_value"] == "synology-package"
+    assert missions_by_id["resolve_runtime_restart"]["target_kind"] == "runtime.restart.failed"
+
+
 async def _clear_archive_tables() -> None:
     async with AsyncSessionLocal() as session:
+        await session.execute(delete(ArchiveEventLog))
         await session.execute(delete(DownloadJob))
         await session.execute(delete(DownloadSchedulerTick))
         await session.execute(delete(DownloadWorkerRun))
@@ -178,5 +320,6 @@ async def _clear_archive_tables() -> None:
         await session.execute(delete(MediaFile))
         await session.execute(delete(Video))
         await session.execute(delete(Channel))
+        await session.execute(delete(StorageChannelPressureSnapshot))
         await session.execute(delete(StoragePressureSnapshot))
         await session.commit()

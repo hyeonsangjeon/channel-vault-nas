@@ -28,6 +28,7 @@ class SyncJobRead(BaseModel):
     completed_at: datetime | None
     videos_seen: int
     videos_created: int
+    videos_enriched: int
     candidates_created: int
     error_message: str | None
     created_at: datetime
@@ -40,6 +41,7 @@ class ChannelSyncResult(BaseModel):
     channel: RegisteredChannel
     videos_seen: int
     videos_created: int
+    videos_enriched: int = 0
     candidates_created: int = 0
 
 
@@ -274,8 +276,51 @@ class DownloadWorkerRunRead(BaseModel):
     started_count: int
     completed_count: int
     failed_count: int
+    planned_job_ids: list[int] = Field(default_factory=list)
+    started_job_ids: list[int] = Field(default_factory=list)
+    completed_job_ids: list[int] = Field(default_factory=list)
+    failed_job_ids: list[int] = Field(default_factory=list)
     skipped_reason: str | None
     duration_seconds: int | None
     started_at: datetime
     completed_at: datetime | None
     created_at: datetime
+
+
+class DownloadWorkerRunSummaryFile(BaseModel):
+    """Indexed media file attached to a worker run summary."""
+
+    id: int
+    video_id: int
+    video_external_id: str
+    video_title: str
+    channel_id: int
+    channel_title: str
+    relative_path: str
+    filename: str
+    size_bytes: int | None
+    size_label: str
+    container: str | None
+    video_codec: str | None
+    audio_codec: str | None
+    fps: float | None
+    width: int | None
+    height: int | None
+    duration_seconds: int | None
+    info_json_path: str | None
+    nfo_path: str | None
+    thumbnail_path: str | None
+    created_at: datetime
+
+
+class DownloadWorkerRunSummaryRead(BaseModel):
+    """Correlated worker run, queue, and indexed-file summary."""
+
+    generated_at: datetime
+    channel_id: int | None
+    channel_title: str | None
+    run: DownloadWorkerRunRead | None
+    latest_worker_jobs: list[DownloadJobRead]
+    completed_jobs: list[DownloadJobRead]
+    failed_jobs: list[DownloadJobRead]
+    archived_files: list[DownloadWorkerRunSummaryFile]

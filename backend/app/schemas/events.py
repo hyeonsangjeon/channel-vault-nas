@@ -9,6 +9,7 @@ from pydantic import BaseModel
 class ArchiveEvent(BaseModel):
     """Realtime archive event sent over WebSocket and retained briefly in memory."""
 
+    id: int | None = None
     type: str
     data: dict[str, Any]
     occurred_at: datetime

@@ -212,6 +212,7 @@ tempCodeRunnerFile.py
 # Channel Vault runtime data
 metadata/
 downfolder/
+runtime/
 frontend/playwright-report/
 frontend/test-results/
 

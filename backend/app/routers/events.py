@@ -15,6 +15,7 @@ router = APIRouter(tags=["events"])
 @router.get("/api/events/recent", response_model=list[ArchiveEvent])
 async def get_recent_events(
     limit: int = Query(default=50, ge=1, le=500),
+    event_id: int | None = Query(default=None, ge=1),
     type_prefix: str | None = None,
     channel_id: int | None = None,
     job_id: int | None = None,
@@ -24,6 +25,7 @@ async def get_recent_events(
     await event_bus.flush_persistence()
     events = await list_archive_events(
         limit=limit,
+        event_id=event_id,
         type_prefix=type_prefix,
         channel_id=channel_id,
         job_id=job_id,
@@ -36,6 +38,7 @@ async def get_recent_events(
 async def export_recent_events(
     export_format: Literal["ndjson", "csv"] = Query(default="ndjson", alias="format"),
     limit: int = Query(default=500, ge=1, le=2_000),
+    event_id: int | None = Query(default=None, ge=1),
     type_prefix: str | None = None,
     channel_id: int | None = None,
     job_id: int | None = None,
@@ -45,6 +48,7 @@ async def export_recent_events(
     await event_bus.flush_persistence()
     events = await list_archive_events(
         limit=limit,
+        event_id=event_id,
         type_prefix=type_prefix,
         channel_id=channel_id,
         job_id=job_id,

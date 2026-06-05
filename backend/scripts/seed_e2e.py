@@ -58,6 +58,7 @@ async def seed() -> None:
         LibraryView,
         MediaFile,
         MetadataSyncTick,
+        StorageChannelPressureSnapshot,
         StoragePressureSnapshot,
         SyncJob,
         Video,
@@ -401,27 +402,64 @@ async def seed() -> None:
             (now - timedelta(days=3), 5_900, 61.4, 408_000_000_000),
             (now - timedelta(hours=3), 6_200, 61.5, 407_000_000_000),
         ]
-        session.add_all(
-            [
-                StoragePressureSnapshot(
-                    root=str(archive_root),
-                    archive_bytes=archive_bytes,
-                    used_bytes=612_000_000_000 + archive_bytes,
-                    free_bytes=free_bytes,
-                    total_bytes=1_000_000_000_000,
-                    pressure_percent=pressure_percent,
-                    file_count=18 + index,
-                    dir_count=11 + index,
-                    channel_count=2,
-                    orphan_sidecar_count=1,
-                    unindexed_media_count=1,
-                    indexed_missing_count=0,
-                    scanned_at=scanned_at,
-                    created_at=scanned_at,
-                )
-                for index, (scanned_at, archive_bytes, pressure_percent, free_bytes) in enumerate(pressure_points)
-            ]
-        )
+        pressure_snapshots: list[tuple[int, datetime, StoragePressureSnapshot]] = []
+        for index, (scanned_at, archive_bytes, pressure_percent, free_bytes) in enumerate(pressure_points):
+            snapshot = StoragePressureSnapshot(
+                root=str(archive_root),
+                archive_bytes=archive_bytes,
+                used_bytes=612_000_000_000 + archive_bytes,
+                free_bytes=free_bytes,
+                total_bytes=1_000_000_000_000,
+                pressure_percent=pressure_percent,
+                file_count=18 + index,
+                dir_count=11 + index,
+                channel_count=2,
+                orphan_sidecar_count=1,
+                unindexed_media_count=1,
+                indexed_missing_count=0,
+                scanned_at=scanned_at,
+                created_at=scanned_at,
+            )
+            session.add(snapshot)
+            pressure_snapshots.append((index, scanned_at, snapshot))
+        await session.flush()
+        signal_bytes = [2_400, 5_200, 5_900]
+        recovered_bytes = [2_100, 2_300, 2_400]
+        for index, scanned_at, snapshot in pressure_snapshots:
+            session.add_all(
+                [
+                    StorageChannelPressureSnapshot(
+                        snapshot_id=snapshot.id,
+                        root=str(archive_root),
+                        channel_relative_path="channels/@signalvaultlab [UC_CVN_E2E]",
+                        title="Signal Lab",
+                        bytes=signal_bytes[index],
+                        file_count=7 + index,
+                        media_count=1,
+                        sidecar_count=4,
+                        orphan_sidecar_count=1,
+                        video_folder_count=1,
+                        pressure_score=48 + index * 3,
+                        scanned_at=scanned_at,
+                        created_at=scanned_at,
+                    ),
+                    StorageChannelPressureSnapshot(
+                        snapshot_id=snapshot.id,
+                        root=str(archive_root),
+                        channel_relative_path="channels/@recoveredvault [UC_CVN_RECOVERED]",
+                        title="Recovered Vault",
+                        bytes=recovered_bytes[index],
+                        file_count=4 + index,
+                        media_count=1,
+                        sidecar_count=4,
+                        orphan_sidecar_count=0,
+                        video_folder_count=1,
+                        pressure_score=22 + index,
+                        scanned_at=scanned_at,
+                        created_at=scanned_at,
+                    ),
+                ]
+            )
         await session.commit()
 
     await engine.dispose()
