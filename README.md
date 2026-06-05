@@ -1,114 +1,179 @@
 # Channel Vault NAS
 
-Personal channel archive manager for NAS.
+NAS-first YouTube channel archive console.
 
-Channel Vault NAS is a NAS-first archive console for YouTube channels and
-playlists. Users register sources, the app periodically syncs metadata, detects
-new videos, downloads media according to per-channel policies, stores thumbnails
-and subtitles, and exposes a searchable local library with streaming support.
+Channel Vault NAS turns a simple `archive.txt` idea into an operator console for
+private media archives: register a channel, sync metadata, skip videos already
+stored on disk, queue only missing videos, run bounded download passes, and keep
+the local library searchable from the app.
 
-The intended frame is creator-owned media, user-authorized channel backups,
-Google Takeout imports, and existing NAS folders. Users are responsible for
-ensuring they have the rights and permissions to archive any content.
+The target use case is creator-owned media, user-authorized channel backups,
+`archive.txt` ledgers, and existing NAS folders. You are responsible for
+ensuring you have the rights and permissions to archive any content.
 
-## Project Status
+## Why It Exists
 
-This repository is the new product line. It is not a drop-in replacement for
-`youtube-dl-nas` v1 and does not take over the existing
-`modenaf360/youtube-dl-nas:latest` Docker image.
+Most download tools answer one question: "Can this URL be downloaded?"
 
-Initial work starts from product and architecture definition, then moves into a
-FastAPI + React implementation.
+Channel Vault NAS answers the NAS operator question:
 
-## Reference Baseline
+> "What changed, what is already archived, what is safe to download next, and
+> can I recover the archive if the app database disappears?"
 
-The new app should reuse platform patterns from
-[`hyeonsangjeon/youtube-dl-nas`](https://github.com/hyeonsangjeon/youtube-dl-nas)
-`origin/develop` at commit `c1a71615441b`:
+The filesystem remains the durable archive. SQLite is the index over that
+archive.
 
-- FastAPI lifespan startup/shutdown pattern
-- Pydantic settings and NAS-friendly environment variables
-- Async SQLAlchemy + SQLite + Alembic foundation
-- Local JWT login, refresh, and protected route dependencies
-- React + Vite frontend with token refresh interceptor
-- asyncio worker/queue model
-- JSON WebSocket event flow
-- yt-dlp subprocess wrapper, proxy handling, filename sanitizing, and
-  `.incomplete` download staging
+## Current Status
 
-The product model changes from a URL download queue to a channel archive
-console. v1 behavior is useful evidence, not a product constraint.
+This is an active alpha. The core loop is working locally:
 
-## Core MVP
+- Channel registration and source probing
+- Metadata sync and automatic metadata scheduler
+- Per-channel policies, including `auto_download`
+- Candidate generation for missing videos
+- Download queue with preflight, retry, cancel, and bounded worker passes
+- Real `yt-dlp` downloads when explicitly enabled
+- Worker run audit, scheduler tick logs, and event drawers
+- Runtime settings with `.env.runtime` apply/restart guidance
+- Storage scanner for real NAS folders, drift, pressure, and orphan sidecars
+- Library index with media files, sidecar fidelity, codec/profile filters, and saved views
+- React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 
-The product treats coverage and fidelity as first-class archive goals:
+Not ready yet:
 
-- Coverage: source count, archived count, missing count, and removed-but-saved
-  count are headline metrics.
-- Fidelity: every video should keep `video.info.json` sidecars, thumbnails, and
-  subtitles beside the media whenever possible.
-- Filesystem contract: the default layout is per-video folders under
-  `downfolder/channels/{handle} [{channel_id}]/{year}/...`, so the NAS archive
-  remains meaningful outside the app.
-- Import lanes: Google Takeout, existing NAS folders, and authorized channel
-  sync are treated as first-class entry points.
+- Auth hardening for exposed networks
+- Polished screenshot/demo assets
+- Published container images
+- Production install guide for Synology/QNAP/systemd packages
 
-The first usable release targets:
+Do not expose this alpha directly to the public internet.
 
-- Local account login
-- Channel and playlist registration
-- Manual sync
-- Periodic sync scheduler
-- New video detection
-- Per-channel download policy
-- Download queue with progress
-- Video metadata persistence
-- Thumbnail storage or caching
-- Optional subtitle download
-- Library list and search
-- Video file streaming
-- Failed job retry
-- Basic settings
+## Product Tour
 
-Deferred until after the core loop is reliable:
+### Dashboard
 
-- Advanced analytics dashboard
-- Automatic tagging
-- Full-text subtitle search
-- Multi-user roles
-- External notifications
-- Mobile app
-- Distributed workers
+The dashboard is an operating cockpit. It shows the current archive score, the
+next useful action, worker/scheduler/storage/library state, recent events, and
+operator missions. It intentionally avoids deep controls.
 
-## Documentation
+### Channels
 
-- [Product Brief / Product Spec](docs/product-brief.md)
-- [Architecture Draft](docs/architecture.md)
-- [Design Direction](docs/design-direction.md)
-- [Archive Priorities](docs/archive-priorities.md)
-- [Storage Recovery](docs/storage-recovery.md)
-- [Use Boundaries](docs/use-boundaries.md)
+The channel workbench is the start point:
 
-Product specs and public architecture notes live in `docs/`. Private task
-handoffs, scratch notes, and local planning files should stay in
-`.codex/tasks/`, `TASKS.local.md`, or `SPEC.local.md`; those paths are ignored
-by git.
+1. Register or probe a source.
+2. Sync metadata.
+3. Review missing videos.
+4. Queue/download only what is not archived.
+5. Use the `archive.txt` import path when you already have a ledger.
 
-## Planned Repository Shape
+### Queue
 
-```text
-backend/
-  app/
-  alembic/
-  tests/
-frontend/
-  src/
-docs/
-docker-compose.yml
-Dockerfile
+The queue console shows all candidate, queued, running, completed, failed, and
+cancelled jobs. Real downloads are guarded by a confirmation flow and a maximum
+of 5 jobs per worker pass.
+
+### Library
+
+The library shows archived and missing videos together. It indexes sidecars,
+media files, codec/profile metadata, thumbnails, subtitles, queue state, and
+path integrity. Saved views make repeated NAS checks fast.
+
+### Insights
+
+Insights reads the actual archive root and reports storage pressure, folder
+structure, extension totals, unindexed media, indexed-but-missing files, and
+orphan sidecars.
+
+### Settings
+
+Settings is the runtime console: worker flags, scheduler flags, binary paths,
+restart adapters, tick logs, worker summaries, and runtime audit events.
+
+## Quickstart: Docker Compose Alpha
+
+This is the easiest public-preview path. It builds local images from this repo
+and stores archive data in bind-mounted folders.
+
+```bash
+git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
+cd channel-vault-nas
+cp .env.example .env
+mkdir -p metadata downfolder runtime
+docker compose up --build
 ```
 
-## Local Development
+Open:
+
+```text
+http://127.0.0.1:5173/
+```
+
+The compose stack runs:
+
+- `api`: FastAPI backend with `yt-dlp`, `ffmpeg`, and `ffprobe`
+- `web`: nginx-served React app
+- `./metadata`: SQLite DB and startup backups
+- `./downfolder`: archived media and sidecars
+- `./runtime/.env.runtime`: Settings tab runtime overrides
+
+To verify Compose without touching your working archive folders, override the
+ports and host folders:
+
+```bash
+mkdir -p /tmp/channel-vault-compose/{metadata,downfolder,runtime}
+CVN_WEB_PORT=15173 \
+CVN_API_PORT=18000 \
+CVN_METADATA_HOST_DIR=/tmp/channel-vault-compose/metadata \
+CVN_DOWNLOAD_HOST_DIR=/tmp/channel-vault-compose/downfolder \
+CVN_RUNTIME_HOST_DIR=/tmp/channel-vault-compose/runtime \
+docker compose up -d --build
+```
+
+Then open `http://127.0.0.1:15173/` or call
+`http://127.0.0.1:18000/api/health`.
+
+The same safe verification path is available as a smoke script. It uses a
+separate Compose project name by default, starts the stack, waits for API,
+proxied API, and web health, checks the Runtime restart adapter, then prints the
+cleanup command:
+
+```bash
+scripts/compose-smoke.sh
+```
+
+Useful overrides:
+
+```bash
+CVN_COMPOSE_SMOKE_BUILD=false scripts/compose-smoke.sh
+CVN_COMPOSE_SMOKE_CLEANUP=true scripts/compose-smoke.sh
+CVN_WEB_PORT=15174 CVN_API_PORT=18001 scripts/compose-smoke.sh
+```
+
+Real downloads remain disabled until you edit `.env`:
+
+```env
+CVN_DOWNLOAD_WORKER_ENABLED=true
+```
+
+Then restart:
+
+```bash
+docker compose up -d --build
+```
+
+The Compose profile also sets `CVN_RESTART_ADAPTER=docker-compose` and
+`CVN_RESTART_SERVICE_NAME=api` so the Settings tab can show the correct restart
+command. It remains copy-only by default because the backend container does not
+mount the host Docker socket or ship with a Docker CLI.
+
+## Quickstart: Local Development
+
+Prerequisites:
+
+- Python 3.11+
+- Node.js 20+
+- `yt-dlp`
+- `ffmpeg` / `ffprobe`
 
 Backend:
 
@@ -117,15 +182,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload
-```
-
-Useful backend media-worker settings:
-
-```bash
-CVN_YTDLP_BINARY=yt-dlp
-CVN_FFPROBE_BINARY=ffprobe
-CVN_MEDIA_PROBE_TIMEOUT_SECONDS=20
+CVN_DB_MIGRATE_ON_STARTUP=true uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Frontend:
@@ -133,97 +190,183 @@ Frontend:
 ```bash
 cd frontend
 npm install
-npm run dev
+VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-The first screen is an `Archive Observatory` dashboard. The current backend
-snapshot is DB-backed for registered channels, sync jobs, download queue
-candidates, and a filesystem storage scanner that reads the configured NAS
-archive root for real channel-folder bytes, folder tree summaries, volume
-pressure, extension totals, and orphan sidecar warnings.
+Open:
 
-After a channel exists, the UI auto-opens the first registered channel and shows
-Archive Launch Control: queue search, selectable candidate/queued jobs,
-preflight storage estimates, yt-dlp command preview, and metadata-only bulk
-actions before any real media transfer starts.
+```text
+http://127.0.0.1:5173/
+```
 
-Launch Control also includes a safe worker control room. By default the media
-worker is locked (`CVN_DOWNLOAD_WORKER_ENABLED=false`), but the UI and
-`GET /api/jobs/downloads/worker/plan` show queued claim order, archive
-destination folders, running-job telemetry, dry-run mode, and the exact yt-dlp
-command that would run.
-`POST /api/jobs/downloads/worker/run-once` defaults to a non-mutating dry-run;
-real transfer requires both `CVN_DOWNLOAD_WORKER_ENABLED=true` and
-`dry_run=false`. If a real transfer is enabled, worker progress is committed
-while yt-dlp runs and `POST /api/jobs/downloads/{job_id}/stop` can terminate an
-in-process job. Worker passes are also retained in SQLite through
-`GET /api/jobs/downloads/worker/runs`, and the worker room shows the most recent
-run ledger. The same audit endpoint supports status, dry-run/live, and failed
-run filters; the frontend worker history drawer exposes those filters with run
-duration, started/completed/failed counts, and skip/failure reasons.
-An optional in-process scheduler can run bounded worker passes on an interval,
-but only when both `CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED=true` and
-`CVN_DOWNLOAD_WORKER_ENABLED=true` are set.
-Each channel policy can pause worker claims independently, so a channel can stay
-synced and queued while the media worker skips it until the policy console
-resumes it.
-The top-level runtime console is backed by `GET /api/settings/runtime` and shows
-whether the real worker and scheduler are enabled, the scheduler cadence/limit,
-whether the scheduler is off, worker-locked, armed, waiting, running, or
-recently failed, and whether local `yt-dlp` and `ffprobe` commands resolve on
-the NAS host. The same surface shows next/last scheduler tick labels for quick
-operator debugging. Its Env guide drawer converts that live snapshot into the
-exact `.env` lines needed to arm the worker/scheduler and override `yt-dlp` or
-`ffprobe` binary paths, lets the operator save those non-secret overrides into
-the managed `.env.runtime` file, and marks the backend restart requirement
-until the running process matches the saved env. The runtime API also detects a
-deployment-aware restart adapter: manual/local dev by default, Docker Compose
-guidance when a compose file exists, systemd guidance when configured, and a
-real executable supervised hook when `CVN_RESTART_HOOK_COMMAND` is provided.
-The drawer links to a dedicated scheduler tick log with filters for completed,
-failed, skipped, slow duration, scheduler interval, and worker limit. Each
-scheduled pass records whether it completed, failed, or was skipped because the
-worker remained locked.
+Health check:
 
-The selected channel also exposes a Vault Library shelf backed by SQLite:
-videos, indexed media files, queue state, media byte totals, and sidecar
-fidelity are shown together so archived and still-missing items stay visible.
-Existing NAS folders can be indexed through the import kit: `video.info.json`
-sidecars are scanned and applied to SQLite as channel, video, and media-file
-records without moving the original files.
-Completed worker jobs use the same sidecar contract, but apply only the
-finished video folder so large NAS roots are not rescanned after every
-download.
-During rescan or targeted post-download indexing, the backend best-effort runs
-`ffprobe` to fill `MediaFile` container, codec, FPS, resolution, and duration
-fields. The library shelf renders those facts as compact quality chips beside
-duration, sidecar fidelity, queue status, and media size. The shelf can be
-filtered by integrity, missing sidecar type, and codec/profile such as `h264`,
-`1080p`, or `mp4`, with quick-view presets for common checks like missing
-subtitles, media-only files, 1080p h264, and complete mp4 assets. Operators can
-also save browser-local library views, for example "무자막 h264" or "failed
-1080p", and reapply them later from the shelf toolbar. Selecting a library card
-opens a media detail drawer with per-file stream actions, technical profile,
-path integrity state, and sidecar/subtitle inventory.
+```bash
+curl http://127.0.0.1:8000/api/health
+```
 
-Startup is NAS-safe by default: the app backs up SQLite, runs Alembic
-`upgrade head`, then keeps an early `create_all` safety net for development
-schemas. The default SQLite URL is anchored to the backend directory so tests
-and app startup use the same local DB path. Set
-`CVN_DB_MIGRATE_ON_STARTUP=false` to disable startup migrations.
+## Enable Real Downloads
 
-Frontend text is localized from `frontend/src/locales/*.json`. Initial
-languages are English, Korean, Japanese, Chinese, and Hindi.
+The app is safe by default. It can plan and queue jobs without starting media
+transfer. Real downloads require the worker flag.
 
-Browser smoke coverage lives in `frontend/e2e/`. `npm run e2e:smoke` starts an
-isolated FastAPI backend, Vite frontend, temporary SQLite DB, and temporary NAS
-fixture, then verifies registration UI, queue preflight/bulk actions, library
-shelf, saved library views, runtime restart/tick log surfaces, real storage
-scan panels, worker control room, and rescan apply flows on desktop and mobile.
+For local development:
 
-## Release Direction
+```bash
+CVN_DOWNLOAD_WORKER_ENABLED=true
+CVN_YTDLP_BINARY=yt-dlp
+CVN_FFPROBE_BINARY=ffprobe
+```
 
-- `0.1.0-alpha`: channel registration, manual sync, metadata persistence
-- `0.2.0-alpha`: download queue, progress, basic library
-- `0.3.0-beta`: auto sync, streaming, basic settings
-- `1.0.0`: Docker deployment docs and stability pass
+Restart the backend after changing runtime env. The Settings tab can persist
+non-secret runtime overrides into `.env.runtime` and shows whether a restart is
+still required.
+
+Worker passes are intentionally bounded:
+
+- UI run buttons default to a confirmation modal.
+- API `run-once` limits are capped.
+- Per-channel policy can pause worker claims.
+- Candidate creation can continue even when workers are paused.
+
+## First Demo Flow
+
+1. Open Dashboard.
+2. Go to Channels.
+3. Paste a channel URL or handle.
+4. Probe and register.
+5. Click Sync to detect source videos.
+6. Review the channel detail tabs.
+7. Open Downloads.
+8. Queue missing videos.
+9. Run a live worker pass only if `CVN_DOWNLOAD_WORKER_ENABLED=true`.
+10. Open Library and confirm media/index coverage changed.
+11. Open Queue to review progress and worker audit.
+12. Open Insights to inspect storage pressure and sidecar drift.
+
+The `archive.txt` path supports the classic workflow:
+
+```bash
+youtube-dl --download-archive archive.txt "https://www.youtube.com/playlist?list=..."
+```
+
+In Channel Vault NAS, that ledger becomes an app workflow:
+
+- Paste or drop `archive.txt`.
+- Preview already archived, known missing, unknown, duplicate, and invalid rows.
+- Stage only videos that still need records/candidates.
+- Sync metadata for placeholder rows.
+- Queue/download only fresh candidates.
+
+## Filesystem Contract
+
+The default archive layout is per-video folders under the configured download
+root:
+
+```text
+downfolder/
+  channels/
+    @handle [UC...channel_id]/
+      2026/
+        2026-06-03 - Video title [video_id]/
+          video.mp4
+          video.info.json
+          *.jpg / *.webp
+          *.vtt / *.srt
+```
+
+Design principles:
+
+- `video.info.json` sidecars live beside media.
+- The database indexes the filesystem, not the other way around.
+- Source title changes do not rename existing folders automatically.
+- Source deletion/private/block events never delete local media by default.
+- Existing NAS folders can be rescanned and indexed without moving files.
+
+## Runtime Flags
+
+Common local flags:
+
+```bash
+CVN_DOWNLOAD_DIR=./downfolder
+CVN_DATABASE_URL=sqlite+aiosqlite:///./metadata/app.db
+CVN_DB_MIGRATE_ON_STARTUP=true
+CVN_DOWNLOAD_WORKER_ENABLED=false
+CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED=false
+CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS=300
+CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT=1
+CVN_METADATA_SYNC_SCHEDULER_ENABLED=false
+CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS=900
+CVN_METADATA_SYNC_SCHEDULER_LIMIT=2
+CVN_YTDLP_BINARY=yt-dlp
+CVN_FFPROBE_BINARY=ffprobe
+```
+
+Restart adapter flags are documented in the Settings tab. Supported adapter
+families in the backend are manual/local dev, Docker Compose guidance, systemd,
+supervisor, Synology package, QNAP package, and an explicit supervised restart
+hook.
+
+## Tests
+
+Backend:
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest
+```
+
+Frontend build:
+
+```bash
+cd frontend
+npm run build
+```
+
+Browser smoke:
+
+```bash
+cd frontend
+npm run e2e:smoke
+```
+
+The smoke suite starts an isolated FastAPI backend, Vite frontend, temporary
+SQLite DB, and temporary NAS fixture, then verifies registration, queue actions,
+library views, runtime/tick surfaces, storage scan panels, worker controls, and
+rescan flows on desktop and mobile.
+
+## Documentation
+
+- [Product Brief](docs/product-brief.md)
+- [Architecture](docs/architecture.md)
+- [Design Direction](docs/design-direction.md)
+- [Archive Priorities](docs/archive-priorities.md)
+- [Storage Recovery](docs/storage-recovery.md)
+- [Use Boundaries](docs/use-boundaries.md)
+
+## Public Release Checklist
+
+The goal is a public repo that can earn real adoption, not just a working local
+prototype.
+
+Before a public alpha release:
+
+- Validate Docker Compose on macOS, Linux, and one NAS-like host.
+- Publish versioned container images.
+- Add screenshot assets for Dashboard, Channels, Queue, Library, Insights, and Settings.
+- Add a 5-minute demo script with a small safe fixture channel.
+- Harden first-run empty states and runtime error copy.
+- Run full backend, frontend build, and browser smoke tests.
+- Tag `v0.1.0-alpha`.
+
+## Relationship To youtube-dl-nas
+
+This repository is a new product line. It is not a drop-in replacement for
+`youtube-dl-nas` v1 and does not take over the existing
+`modenaf360/youtube-dl-nas:latest` Docker image.
+
+The new app reuses proven platform patterns from
+[`hyeonsangjeon/youtube-dl-nas`](https://github.com/hyeonsangjeon/youtube-dl-nas)
+but changes the product model from a URL download queue to a channel archive
+console.

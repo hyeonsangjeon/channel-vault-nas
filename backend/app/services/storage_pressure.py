@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.archive import StoragePressureSnapshot
+from app.models.archive import StorageChannelPressureSnapshot, StoragePressureSnapshot
 from app.schemas.storage import (
+    StorageChannelPressureComparisonRead,
+    StorageChannelPressureSnapshotRead,
+    StorageChannelPressureTrendRead,
     StoragePressureSnapshotRead,
     StoragePressureTrendRead,
     StorageScanRead,
@@ -40,6 +43,27 @@ async def capture_storage_pressure_snapshot(
     )
     db.add(row)
     await db.flush()
+    created_at = row.created_at
+    db.add_all(
+        [
+            StorageChannelPressureSnapshot(
+                snapshot_id=row.id,
+                root=scan.volume.root,
+                channel_relative_path=channel.relative_path,
+                title=channel.title,
+                bytes=channel.bytes,
+                file_count=channel.file_count,
+                media_count=channel.media_count,
+                sidecar_count=channel.sidecar_count,
+                orphan_sidecar_count=channel.orphan_sidecar_count,
+                video_folder_count=channel.video_folder_count,
+                pressure_score=channel.pressure_score,
+                scanned_at=scan.scanned_at,
+                created_at=created_at,
+            )
+            for channel in scan.channels
+        ]
+    )
     await event_bus.publish(
         "storage.pressure.snapshot",
         {
@@ -95,6 +119,46 @@ async def build_storage_pressure_trend(
     )
 
 
+async def build_storage_channel_pressure_trend(
+    *,
+    db: AsyncSession,
+    relative_path: str,
+    limit: int = 24,
+) -> StorageChannelPressureTrendRead:
+    """Return recent per-channel storage footprint snapshots."""
+    rows = (
+        (
+            await db.execute(
+                select(StorageChannelPressureSnapshot)
+                .where(StorageChannelPressureSnapshot.channel_relative_path == relative_path)
+                .order_by(desc(StorageChannelPressureSnapshot.scanned_at), desc(StorageChannelPressureSnapshot.id))
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    snapshots = [_channel_snapshot_read(row) for row in reversed(rows)]
+    latest = snapshots[-1] if snapshots else None
+    previous = snapshots[-2] if len(snapshots) >= 2 else None
+    delta_bytes = (latest.bytes - previous.bytes) if latest and previous else 0
+    peak_bytes = max((snapshot.bytes for snapshot in snapshots), default=0)
+    comparisons = [_channel_pressure_comparison(snapshots=snapshots, window_days=days) for days in (7, 30)]
+    warning = next((comparison.warning for comparison in comparisons if comparison.warning), None)
+    return StorageChannelPressureTrendRead(
+        relative_path=relative_path,
+        snapshots=snapshots,
+        latest=latest,
+        previous=previous,
+        delta_bytes=delta_bytes,
+        delta_label=_signed_bytes(delta_bytes),
+        peak_bytes=peak_bytes,
+        peak_label=_format_bytes(peak_bytes),
+        comparisons=comparisons,
+        warning=warning,
+    )
+
+
 def _snapshot_read(row: StoragePressureSnapshot) -> StoragePressureSnapshotRead:
     return StoragePressureSnapshotRead(
         id=row.id,
@@ -119,6 +183,26 @@ def _snapshot_read(row: StoragePressureSnapshot) -> StoragePressureSnapshotRead:
     )
 
 
+def _channel_snapshot_read(row: StorageChannelPressureSnapshot) -> StorageChannelPressureSnapshotRead:
+    return StorageChannelPressureSnapshotRead(
+        id=row.id,
+        snapshot_id=row.snapshot_id,
+        root=row.root,
+        channel_relative_path=row.channel_relative_path,
+        title=row.title,
+        bytes=row.bytes,
+        label=_format_bytes(row.bytes),
+        file_count=row.file_count,
+        media_count=row.media_count,
+        sidecar_count=row.sidecar_count,
+        orphan_sidecar_count=row.orphan_sidecar_count,
+        video_folder_count=row.video_folder_count,
+        pressure_score=row.pressure_score,
+        scanned_at=row.scanned_at,
+        created_at=row.created_at,
+    )
+
+
 def _daily_growth_bytes(snapshots: list[StoragePressureSnapshotRead]) -> float:
     if len(snapshots) < 2:
         return 0.0
@@ -131,6 +215,74 @@ def _daily_growth_bytes(snapshots: list[StoragePressureSnapshotRead]) -> float:
     if growth <= 0:
         return 0.0
     return round(growth / (elapsed_seconds / 86_400), 2)
+
+
+def _channel_pressure_comparison(
+    *,
+    snapshots: list[StorageChannelPressureSnapshotRead],
+    window_days: int,
+) -> StorageChannelPressureComparisonRead:
+    latest = snapshots[-1] if snapshots else None
+    if latest is None:
+        return StorageChannelPressureComparisonRead(
+            window_days=window_days,
+            label=f"{window_days}d",
+            snapshot_count=0,
+        )
+
+    latest_at = _as_utc(latest.scanned_at)
+    cutoff = latest_at - timedelta(days=window_days)
+    window_snapshots = [snapshot for snapshot in snapshots if _as_utc(snapshot.scanned_at) >= cutoff]
+    baseline = window_snapshots[0] if len(window_snapshots) >= 2 else (snapshots[0] if len(snapshots) >= 2 else None)
+    if baseline is None or baseline.id == latest.id:
+        return StorageChannelPressureComparisonRead(
+            window_days=window_days,
+            label=f"{window_days}d",
+            snapshot_count=len(window_snapshots),
+            baseline=baseline,
+        )
+
+    delta_bytes = latest.bytes - baseline.bytes
+    elapsed_seconds = max((latest_at - _as_utc(baseline.scanned_at)).total_seconds(), 0)
+    daily_growth_bytes = round(delta_bytes / (elapsed_seconds / 86_400), 2) if delta_bytes > 0 and elapsed_seconds > 0 else 0.0
+    growth_percent = _growth_percent(baseline.bytes, latest.bytes)
+    return StorageChannelPressureComparisonRead(
+        window_days=window_days,
+        label=f"{window_days}d",
+        snapshot_count=len(window_snapshots),
+        baseline=baseline,
+        delta_bytes=delta_bytes,
+        delta_label=_signed_bytes(delta_bytes),
+        daily_growth_bytes=daily_growth_bytes,
+        daily_growth_label=_format_bytes(int(daily_growth_bytes)),
+        growth_percent=growth_percent,
+        warning=_channel_pressure_warning(
+            baseline_bytes=baseline.bytes,
+            delta_bytes=delta_bytes,
+            growth_percent=growth_percent,
+        ),
+    )
+
+
+def _growth_percent(previous_bytes: int, latest_bytes: int) -> float:
+    if previous_bytes <= 0:
+        return 100.0 if latest_bytes > 0 else 0.0
+    return round(((latest_bytes - previous_bytes) / previous_bytes) * 100, 1)
+
+
+def _channel_pressure_warning(
+    *,
+    baseline_bytes: int,
+    delta_bytes: int,
+    growth_percent: float,
+) -> str | None:
+    if delta_bytes <= 0:
+        return None
+    if baseline_bytes <= 0:
+        return "new_growth"
+    if growth_percent >= 50:
+        return "rapid_growth"
+    return "growing"
 
 
 def _runway_days(*, latest: StoragePressureSnapshotRead | None, daily_growth_bytes: float) -> float | None:

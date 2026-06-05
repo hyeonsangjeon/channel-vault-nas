@@ -15,6 +15,7 @@ from app.schemas.jobs import (
     DownloadWorkerRunRead,
     DownloadWorkerRunRequest,
     DownloadWorkerRunResult,
+    DownloadWorkerRunSummaryRead,
     QueuePreflightPlan,
     SyncJobRead,
 )
@@ -31,6 +32,8 @@ from app.services.download_queue import (
 )
 from app.services.download_worker import (
     build_download_worker_plan,
+    download_worker_summary_export_rows,
+    get_download_worker_run_summary,
     list_download_worker_runs,
     run_download_worker_once,
     stop_running_download_job,
@@ -109,6 +112,32 @@ async def get_download_worker_runs(
         dry_run=dry_run,
         failed_only=failed_only,
         limit=limit,
+    )
+
+
+@router.get("/downloads/worker/summary", response_model=DownloadWorkerRunSummaryRead)
+async def get_download_worker_summary(
+    db: DbSession,
+    channel_id: int | None = None,
+    run_id: int | None = None,
+) -> DownloadWorkerRunSummaryRead:
+    """Return a latest worker pass summary with queue rows and indexed files."""
+    return await get_download_worker_run_summary(db=db, channel_id=channel_id, run_id=run_id)
+
+
+@router.get("/downloads/worker/summary/export", response_class=Response)
+async def export_download_worker_summary(
+    db: DbSession,
+    export_format: Literal["ndjson", "csv"] = Query(default="ndjson", alias="format"),
+    channel_id: int | None = None,
+    run_id: int | None = None,
+) -> Response:
+    """Download the latest worker pass summary as NDJSON or CSV."""
+    summary = await get_download_worker_run_summary(db=db, channel_id=channel_id, run_id=run_id)
+    return audit_export_response(
+        rows=download_worker_summary_export_rows(summary),
+        filename_prefix="download-worker-summary",
+        export_format=export_format,
     )
 
 

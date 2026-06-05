@@ -11,14 +11,24 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.archive import Channel, ChannelPolicy, DownloadJob, DownloadWorkerRun, Video
+from app.models.archive import (
+    Channel,
+    ChannelPolicy,
+    DownloadJob,
+    DownloadWorkerRun,
+    MediaFile,
+    Video,
+)
 from app.schemas.jobs import (
     DownloadJobActionResult,
+    DownloadJobRead,
     DownloadWorkerPlan,
     DownloadWorkerPlanJob,
     DownloadWorkerRunRead,
     DownloadWorkerRunRequest,
     DownloadWorkerRunResult,
+    DownloadWorkerRunSummaryFile,
+    DownloadWorkerRunSummaryRead,
 )
 from app.services.archive_paths import video_archive_dir
 from app.services.archive_rescan import apply_rescan_target
@@ -86,6 +96,7 @@ async def run_download_worker_once(
 ) -> DownloadWorkerRunResult:
     """Run one bounded worker pass, defaulting to a non-mutating dry-run."""
     plan = await build_download_worker_plan(db=db, channel_id=payload.channel_id, limit=payload.limit)
+    planned_job_ids = [item.job.id for item in plan.jobs]
     if payload.dry_run or not settings.download_worker_enabled:
         skipped_reason = plan.locked_reason if not settings.download_worker_enabled else "dry-run requested"
         audit = DownloadWorkerRun(
@@ -95,6 +106,10 @@ async def run_download_worker_once(
             started_count=0,
             completed_count=0,
             failed_count=0,
+            planned_job_ids=planned_job_ids,
+            started_job_ids=[],
+            completed_job_ids=[],
+            failed_job_ids=[],
             skipped_reason=skipped_reason,
             started_at=datetime.now(UTC),
             completed_at=datetime.now(UTC),
@@ -120,6 +135,10 @@ async def run_download_worker_once(
         started_count=0,
         completed_count=0,
         failed_count=0,
+        planned_job_ids=planned_job_ids,
+        started_job_ids=[],
+        completed_job_ids=[],
+        failed_job_ids=[],
         skipped_reason=None,
         started_at=datetime.now(UTC),
         completed_at=None,
@@ -131,6 +150,9 @@ async def run_download_worker_once(
     started = 0
     completed = 0
     failed = 0
+    started_job_ids: list[int] = []
+    completed_job_ids: list[int] = []
+    failed_job_ids: list[int] = []
     results = []
     for item in plan.jobs:
         row = await db.execute(
@@ -141,12 +163,20 @@ async def run_download_worker_once(
             continue
         job, video, channel = result
         started += 1
+        started_job_ids.append(job.id)
         ok = await _run_one_job(db=db, job=job, video=video, channel=channel)
         completed += int(ok)
         failed += int(not ok)
+        if ok:
+            completed_job_ids.append(job.id)
+        else:
+            failed_job_ids.append(job.id)
         audit.started_count = started
         audit.completed_count = completed
         audit.failed_count = failed
+        audit.started_job_ids = list(started_job_ids)
+        audit.completed_job_ids = list(completed_job_ids)
+        audit.failed_job_ids = list(failed_job_ids)
         await _commit_worker_state(db)
         results.append(to_download_job(job, video, channel))
 
@@ -191,6 +221,126 @@ async def list_download_worker_runs(
     effective_limit = max(1, min(limit, 100))
     rows = (await db.execute(query.order_by(DownloadWorkerRun.created_at.desc()).limit(effective_limit))).all()
     return [_to_worker_run_read(run, channel) for run, channel in rows]
+
+
+async def get_download_worker_run_summary(
+    *,
+    db: AsyncSession,
+    channel_id: int | None = None,
+    run_id: int | None = None,
+) -> DownloadWorkerRunSummaryRead:
+    """Return a correlated worker pass summary for support and NAS automation."""
+    query = select(DownloadWorkerRun, Channel).outerjoin(Channel, DownloadWorkerRun.channel_id == Channel.id)
+    if run_id is not None:
+        query = query.where(DownloadWorkerRun.id == run_id)
+    elif channel_id is not None:
+        query = query.where(DownloadWorkerRun.channel_id == channel_id)
+    row = (await db.execute(query.order_by(DownloadWorkerRun.created_at.desc()).limit(1))).one_or_none()
+    if row is None:
+        channel = await db.get(Channel, channel_id) if channel_id is not None else None
+        return DownloadWorkerRunSummaryRead(
+            generated_at=datetime.now(UTC),
+            channel_id=channel_id,
+            channel_title=channel.title if channel else None,
+            run=None,
+            latest_worker_jobs=[],
+            completed_jobs=[],
+            failed_jobs=[],
+            archived_files=[],
+        )
+
+    run, channel = row
+    run_read = _to_worker_run_read(run, channel)
+    latest_job_ids = _ordered_unique(run_read.started_job_ids or run_read.planned_job_ids)
+    completed_job_ids = _ordered_unique(run_read.completed_job_ids)
+    failed_job_ids = _ordered_unique(run_read.failed_job_ids)
+    latest_jobs = await _download_jobs_for_ids(db=db, job_ids=latest_job_ids)
+    completed_job_id_set = set(completed_job_ids)
+    failed_job_id_set = set(failed_job_ids)
+    completed_jobs = [job for job in latest_jobs if job.id in completed_job_id_set]
+    failed_jobs = [job for job in latest_jobs if job.id in failed_job_id_set]
+    archived_files = await _media_files_for_jobs(db=db, jobs=completed_jobs)
+
+    return DownloadWorkerRunSummaryRead(
+        generated_at=datetime.now(UTC),
+        channel_id=run.channel_id,
+        channel_title=channel.title if channel else None,
+        run=run_read,
+        latest_worker_jobs=latest_jobs,
+        completed_jobs=completed_jobs,
+        failed_jobs=failed_jobs,
+        archived_files=archived_files,
+    )
+
+
+def download_worker_summary_export_rows(summary: DownloadWorkerRunSummaryRead) -> list[dict[str, object]]:
+    """Flatten a worker run summary into export-friendly audit rows."""
+    rows: list[dict[str, object]] = [
+        {
+            "row_kind": "summary",
+            "generated_at": summary.generated_at.isoformat(),
+            "channel_id": summary.channel_id,
+            "channel_title": summary.channel_title,
+            "run_id": summary.run.id if summary.run else None,
+            "run_status": summary.run.status if summary.run else None,
+            "started_count": summary.run.started_count if summary.run else 0,
+            "completed_count": summary.run.completed_count if summary.run else 0,
+            "failed_count": summary.run.failed_count if summary.run else 0,
+            "planned_job_ids": summary.run.planned_job_ids if summary.run else [],
+            "started_job_ids": summary.run.started_job_ids if summary.run else [],
+            "completed_job_ids": summary.run.completed_job_ids if summary.run else [],
+            "failed_job_ids": summary.run.failed_job_ids if summary.run else [],
+        }
+    ]
+    completed_job_ids = {job.id for job in summary.completed_jobs}
+    failed_job_ids = {job.id for job in summary.failed_jobs}
+    for job in summary.latest_worker_jobs:
+        rows.append(
+            {
+                "row_kind": "job",
+                "generated_at": summary.generated_at.isoformat(),
+                "channel_id": job.channel_id,
+                "channel_title": job.channel_title,
+                "job_id": job.id,
+                "video_id": job.video_id,
+                "video_external_id": job.video_external_id,
+                "video_title": job.video_title,
+                "job_status": job.status,
+                "run_result": "failed" if job.id in failed_job_ids else "completed" if job.id in completed_job_ids else "planned",
+                "progress": job.progress,
+                "quality": job.quality,
+                "priority": job.priority,
+                "archive_path": job.archive_path,
+                "error_message": job.error_message,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            }
+        )
+    for media in summary.archived_files:
+        rows.append(
+            {
+                "row_kind": "media_file",
+                "generated_at": summary.generated_at.isoformat(),
+                "channel_id": media.channel_id,
+                "channel_title": media.channel_title,
+                "video_id": media.video_id,
+                "video_external_id": media.video_external_id,
+                "video_title": media.video_title,
+                "media_file_id": media.id,
+                "relative_path": media.relative_path,
+                "filename": media.filename,
+                "size_bytes": media.size_bytes,
+                "size_label": media.size_label,
+                "container": media.container,
+                "video_codec": media.video_codec,
+                "audio_codec": media.audio_codec,
+                "width": media.width,
+                "height": media.height,
+                "duration_seconds": media.duration_seconds,
+                "created_at": media.created_at.isoformat(),
+            }
+        )
+    return rows
 
 
 async def stop_running_download_job(*, db: AsyncSession, job_id: int) -> DownloadJobActionResult:
@@ -245,12 +395,102 @@ def _to_worker_run_read(run: DownloadWorkerRun, channel: Channel | None) -> Down
         started_count=run.started_count,
         completed_count=run.completed_count,
         failed_count=run.failed_count,
+        planned_job_ids=_run_id_list(run.planned_job_ids),
+        started_job_ids=_run_id_list(run.started_job_ids),
+        completed_job_ids=_run_id_list(run.completed_job_ids),
+        failed_job_ids=_run_id_list(run.failed_job_ids),
         skipped_reason=run.skipped_reason,
         duration_seconds=duration_seconds,
         started_at=run.started_at,
         completed_at=run.completed_at,
         created_at=run.created_at,
     )
+
+
+async def _download_jobs_for_ids(*, db: AsyncSession, job_ids: list[int]) -> list[DownloadJobRead]:
+    if not job_ids:
+        return []
+    id_order = {job_id: index for index, job_id in enumerate(job_ids)}
+    rows = (
+        await db.execute(
+            select(DownloadJob, Video, Channel)
+            .join(Video, DownloadJob.video_id == Video.id)
+            .join(Channel, Video.channel_id == Channel.id)
+            .where(DownloadJob.id.in_(job_ids))
+        )
+    ).all()
+    jobs = [to_download_job(job, video, channel) for job, video, channel in rows]
+    return sorted(jobs, key=lambda job: id_order.get(job.id, len(id_order)))
+
+
+async def _media_files_for_jobs(*, db: AsyncSession, jobs: list[DownloadJobRead]) -> list[DownloadWorkerRunSummaryFile]:
+    if not jobs:
+        return []
+    video_order = {job.video_id: index for index, job in enumerate(jobs)}
+    rows = (
+        await db.execute(
+            select(MediaFile, Video, Channel)
+            .join(Video, MediaFile.video_id == Video.id)
+            .join(Channel, Video.channel_id == Channel.id)
+            .where(MediaFile.video_id.in_(list(video_order)))
+            .order_by(MediaFile.created_at.desc())
+        )
+    ).all()
+    files = [_to_worker_summary_file(media=media, video=video, channel=channel) for media, video, channel in rows]
+    return sorted(files, key=lambda item: (video_order.get(item.video_id, len(video_order)), item.created_at), reverse=False)
+
+
+def _to_worker_summary_file(*, media: MediaFile, video: Video, channel: Channel) -> DownloadWorkerRunSummaryFile:
+    return DownloadWorkerRunSummaryFile(
+        id=media.id,
+        video_id=video.id,
+        video_external_id=video.external_id,
+        video_title=video.title,
+        channel_id=channel.id,
+        channel_title=channel.title,
+        relative_path=media.relative_path,
+        filename=media.filename,
+        size_bytes=media.size_bytes,
+        size_label=_format_bytes(media.size_bytes or 0),
+        container=media.container,
+        video_codec=media.video_codec,
+        audio_codec=media.audio_codec,
+        fps=media.fps,
+        width=media.width,
+        height=media.height,
+        duration_seconds=media.duration_seconds,
+        info_json_path=media.info_json_path,
+        nfo_path=media.nfo_path,
+        thumbnail_path=media.thumbnail_path,
+        created_at=media.created_at,
+    )
+
+
+def _run_id_list(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, int)]
+
+
+def _ordered_unique(values: list[int]) -> list[int]:
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _format_bytes(value: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(max(0, value))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{int(size)} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
 
 
 def _queued_download_query(*, channel_id: int | None) -> Select[tuple[DownloadJob, Video, Channel]]:

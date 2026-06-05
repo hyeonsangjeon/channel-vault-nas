@@ -30,6 +30,7 @@ from app.schemas.settings import (
     SchedulerTickRead,
 )
 from app.services.download_scheduler import get_download_worker_scheduler_status
+from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import (
     get_metadata_sync_scheduler_status,
     list_metadata_sync_ticks,
@@ -115,7 +116,7 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
 
 def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
     """Return the best restart adapter for the current deployment."""
-    configured_adapter = settings.restart_adapter.strip().lower() or "auto"
+    configured_adapter = _normalize_restart_adapter(settings.restart_adapter)
     hook_command = settings.restart_hook_command.strip()
     service_name = settings.restart_service_name.strip() or None
 
@@ -128,6 +129,9 @@ def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
             executable=False,
             manual_required=True,
             reason="runtime restart adapter is disabled",
+            command_available=True,
+            setup_hints=["set CVN_RESTART_ADAPTER=auto to re-enable deployment detection"],
+            env_lines=["CVN_RESTART_ADAPTER=disabled"],
         )
 
     if hook_command:
@@ -139,59 +143,171 @@ def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
             executable=True,
             manual_required=False,
             reason="CVN_RESTART_HOOK_COMMAND is configured",
+            command_available=True,
+            setup_hints=["hook commands run as the backend process user with CVN_RESTART_REASON in the environment"],
+            env_lines=[f"CVN_RESTART_HOOK_COMMAND={hook_command}"],
             service_name=service_name,
         )
 
     if configured_adapter == "supervisor" or (configured_adapter == "auto" and os.environ.get("SUPERVISOR_ENABLED")):
         command = _supervisor_restart_command(service_name=service_name)
+        command_available = _command_available("supervisorctl")
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="supervisor",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="supervisorctl",
+        )
         return RuntimeRestartAdapter(
             adapter="supervisor",
             environment="supervised",
             label="Supervisor restart",
             command=command,
-            executable=settings.restart_adapter_execute and service_name is not None,
-            manual_required=not settings.restart_adapter_execute or service_name is None,
+            executable=executable,
+            manual_required=not executable,
             reason=(
                 "set CVN_RESTART_SERVICE_NAME and CVN_RESTART_ADAPTER_EXECUTE=true to run supervisorctl"
                 if service_name is None or not settings.restart_adapter_execute
+                else "supervisorctl is not available to this process"
+                if not command_available
                 else "supervisorctl restart is executable by configuration"
             ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="supervisor", service_name=service_name),
             service_name=service_name,
         )
 
     compose_file = _detect_compose_file()
     if configured_adapter == "docker_compose" or (configured_adapter == "auto" and compose_file is not None):
         command = _docker_compose_restart_command(compose_file=compose_file, service_name=service_name)
+        command_available = _command_available("docker")
+        executable = settings.restart_adapter_execute and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="docker-compose",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="docker",
+            service_optional=True,
+        )
         return RuntimeRestartAdapter(
             adapter="docker-compose",
             environment="container" if _running_in_container() else "docker-compose",
             label="Docker Compose restart",
             command=command,
-            executable=settings.restart_adapter_execute,
-            manual_required=not settings.restart_adapter_execute,
+            executable=executable,
+            manual_required=not executable,
             reason=(
-                "docker compose file detected; enable CVN_RESTART_ADAPTER_EXECUTE=true to run it from the UI"
+                "docker CLI is not available to this process; copy the command or configure a supervised host hook"
+                if not command_available
+                else "docker-compose adapter is copy-only until CVN_RESTART_ADAPTER_EXECUTE=true"
                 if not settings.restart_adapter_execute
                 else "docker compose restart command is executable by configuration"
             ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="docker-compose", service_name=service_name),
             service_name=service_name,
             compose_file=str(compose_file) if compose_file is not None else None,
         )
 
     if configured_adapter == "systemd":
         command = _systemd_restart_command(service_name=service_name)
+        command_available = _command_available("systemctl")
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="systemd",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="systemctl",
+        )
         return RuntimeRestartAdapter(
             adapter="systemd",
             environment="nas-service",
             label="System service restart",
             command=command,
-            executable=settings.restart_adapter_execute and service_name is not None,
-            manual_required=not settings.restart_adapter_execute or service_name is None,
+            executable=executable,
+            manual_required=not executable,
             reason=(
                 "set CVN_RESTART_SERVICE_NAME and CVN_RESTART_ADAPTER_EXECUTE=true to run systemctl"
                 if service_name is None or not settings.restart_adapter_execute
+                else "systemctl is not available to this process"
+                if not command_available
                 else "system service restart is executable by configuration"
             ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="systemd", service_name=service_name),
+            service_name=service_name,
+        )
+
+    if configured_adapter in {"synology", "synology_package", "synopkg"} or (
+        configured_adapter == "auto" and _looks_like_synology_nas()
+    ):
+        command = _synology_package_restart_command(service_name=service_name)
+        command_available = _command_available("synopkg")
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="synology-package",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="synopkg",
+        )
+        return RuntimeRestartAdapter(
+            adapter="synology-package",
+            environment="synology-nas",
+            label="Synology package restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME to the Synology package name and CVN_RESTART_ADAPTER_EXECUTE=true"
+                if service_name is None or not settings.restart_adapter_execute
+                else "synopkg is not available to this process"
+                if not command_available
+                else "Synology package restart is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="synology-package", service_name=service_name),
+            service_name=service_name,
+        )
+
+    if configured_adapter in {"qnap", "qnap_package", "qnap_init", "qpkg"} or (
+        configured_adapter == "auto" and _looks_like_qnap_nas()
+    ):
+        command = _qnap_package_restart_command(service_name=service_name)
+        command_available = _qnap_package_command_available(service_name=service_name)
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="qnap-package",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name=_qnap_package_command_name(service_name=service_name),
+        )
+        return RuntimeRestartAdapter(
+            adapter="qnap-package",
+            environment="qnap-nas",
+            label="QNAP package restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME to the QNAP package script name and CVN_RESTART_ADAPTER_EXECUTE=true"
+                if service_name is None or not settings.restart_adapter_execute
+                else "QNAP package restart script is not available to this process"
+                if not command_available
+                else "QNAP package restart is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="qnap-package", service_name=service_name),
             service_name=service_name,
         )
 
@@ -208,6 +324,13 @@ def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
                 if not settings.restart_adapter_execute
                 else "local restart command is executable by configuration"
             ),
+            command_available=True,
+            setup_hints=(
+                ["set CVN_RESTART_ADAPTER_EXECUTE=true only if this shell command is safe for your dev session"]
+                if not settings.restart_adapter_execute
+                else []
+            ),
+            env_lines=["CVN_RESTART_ADAPTER=local-dev", "CVN_RESTART_ADAPTER_EXECUTE=true"],
         )
 
     return RuntimeRestartAdapter(
@@ -218,6 +341,15 @@ def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
         executable=False,
         manual_required=True,
         reason="no restart hook or deployment adapter was detected",
+        command_available=True,
+        setup_hints=[
+            "set CVN_RESTART_HOOK_COMMAND to a supervised restart script",
+            "or set CVN_RESTART_ADAPTER=docker-compose|systemd|supervisor|synology-package|qnap-package with CVN_RESTART_SERVICE_NAME",
+        ],
+        env_lines=[
+            "CVN_RESTART_HOOK_COMMAND=/path/to/restart-channel-vault.sh",
+            "CVN_RESTART_ADAPTER_EXECUTE=true",
+        ],
     )
 
 
@@ -226,12 +358,25 @@ async def request_runtime_restart(payload: RuntimeRestartRequest) -> RuntimeRest
     adapter = get_runtime_restart_adapter()
     reason = payload.reason or "runtime settings changed"
     if not adapter.executable:
+        message = f"Manual restart required: {adapter.reason}"
+        await _publish_restart_audit(
+            "runtime.restart.manual_required",
+            adapter=adapter,
+            reason=reason,
+            message=message,
+        )
         return RuntimeRestartResult(
             requested=False,
             adapter=adapter,
-            message=f"Manual restart required: {adapter.reason}",
+            message=message,
         )
 
+    await _publish_restart_audit(
+        "runtime.restart.requested",
+        adapter=adapter,
+        reason=reason,
+        message="Restart command accepted by deployment adapter.",
+    )
     env = os.environ.copy()
     env["CVN_RESTART_REASON"] = reason
     process = await asyncio.create_subprocess_shell(
@@ -247,16 +392,32 @@ async def request_runtime_restart(payload: RuntimeRestartRequest) -> RuntimeRest
             timeout=max(1, settings.restart_command_timeout_seconds),
         )
     except TimeoutError:
+        await _publish_restart_audit(
+            "runtime.restart.dispatched",
+            adapter=adapter,
+            reason=reason,
+            message="Restart command was dispatched and is still running.",
+        )
         return RuntimeRestartResult(
             requested=True,
             adapter=adapter,
             message="Restart command was dispatched and is still running.",
         )
 
+    message = "Restart command completed." if process.returncode == 0 else "Restart command failed."
+    await _publish_restart_audit(
+        "runtime.restart.completed" if process.returncode == 0 else "runtime.restart.failed",
+        adapter=adapter,
+        reason=reason,
+        message=message,
+        exit_code=process.returncode,
+        stdout=_trim_command_output(stdout.decode(errors="replace")),
+        stderr=_trim_command_output(stderr.decode(errors="replace")),
+    )
     return RuntimeRestartResult(
         requested=process.returncode == 0,
         adapter=adapter,
-        message="Restart command completed." if process.returncode == 0 else "Restart command failed.",
+        message=message,
         exit_code=process.returncode,
         stdout=_trim_command_output(stdout.decode(errors="replace")),
         stderr=_trim_command_output(stderr.decode(errors="replace")),
@@ -403,6 +564,76 @@ def _runtime_env_path() -> Path:
     return Path(settings.runtime_env_file).expanduser().resolve()
 
 
+def _normalize_restart_adapter(value: str) -> str:
+    cleaned = value.strip().lower().replace("-", "_") or "auto"
+    return cleaned
+
+
+def _command_available(command_name: str) -> bool:
+    return which(command_name) is not None
+
+
+def _restart_setup_hints(
+    *,
+    adapter: str,
+    execute_enabled: bool,
+    service_name: str | None,
+    command_available: bool,
+    command_name: str,
+    service_optional: bool = False,
+) -> list[str]:
+    hints: list[str] = []
+    if not command_available:
+        hints.append(f"{command_name} is not available to the backend process")
+    if not service_optional and service_name is None:
+        hints.append("set CVN_RESTART_SERVICE_NAME to the service name managed by this adapter")
+    if not execute_enabled:
+        hints.append("set CVN_RESTART_ADAPTER_EXECUTE=true after validating the command")
+    if adapter == "docker-compose" and service_name is None:
+        hints.append("set CVN_RESTART_SERVICE_NAME to restart one compose service instead of the whole project")
+    return hints
+
+
+def _restart_env_lines(*, adapter: str, service_name: str | None = None) -> list[str]:
+    lines = [f"CVN_RESTART_ADAPTER={adapter}"]
+    if service_name:
+        lines.append(f"CVN_RESTART_SERVICE_NAME={service_name}")
+    lines.append("CVN_RESTART_ADAPTER_EXECUTE=true")
+    return lines
+
+
+async def _publish_restart_audit(
+    event_type: str,
+    *,
+    adapter: RuntimeRestartAdapter,
+    reason: str,
+    message: str,
+    exit_code: int | None = None,
+    stdout: str | None = None,
+    stderr: str | None = None,
+) -> None:
+    data: dict[str, object] = {
+        "adapter": adapter.adapter,
+        "environment": adapter.environment,
+        "service_name": adapter.service_name,
+        "compose_file": adapter.compose_file,
+        "command": adapter.command,
+        "command_available": adapter.command_available,
+        "executable": adapter.executable,
+        "manual_required": adapter.manual_required,
+        "reason": reason,
+        "message": message,
+    }
+    if exit_code is not None:
+        data["exit_code"] = exit_code
+    if stdout:
+        data["stdout"] = stdout
+    if stderr:
+        data["stderr"] = stderr
+    await event_bus.publish(event_type, data)
+    await event_bus.flush_persistence(timeout=0.75)
+
+
 def _restart_command() -> str:
     return "cd backend && uvicorn app.main:app --reload"
 
@@ -434,6 +665,36 @@ def _systemd_restart_command(*, service_name: str | None) -> str:
 def _supervisor_restart_command(*, service_name: str | None) -> str:
     service = service_name or "channel-vault-nas"
     return " ".join(shlex.quote(part) for part in ("supervisorctl", "restart", service))
+
+
+def _synology_package_restart_command(*, service_name: str | None) -> str:
+    package_name = service_name or "channel-vault-nas"
+    return " ".join(shlex.quote(part) for part in ("synopkg", "restart", package_name))
+
+
+def _qnap_package_restart_command(*, service_name: str | None) -> str:
+    script = _qnap_package_command_name(service_name=service_name)
+    return " ".join(shlex.quote(part) for part in (script, "restart"))
+
+
+def _qnap_package_command_name(*, service_name: str | None) -> str:
+    package_name = service_name or "channel-vault-nas"
+    return f"/etc/init.d/{package_name}.sh"
+
+
+def _qnap_package_command_available(*, service_name: str | None) -> bool:
+    if service_name is None:
+        return False
+    script = Path(_qnap_package_command_name(service_name=service_name))
+    return script.exists() and os.access(script, os.X_OK)
+
+
+def _looks_like_synology_nas() -> bool:
+    return Path("/etc/synoinfo.conf").exists() or _command_available("synopkg")
+
+
+def _looks_like_qnap_nas() -> bool:
+    return Path("/etc/config/qpkg.conf").exists()
 
 
 def _running_in_container() -> bool:

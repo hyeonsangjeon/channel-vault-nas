@@ -132,6 +132,7 @@ class SyncJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     videos_seen: Mapped[int] = mapped_column(Integer, default=0)
     videos_created: Mapped[int] = mapped_column(Integer, default=0)
+    videos_enriched: Mapped[int] = mapped_column(Integer, default=0)
     candidates_created: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -179,6 +180,10 @@ class DownloadWorkerRun(Base):
     started_count: Mapped[int] = mapped_column(Integer, default=0)
     completed_count: Mapped[int] = mapped_column(Integer, default=0)
     failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    planned_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    started_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    completed_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    failed_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
     skipped_reason: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -203,6 +208,7 @@ class MetadataSyncTick(Base):
     failed_count: Mapped[int] = mapped_column(Integer, default=0)
     videos_seen_count: Mapped[int] = mapped_column(Integer, default=0)
     videos_created_count: Mapped[int] = mapped_column(Integer, default=0)
+    videos_enriched_count: Mapped[int] = mapped_column(Integer, default=0)
     candidates_created_count: Mapped[int] = mapped_column(Integer, default=0)
     skipped_reason: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)
@@ -265,6 +271,27 @@ class StoragePressureSnapshot(Base):
     orphan_sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
     unindexed_media_count: Mapped[int] = mapped_column(Integer, default=0)
     indexed_missing_count: Mapped[int] = mapped_column(Integer, default=0)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+
+class StorageChannelPressureSnapshot(Base):
+    """Point-in-time per-channel NAS footprint snapshot."""
+
+    __tablename__ = "storage_channel_pressure_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("storage_pressure_snapshots.id", ondelete="CASCADE"), index=True)
+    root: Mapped[str] = mapped_column(Text)
+    channel_relative_path: Mapped[str] = mapped_column(Text, index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    bytes: Mapped[int] = mapped_column(Integer, default=0)
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    media_count: Mapped[int] = mapped_column(Integer, default=0)
+    sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
+    orphan_sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
+    video_folder_count: Mapped[int] = mapped_column(Integer, default=0)
+    pressure_score: Mapped[int] = mapped_column(Integer, default=0)
     scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
 

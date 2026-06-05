@@ -27,6 +27,8 @@ from app.services.download_scheduler import (
 )
 from app.services.download_worker import (
     build_download_worker_plan,
+    download_worker_summary_export_rows,
+    get_download_worker_run_summary,
     list_download_worker_runs,
     run_download_worker_once,
     stop_running_download_job,
@@ -190,8 +192,29 @@ print("[download] 100% of 10.00MiB in 00:00:01 at 10.00MiB/s", flush=True)
     assert worker_run is not None
     assert worker_run.status == "completed"
     assert worker_run.completed_count == 1
+    assert worker_run.planned_job_ids == [job.id]
+    assert worker_run.started_job_ids == [job.id]
+    assert worker_run.completed_job_ids == [job.id]
+    assert worker_run.failed_job_ids == []
     assert video_count == 1
     assert stray_video is None
+
+    async with AsyncSessionLocal() as session:
+        summary = await get_download_worker_run_summary(db=session, channel_id=channel.id)
+
+    assert summary.run is not None
+    assert summary.run.id == worker_run.id
+    assert [item.id for item in summary.latest_worker_jobs] == [job.id]
+    assert [item.id for item in summary.completed_jobs] == [job.id]
+    assert summary.failed_jobs == []
+    assert len(summary.archived_files) == 1
+    assert summary.archived_files[0].video_id == video.id
+    assert summary.archived_files[0].filename == "video.mp4"
+    export_rows = download_worker_summary_export_rows(summary)
+    assert [row["row_kind"] for row in export_rows] == ["summary", "job", "media_file"]
+    assert export_rows[1]["job_id"] == job.id
+    assert export_rows[1]["run_result"] == "completed"
+    assert export_rows[2]["filename"] == "video.mp4"
 
 
 @pytest.mark.asyncio
@@ -331,6 +354,10 @@ async def test_worker_run_history_filters_and_duration() -> None:
                     started_count=1,
                     completed_count=0,
                     failed_count=1,
+                    planned_job_ids=[101],
+                    started_job_ids=[101],
+                    completed_job_ids=[],
+                    failed_job_ids=[101],
                     skipped_reason="yt-dlp exited with code 1",
                     started_at=started_at,
                     completed_at=datetime(2026, 5, 31, 12, 0, 7, tzinfo=UTC),
@@ -343,6 +370,10 @@ async def test_worker_run_history_filters_and_duration() -> None:
                     started_count=0,
                     completed_count=0,
                     failed_count=0,
+                    planned_job_ids=[101, 102],
+                    started_job_ids=[],
+                    completed_job_ids=[],
+                    failed_job_ids=[],
                     skipped_reason="dry-run requested",
                     started_at=started_at,
                     completed_at=datetime(2026, 5, 31, 12, 0, 2, tzinfo=UTC),
@@ -355,6 +386,10 @@ async def test_worker_run_history_filters_and_duration() -> None:
                     started_count=2,
                     completed_count=2,
                     failed_count=0,
+                    planned_job_ids=[201, 202],
+                    started_job_ids=[201, 202],
+                    completed_job_ids=[201, 202],
+                    failed_job_ids=[],
                     skipped_reason=None,
                     started_at=started_at,
                     completed_at=datetime(2026, 5, 31, 12, 0, 5, tzinfo=UTC),
@@ -373,8 +408,12 @@ async def test_worker_run_history_filters_and_duration() -> None:
     assert failed_runs[0].channel_title == "Worker History Channel"
     assert failed_runs[0].duration_seconds == 7
     assert failed_runs[0].skipped_reason == "yt-dlp exited with code 1"
+    assert failed_runs[0].planned_job_ids == [101]
+    assert failed_runs[0].failed_job_ids == [101]
     assert [run.status for run in dry_runs] == ["dry_run"]
+    assert dry_runs[0].planned_job_ids == [101, 102]
     assert [run.completed_count for run in completed_runs] == [2]
+    assert completed_runs[0].completed_job_ids == [201, 202]
 
 
 @pytest.mark.asyncio

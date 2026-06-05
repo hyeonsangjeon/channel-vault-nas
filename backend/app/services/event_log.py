@@ -30,6 +30,7 @@ async def persist_archive_event(event: ArchiveEvent, *, attempts: int = 6) -> No
 async def list_archive_events(
     *,
     limit: int = 50,
+    event_id: int | None = None,
     type_prefix: str | None = None,
     channel_id: int | None = None,
     job_id: int | None = None,
@@ -42,6 +43,8 @@ async def list_archive_events(
     try:
         async with AsyncSessionLocal() as session:
             query = select(ArchiveEventLog)
+            if event_id is not None:
+                query = query.where(ArchiveEventLog.id == event_id)
             if type_prefix:
                 query = query.where(ArchiveEventLog.type.like(f"{type_prefix}%"))
             result = await session.execute(
@@ -85,7 +88,7 @@ async def prune_archive_events(*, keep_latest: int = 500) -> ArchiveEventPruneRe
 
 
 def _to_archive_event(row: ArchiveEventLog) -> ArchiveEvent:
-    return ArchiveEvent(type=row.type, data=row.data or {}, occurred_at=row.occurred_at)
+    return ArchiveEvent(id=row.id, type=row.type, data=row.data or {}, occurred_at=row.occurred_at)
 
 
 def _event_matches(

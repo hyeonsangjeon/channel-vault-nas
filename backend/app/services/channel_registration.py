@@ -19,6 +19,10 @@ from app.schemas.source import (
     SourceVideoPreview,
 )
 from app.services.archive_paths import channel_folder_name, video_folder_name
+from app.services.archive_txt import (
+    ARCHIVE_TXT_PLACEHOLDER_DESCRIPTION,
+    ARCHIVE_TXT_PLACEHOLDER_PREFIX,
+)
 from app.services.ytdlp_probe import probe_channel_source
 
 
@@ -28,6 +32,7 @@ class VideoUpsertSummary:
 
     videos_seen: int
     videos_created: int
+    videos_enriched: int
 
 
 async def list_registered_channels(db: AsyncSession) -> list[RegisteredChannel]:
@@ -143,6 +148,7 @@ async def upsert_probe_videos(
     existing_result = await db.execute(select(Video).where(Video.channel_id == channel.id))
     existing = {video.external_id: video for video in existing_result.scalars().all()}
     created = 0
+    enriched = 0
 
     channel_folder = channel_folder_name(
         handle=channel.handle,
@@ -179,7 +185,12 @@ async def upsert_probe_videos(
             )
             continue
 
+        was_archive_txt_placeholder = _is_archive_txt_placeholder(video)
+        if was_archive_txt_placeholder:
+            enriched += 1
         video.title = preview.title
+        if video.description == ARCHIVE_TXT_PLACEHOLDER_DESCRIPTION:
+            video.description = None
         video.published_at = preview.published_at or video.published_at
         video.upload_date = upload_date or video.upload_date
         video.duration_seconds = preview.duration_seconds or video.duration_seconds
@@ -187,8 +198,9 @@ async def upsert_probe_videos(
         video.source_state = "available"
         video.last_seen_in_source_at = now
         video.info_json_path = info_json_path
+        video.updated_at = now
 
-    return VideoUpsertSummary(videos_seen=len(probe.videos), videos_created=created)
+    return VideoUpsertSummary(videos_seen=len(probe.videos), videos_created=created, videos_enriched=enriched)
 
 
 async def upsert_channel_policy(
@@ -282,6 +294,10 @@ def _info_json_path(channel_folder: str, preview: SourceVideoPreview, upload_dat
         upload_date=upload_date,
     )
     return f"channels/{channel_folder}/{year}/{video_folder}/video.info.json"
+
+
+def _is_archive_txt_placeholder(video: Video) -> bool:
+    return video.title.startswith(ARCHIVE_TXT_PLACEHOLDER_PREFIX) and video.info_json_path is None
 
 
 def _date_from_yyyymmdd(value: str | None) -> date | None:

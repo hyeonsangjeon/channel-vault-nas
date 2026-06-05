@@ -1,6 +1,6 @@
 """Tests for DB backup and sidecar recovery contracts."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -17,6 +17,7 @@ from app.models.archive import (
     DownloadJob,
     DownloadWorkerRun,
     MediaFile,
+    StorageChannelPressureSnapshot,
     StoragePressureSnapshot,
     SyncJob,
     Video,
@@ -35,6 +36,7 @@ from app.services.storage_orphans import (
     restore_quarantined_sidecar,
 )
 from app.services.storage_pressure import (
+    build_storage_channel_pressure_trend,
     build_storage_pressure_trend,
     capture_storage_pressure_snapshot,
 )
@@ -165,6 +167,7 @@ async def test_storage_pressure_snapshots_track_growth(tmp_path: Path) -> None:
     run_migrations()
     await init_db()
     async with AsyncSessionLocal() as session:
+        await session.execute(delete(StorageChannelPressureSnapshot))
         await session.execute(delete(StoragePressureSnapshot))
         await session.commit()
 
@@ -184,6 +187,11 @@ async def test_storage_pressure_snapshots_track_growth(tmp_path: Path) -> None:
     async with AsyncSessionLocal() as session:
         second = await capture_storage_pressure_snapshot(db=session, scan=second_scan)
         trend = await build_storage_pressure_trend(db=session, limit=10)
+        channel_trend = await build_storage_channel_pressure_trend(
+            db=session,
+            relative_path="channels/signal [UC_SIGNAL]",
+            limit=10,
+        )
         await session.commit()
 
     assert first.archive_bytes == 1024
@@ -194,6 +202,11 @@ async def test_storage_pressure_snapshots_track_growth(tmp_path: Path) -> None:
     assert trend.daily_growth_bytes == 2048
     assert trend.runway_label != ""
     assert [snapshot.id for snapshot in trend.snapshots] == [first.id, second.id]
+    assert channel_trend.latest is not None
+    assert channel_trend.previous is not None
+    assert channel_trend.latest.bytes == 3072
+    assert channel_trend.delta_bytes == 2048
+    assert channel_trend.peak_label == "3 KB"
 
 
 @pytest.mark.asyncio
@@ -492,6 +505,7 @@ async def test_storage_pressure_snapshot_endpoint(
     run_migrations()
     await init_db()
     async with AsyncSessionLocal() as session:
+        await session.execute(delete(StorageChannelPressureSnapshot))
         await session.execute(delete(StoragePressureSnapshot))
         await session.commit()
 
@@ -506,6 +520,10 @@ async def test_storage_pressure_snapshot_endpoint(
         captured = await client.post("/api/storage/pressure/snapshots")
         await event_bus.flush_persistence()
         trend = await client.get("/api/storage/pressure/trend")
+        channel_trend = await client.get(
+            "/api/storage/pressure/channels/trend",
+            params={"relative_path": "channels/signal [UC_SIGNAL]"},
+        )
 
     assert empty.status_code == 200
     assert empty.json()["snapshots"] == []
@@ -514,6 +532,74 @@ async def test_storage_pressure_snapshot_endpoint(
     assert captured.json()["latest"]["file_count"] == 1
     assert trend.status_code == 200
     assert trend.json()["latest"]["archive_label"] == "5 B"
+    assert channel_trend.status_code == 200
+    assert channel_trend.json()["latest"]["bytes"] == len("media")
+    assert channel_trend.json()["latest"]["channel_relative_path"] == "channels/signal [UC_SIGNAL]"
+    assert [comparison["window_days"] for comparison in channel_trend.json()["comparisons"]] == [7, 30]
+
+
+@pytest.mark.asyncio
+async def test_storage_channel_pressure_trend_includes_growth_comparisons() -> None:
+    run_migrations()
+    await init_db()
+    relative_path = "channels/signal [UC_SIGNAL]"
+    now = datetime(2026, 6, 3, 7, 0, tzinfo=UTC)
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(StorageChannelPressureSnapshot))
+        await session.execute(delete(StoragePressureSnapshot))
+        for days_ago, channel_bytes in ((20, 1_000), (5, 1_500), (0, 2_400)):
+            scanned_at = now - timedelta(days=days_ago)
+            snapshot = StoragePressureSnapshot(
+                root="/archive",
+                archive_bytes=channel_bytes,
+                used_bytes=channel_bytes,
+                free_bytes=10_000,
+                total_bytes=12_400,
+                pressure_percent=20.0,
+                file_count=1,
+                dir_count=1,
+                channel_count=1,
+                scanned_at=scanned_at,
+                created_at=scanned_at,
+            )
+            session.add(snapshot)
+            await session.flush()
+            session.add(
+                StorageChannelPressureSnapshot(
+                    snapshot_id=snapshot.id,
+                    root="/archive",
+                    channel_relative_path=relative_path,
+                    title="Signal",
+                    bytes=channel_bytes,
+                    file_count=1,
+                    media_count=1,
+                    sidecar_count=0,
+                    orphan_sidecar_count=0,
+                    video_folder_count=1,
+                    pressure_score=20,
+                    scanned_at=scanned_at,
+                    created_at=scanned_at,
+                )
+            )
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        trend = await build_storage_channel_pressure_trend(db=session, relative_path=relative_path, limit=10)
+
+    assert trend.delta_bytes == 900
+    assert trend.warning == "rapid_growth"
+    seven_day, thirty_day = trend.comparisons
+    assert seven_day.window_days == 7
+    assert seven_day.baseline is not None
+    assert seven_day.baseline.bytes == 1_500
+    assert seven_day.delta_bytes == 900
+    assert seven_day.daily_growth_bytes == 180
+    assert seven_day.growth_percent == 60
+    assert seven_day.warning == "rapid_growth"
+    assert thirty_day.baseline is not None
+    assert thirty_day.baseline.bytes == 1_000
+    assert thirty_day.delta_bytes == 1_400
+    assert thirty_day.growth_percent == 140
 
 
 @pytest.mark.asyncio

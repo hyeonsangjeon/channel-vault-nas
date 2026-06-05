@@ -31,6 +31,10 @@ class OperationMission(BaseModel):
     count: int = 0
     primary_value: str = ""
     secondary_value: str = ""
+    target_kind: str = ""
+    target_id: str = ""
+    target_channel_id: int | None = None
+    target_path: str = ""
     resolved: bool = False
 
 

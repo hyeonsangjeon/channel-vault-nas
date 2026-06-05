@@ -46,7 +46,7 @@ import {
   Square,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import {
   applyLibraryRescan,
   apiUrl,
@@ -65,6 +65,7 @@ import {
   getDashboard,
   getDownloadJobs,
   getDownloadWorkerPlan,
+  getDownloadWorkerRunSummary,
   getDownloadWorkerRuns,
   getLibrary,
   getLibraryFiles,
@@ -75,6 +76,7 @@ import {
   getRecentEvents,
   getRuntimeSettings,
   getSchedulerTicks,
+  getStorageChannelPressureTrend,
   getStorageOrphanQuarantine,
   getStoragePressureTrend,
   getStorageScan,
@@ -95,6 +97,7 @@ import {
   runDownloadWorkerOnce,
   runMetadataSyncSchedulerOnce,
   saveLibraryView,
+  stageArchiveTxt,
   stopDownloadJob,
   syncChannel,
   updateChannel,
@@ -104,6 +107,7 @@ import {
   type ArchiveEvent,
   type ArchiveEventFilters,
   type ArchiveTxtPreviewResult,
+  type ArchiveTxtStageResult,
   type ChannelPolicy,
   type ChannelDetail,
   type ChannelCadence,
@@ -114,6 +118,7 @@ import {
   type ChannelProbeResult,
   type ChannelRegistrationPayload,
   type ChannelRegistrationResult,
+  type ChannelSyncResult,
   type ChannelVideo,
   type DashboardSnapshot,
   type DownloadJob,
@@ -126,12 +131,14 @@ import {
   type LibrarySnapshot,
   type QueuePreflightPlan,
   type RescanApplyResult,
+  type RuntimeRestartAdapter,
   type RuntimeSettings,
   type RuntimeSettingsUpdate,
   type MetadataSyncTickFilters,
   type MetadataSyncTick,
   type SchedulerTick,
   type SchedulerTickFilters,
+  type StorageChannelPressureTrend,
   type StorageDriftActionResult,
   type StorageDriftItem,
   type StorageOrphanQuarantineResult,
@@ -181,7 +188,7 @@ const navItems: { key: TranslationKey; id: NavId }[] = [
 
 type ChannelDetailTab = "overview" | "downloads" | "library" | "logs" | "policy";
 type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
-type ArchiveEventFilter = "all" | "download" | "sync" | "library" | "storage" | "policy" | "failure";
+type ArchiveEventFilter = "all" | "download" | "sync" | "library" | "storage" | "runtime" | "policy" | "failure";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
 type AuditExportFormat = "ndjson" | "csv";
@@ -192,7 +199,23 @@ type QueuePreflightFilter = "all" | "ready" | "review" | "unchecked";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
+type LaunchRunwayState = "ready" | "active" | "locked";
 type DownloadTelemetryStatus = "running" | "completed" | "failed" | "cancelled";
+type EventStreamStatus = "connecting" | "live" | "error" | "closed";
+type AppRoute = {
+  nav: NavId;
+  channelTab?: ChannelDetailTab;
+  channelId?: number;
+  queueJobIds?: number[];
+  runtimeGuide?: boolean;
+  eventLog?: boolean;
+};
+type NavStatusTone = "neutral" | "good" | "active" | "warn" | "bad";
+type NavStatusBadge = {
+  value: string;
+  tone: NavStatusTone;
+  label: string;
+};
 type DownloadTelemetry = {
   jobId: number;
   videoId: number | null;
@@ -219,6 +242,10 @@ type SavedLibraryView = {
   updatedAt: string;
 };
 const savedLibraryViewsStorageKey = "channel-vault-library-views";
+const archiveTxtDraftStorageKey = "channel-vault-archive-txt-draft";
+const archiveTxtDefaultDraft = "youtube 6lXl1hkEgcA\nhttps://youtu.be/M0IXseVAxw8\nyoutube 6lXl1hkEgcA";
+const archiveTxtPlaceholderPrefix = "archive.txt import ";
+const retentionPresetValues = [100, 200, 500, 1000];
 const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "worker.history.filter.all" },
   { id: "failed", labelKey: "worker.history.filter.failed" },
@@ -231,6 +258,7 @@ const archiveEventFilters: { id: ArchiveEventFilter; labelKey: TranslationKey }[
   { id: "sync", labelKey: "events.filter.sync" },
   { id: "library", labelKey: "events.filter.library" },
   { id: "storage", labelKey: "events.filter.storage" },
+  { id: "runtime", labelKey: "events.filter.runtime" },
   { id: "policy", labelKey: "events.filter.policy" },
   { id: "failure", labelKey: "events.filter.failure" },
 ];
@@ -342,9 +370,28 @@ type RuntimeDraft = {
   ffprobeBinary: string;
 };
 
+type RestartAdapterPreset = {
+  id: string;
+  labelKey: TranslationKey;
+  detailKey: TranslationKey;
+  command: string;
+  lines: string[];
+};
+type CommandPaletteItem = {
+  id: string;
+  icon: typeof Search;
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  groupKey: TranslationKey;
+  keywords: string[];
+  disabled?: boolean;
+  run: () => void;
+};
+
 function App() {
   const { language, setLanguage, t } = useI18n();
-  const [activeNavId, setActiveNavId] = useState<NavId>("dashboard");
+  const initialRoute = useMemo(() => readAppRouteFromHash(), []);
+  const [activeNavId, setActiveNavId] = useState<NavId>(initialRoute?.nav ?? "dashboard");
   const [sourceValue, setSourceValue] = useState("https://www.youtube.com/@wingnut987s4");
   const [maxQuality, setMaxQuality] = useState("1080p");
   const [audioOnly, setAudioOnly] = useState(false);
@@ -364,18 +411,26 @@ function App() {
   const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [events, setEvents] = useState<ArchiveEvent[]>([]);
-  const [eventLogOpen, setEventLogOpen] = useState(false);
+  const [eventLogOpen, setEventLogOpen] = useState(initialRoute?.eventLog ?? false);
   const [eventLogRows, setEventLogRows] = useState<ArchiveEvent[]>([]);
   const [eventLogQuery, setEventLogQuery] = useState<ArchiveEventFilters>({});
   const [eventLogScopeLabel, setEventLogScopeLabel] = useState("");
+  const [eventLogHighlightId, setEventLogHighlightId] = useState<number | null>(null);
   const [eventLogFilter, setEventLogFilter] = useState<ArchiveEventFilter>("all");
   const [eventLogStatus, setEventLogStatus] = useState<"idle" | "loading" | "error">("idle");
   const [eventLogCopyStatus, setEventLogCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [eventLogRetentionStatus, setEventLogRetentionStatus] = useState<RetentionStatus>("idle");
   const [eventLogRetentionKeep, setEventLogRetentionKeep] = useState("500");
+  const [eventDetail, setEventDetail] = useState<ArchiveEvent | null>(null);
+  const [eventDetailCopyStatus, setEventDetailCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [eventDetailCurlStatus, setEventDetailCurlStatus] = useState<"idle" | "copied" | "error">("idle");
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [operationsReadiness, setOperationsReadiness] = useState<OperationsReadiness | null>(null);
   const [operationsStatus, setOperationsStatus] = useState<"idle" | "refreshing" | "done" | "error">("idle");
+  const [topbarRefreshStatus, setTopbarRefreshStatus] = useState<"idle" | "refreshing" | "done" | "error">("idle");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [eventStreamStatus, setEventStreamStatus] = useState<EventStreamStatus>("connecting");
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettings | null>(null);
   const [storageScan, setStorageScan] = useState<StorageScan | null>(null);
   const [storagePressureTrend, setStoragePressureTrend] = useState<StoragePressureTrend | null>(null);
@@ -400,7 +455,7 @@ function App() {
   const [expandedQueueConsoleJobId, setExpandedQueueConsoleJobId] = useState<number | null>(null);
   const [queueConsoleFileMap, setQueueConsoleFileMap] = useState<Record<number, LibraryFile[]>>({});
   const [queueConsoleFileStatus, setQueueConsoleFileStatus] = useState<Record<number, "idle" | "loading" | "error">>({});
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
+  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(initialRoute?.channelId ?? null);
   const [selectionSeedKey, setSelectionSeedKey] = useState("");
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
   const [libraryQuery, setLibraryQuery] = useState("");
@@ -417,6 +472,9 @@ function App() {
   const [storageOrphanKindFilter, setStorageOrphanKindFilter] = useState("all");
   const [storageReportCopyStatus, setStorageReportCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [storageLensCopyStatus, setStorageLensCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [storageLensCommandCopyStatus, setStorageLensCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [storageChannelPressureTrend, setStorageChannelPressureTrend] = useState<StorageChannelPressureTrend | null>(null);
+  const [storageFocusPath, setStorageFocusPath] = useState("");
   const [storageDriftActionStatus, setStorageDriftActionStatus] = useState<Record<string, StorageDriftActionStatus>>({});
   const [selectedStorageDriftItem, setSelectedStorageDriftItem] = useState<StorageDriftItem | null>(null);
   const [storageDriftPreview, setStorageDriftPreview] = useState<StorageDriftActionResult | null>(null);
@@ -433,14 +491,23 @@ function App() {
   const [storageQuarantinePurgeConfirm, setStorageQuarantinePurgeConfirm] = useState("");
   const [storageQuarantinePurgePlan, setStorageQuarantinePurgePlan] = useState<StorageQuarantinePurgeResult | null>(null);
   const [rescanResult, setRescanResult] = useState<RescanApplyResult | null>(null);
-  const [archiveTxtDraft, setArchiveTxtDraft] = useState("youtube 6lXl1hkEgcA\nhttps://youtu.be/M0IXseVAxw8\nyoutube 6lXl1hkEgcA");
+  const [archiveTxtDraft, setArchiveTxtDraft] = useState(() => loadArchiveTxtDraft());
   const [archiveTxtPreview, setArchiveTxtPreview] = useState<ArchiveTxtPreviewResult | null>(null);
   const [archiveTxtStatus, setArchiveTxtStatus] = useState<"idle" | "previewing" | "done" | "error">("idle");
+  const [archiveTxtStageStatus, setArchiveTxtStageStatus] = useState<"idle" | "staging" | "done" | "error">("idle");
+  const [archiveTxtStageResult, setArchiveTxtStageResult] = useState<ArchiveTxtStageResult | null>(null);
+  const [archiveTxtSyncStatus, setArchiveTxtSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [archiveTxtSyncResult, setArchiveTxtSyncResult] = useState<ChannelSyncResult | null>(null);
+  const [archiveTxtQueueStatus, setArchiveTxtQueueStatus] = useState<"idle" | "preparing" | "done" | "error">("idle");
+  const [archiveTxtRunConfirmOpen, setArchiveTxtRunConfirmOpen] = useState(false);
+  const [archiveTxtRunStatus, setArchiveTxtRunStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [workerPlan, setWorkerPlan] = useState<DownloadWorkerPlan | null>(null);
   const [workerRuns, setWorkerRuns] = useState<DownloadWorkerRunAudit[]>([]);
   const [downloadTelemetry, setDownloadTelemetry] = useState<Record<number, DownloadTelemetry>>({});
   const [workerHistoryRuns, setWorkerHistoryRuns] = useState<DownloadWorkerRunAudit[]>([]);
   const [workerHistoryOpen, setWorkerHistoryOpen] = useState(false);
+  const [downloadRunSummaryOpen, setDownloadRunSummaryOpen] = useState(false);
+  const [downloadRunSummaryCopyStatus, setDownloadRunSummaryCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [workerHistoryFilter, setWorkerHistoryFilter] = useState<WorkerHistoryFilter>("all");
   const [schedulerTickDrawerOpen, setSchedulerTickDrawerOpen] = useState(false);
   const [schedulerTickRows, setSchedulerTickRows] = useState<SchedulerTick[]>([]);
@@ -457,24 +524,59 @@ function App() {
   const [metadataLimitFilter, setMetadataLimitFilter] = useState("");
   const [metadataRetentionKeep, setMetadataRetentionKeep] = useState("200");
   const [metadataRunStatus, setMetadataRunStatus] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(false);
+  const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(initialRoute?.runtimeGuide ?? false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [supportBundleCopyStatus, setSupportBundleCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [schedulerTickRetentionStatus, setSchedulerTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [metadataTickRetentionStatus, setMetadataTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [runtimeRestartStatus, setRuntimeRestartStatus] = useState<"idle" | "requesting" | "requested" | "manual" | "error">("idle");
   const [runtimeRestartMessage, setRuntimeRestartMessage] = useState("");
+  const [runtimeRestartEvents, setRuntimeRestartEvents] = useState<ArchiveEvent[]>([]);
+  const [runtimeRestartEventsStatus, setRuntimeRestartEventsStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [runtimeRestartPresetCopyStatus, setRuntimeRestartPresetCopyStatus] = useState<{
+    id: string;
+    status: "copied" | "error";
+  } | null>(null);
+  const [runtimeComposeSmokeCopyStatus, setRuntimeComposeSmokeCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
   const [runtimeApplyMessage, setRuntimeApplyMessage] = useState("");
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft>(() => defaultRuntimeDraft());
   const [runtimeClockNow, setRuntimeClockNow] = useState(() => Date.now());
-  const [activeChannelTab, setActiveChannelTab] = useState<ChannelDetailTab>("overview");
+  const [activeChannelTab, setActiveChannelTab] = useState<ChannelDetailTab>(
+    initialRoute?.channelTab ?? (initialRoute?.nav === "library" ? "library" : "overview"),
+  );
   const [liveDownloadConfirmOpen, setLiveDownloadConfirmOpen] = useState(false);
   const [liveDownloadStatus, setLiveDownloadStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const registeredChannelIdRef = useRef<number | null>(null);
+  const applyingRouteHashRef = useRef(false);
+  const librarySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        setCommandPaletteQuery("");
+        window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
+        return;
+      }
+      if (event.key === "Escape") {
+        setCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) return;
+    window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
+  }, [commandPaletteOpen]);
 
   const activeProbe = registration?.probe ?? probe;
   const registeredChannelId = registration?.channel.id ?? activeProbe?.existing_channel_id ?? selectedChannelId;
@@ -534,6 +636,94 @@ function App() {
     },
     [activeProbe, activeTitle, dashboard, registration],
   );
+  const channelSwitcherOptions = useMemo(() => {
+    const channels = new Map<number, { id: number; title: string; detail: string }>();
+    dashboard?.channels.forEach((channel) => {
+      const channelId = parseDashboardChannelId(channel.id);
+      if (!Number.isFinite(channelId)) return;
+      channels.set(channelId, {
+        id: channelId,
+        title: channel.title,
+        detail: `${channel.new_videos} ${t("metrics.newVideos.label")} · ${channel.failed_jobs} ${t("queue.failed")}`,
+      });
+    });
+    if (registeredChannelId && !channels.has(registeredChannelId)) {
+      channels.set(registeredChannelId, {
+        id: registeredChannelId,
+        title: activeTitle,
+        detail: activeHandle ?? activeExternalId,
+      });
+    }
+    return Array.from(channels.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [activeExternalId, activeHandle, activeTitle, dashboard, registeredChannelId, t]);
+  const activeChannelContextDetail = registeredChannelId
+    ? `${activeArchivedCount}/${activeCounts?.video_count ?? channelVideos.length} · ${activeMissingCount} ${t("backup.missing.label")}`
+    : t("channel.switcher.noChannel");
+  const currentAppRoute = useMemo<AppRoute>(() => {
+    const queueJobIds =
+      activeNavId === "queue"
+        ? Array.from(
+            new Set(
+              [...queueConsoleSelectedJobIds, expandedQueueConsoleJobId]
+                .filter((jobId): jobId is number => typeof jobId === "number" && Number.isFinite(jobId)),
+            ),
+          )
+        : undefined;
+    return {
+      nav: activeNavId,
+      channelTab: activeNavId === "channels" ? activeChannelTab : undefined,
+      channelId: registeredChannelId ?? undefined,
+      queueJobIds: queueJobIds?.length ? queueJobIds : undefined,
+      runtimeGuide: activeNavId === "settings" && runtimeGuideOpen,
+      eventLog: eventLogOpen,
+    };
+  }, [activeChannelTab, activeNavId, eventLogOpen, expandedQueueConsoleJobId, queueConsoleSelectedJobIds, registeredChannelId, runtimeGuideOpen]);
+
+  useEffect(() => {
+    if (applyingRouteHashRef.current) return;
+    writeAppHash(currentAppRoute, "replace");
+  }, [currentAppRoute]);
+
+  useEffect(() => {
+    function applyRouteFromHash() {
+      const route = readAppRouteFromHash();
+      if (!route) return;
+      applyingRouteHashRef.current = true;
+      setActiveNavId(route.nav);
+      if (route.nav === "channels") {
+        setActiveChannelTab(route.channelTab ?? "overview");
+      } else if (route.nav === "library") {
+        setActiveChannelTab("library");
+      }
+      if (route.channelId) {
+        setSelectedChannelId(route.channelId);
+        if (route.nav === "queue") {
+          setQueueConsoleChannelFilter(String(route.channelId));
+        }
+      }
+      if (route.nav === "queue" && route.queueJobIds?.length) {
+        setQueueConsoleSelectedJobIds(route.queueJobIds);
+        setExpandedQueueConsoleJobId(route.queueJobIds[0]);
+      }
+      if (route.runtimeGuide && route.nav === "settings") {
+        void handleOpenRuntimeGuide();
+      }
+      if (route.eventLog) {
+        void handleOpenEventLog();
+      }
+      window.setTimeout(() => {
+        applyingRouteHashRef.current = false;
+      }, 0);
+    }
+
+    applyRouteFromHash();
+    window.addEventListener("hashchange", applyRouteFromHash);
+    window.addEventListener("popstate", applyRouteFromHash);
+    return () => {
+      window.removeEventListener("hashchange", applyRouteFromHash);
+      window.removeEventListener("popstate", applyRouteFromHash);
+    };
+  }, []);
   const activeLinks = useMemo(() => {
     if (!dashboard?.channels.length) return mockLinks;
     const ids = new Set(dashboard.channels.map((channel) => channel.id));
@@ -648,6 +838,16 @@ function App() {
     if (!storageScan?.volume.root || !activeStorageChannel?.relative_path) return "";
     return `${storageScan.volume.root.replace(/\/$/, "")}/${activeStorageChannel.relative_path}`;
   }, [activeStorageChannel, storageScan]);
+  const activeStorageOpenCommand = useMemo(
+    () => buildStorageOpenCommand(activeStoragePath, runtimeSettings?.restart_adapter ?? null, t),
+    [activeStoragePath, runtimeSettings?.restart_adapter, t],
+  );
+  const activeStorageHistoryPeakBytes = useMemo(
+    () => Math.max(1, storageChannelPressureTrend?.peak_bytes ?? activeStorageChannel?.bytes ?? 0),
+    [activeStorageChannel?.bytes, storageChannelPressureTrend],
+  );
+  const activeStorageGrowthComparisons = storageChannelPressureTrend?.comparisons ?? [];
+  const activeStorageGrowthWarning = storageChannelPressureTrend?.warning ?? null;
   const activeStorageDriftRows = useMemo(() => {
     if (!storageScan || !activeStorageChannel) return [];
     const basePath = activeStorageChannel.relative_path.toLowerCase();
@@ -749,6 +949,36 @@ function App() {
     queued: downloadJobs.filter((job) => job.status === "queued").length,
     running: downloadJobs.filter((job) => job.status === "running").length,
   };
+  const archiveTxtStageableCount = (archiveTxtPreview?.known_missing_count ?? 0) + (archiveTxtPreview?.unknown_count ?? 0);
+  const archiveTxtDraftLineCount = archiveTxtDraft.split(/\r?\n/).filter((line) => line.trim()).length;
+  const archiveTxtStagedVideoRows = useMemo(() => {
+    if (!archiveTxtStageResult?.video_ids.length) {
+      return { enriched: [] as ChannelVideo[], pending: [] as ChannelVideo[], rows: [] as ChannelVideo[] };
+    }
+    const stagedIds = new Set(archiveTxtStageResult.video_ids);
+    const rows = channelVideos.filter((video) => stagedIds.has(video.id));
+    return {
+      rows,
+      enriched: rows.filter((video) => !video.title.startsWith(archiveTxtPlaceholderPrefix)),
+      pending: rows.filter((video) => video.title.startsWith(archiveTxtPlaceholderPrefix)),
+    };
+  }, [archiveTxtStageResult, channelVideos]);
+  const archiveTxtWizardStepIndex = archiveTxtStageResult
+    ? 3
+    : archiveTxtPreview
+      ? 2
+      : archiveTxtDraft.trim()
+        ? 1
+        : 0;
+  const archiveTxtRunJobIds = useMemo(() => archiveTxtStageResult?.job_ids.slice(0, 5) ?? [], [archiveTxtStageResult]);
+  const archiveTxtRunJobs = useMemo(() => {
+    if (!archiveTxtRunJobIds.length) return [];
+    const jobIds = new Set(archiveTxtRunJobIds);
+    return downloadJobs.filter((job) => jobIds.has(job.id)).slice(0, 5);
+  }, [archiveTxtRunJobIds, downloadJobs]);
+  const archiveTxtRunLimit = archiveTxtRunJobIds.length;
+  const archiveTxtRunBlocked =
+    !workerPlan?.enabled || Boolean(workerPlan?.locked_reason) || archiveTxtRunLimit === 0 || archiveTxtRunStatus === "running";
   const liveRunLimit = Math.min(5, Math.max(workerPlan?.claimable_count ?? 0, nextDownloadJobs.length, activeMissingCount));
   const liveDownloadBlocked =
     !workerPlan?.enabled || Boolean(workerPlan?.locked_reason) || liveRunLimit === 0 || liveDownloadStatus === "running";
@@ -775,6 +1005,44 @@ function App() {
   const runningWorkerJobs = useMemo(
     () => (workerPlan?.running_jobs.length ? workerPlan.running_jobs.map((item) => item.job) : runningJobs),
     [runningJobs, workerPlan],
+  );
+  const archiveTxtSummaryJobIds = useMemo(() => new Set(archiveTxtStageResult?.job_ids ?? []), [archiveTxtStageResult]);
+  const archiveTxtSummaryJobs = useMemo(
+    () => downloadJobs.filter((job) => archiveTxtSummaryJobIds.has(job.id)),
+    [archiveTxtSummaryJobIds, downloadJobs],
+  );
+  const latestWorkerRun = workerRuns[0] ?? null;
+  const latestWorkerAuditJobIds = useMemo(
+    () => {
+      const startedIds = latestWorkerRun?.started_job_ids ?? [];
+      const plannedIds = latestWorkerRun?.planned_job_ids ?? [];
+      return new Set(startedIds.length ? startedIds : plannedIds);
+    },
+    [latestWorkerRun],
+  );
+  const latestWorkerCompletedJobIds = useMemo(() => new Set(latestWorkerRun?.completed_job_ids ?? []), [latestWorkerRun]);
+  const latestWorkerFailedJobIds = useMemo(() => new Set(latestWorkerRun?.failed_job_ids ?? []), [latestWorkerRun]);
+  const latestWorkerJobs = useMemo(
+    () =>
+      latestWorkerAuditJobIds.size
+        ? downloadJobs.filter((job) => latestWorkerAuditJobIds.has(job.id))
+        : downloadJobs.filter((job) => archiveTxtSummaryJobIds.has(job.id)),
+    [archiveTxtSummaryJobIds, downloadJobs, latestWorkerAuditJobIds],
+  );
+  const recentCompletedJobs = useMemo(
+    () =>
+      latestWorkerCompletedJobIds.size
+        ? downloadJobs.filter((job) => latestWorkerCompletedJobIds.has(job.id))
+        : downloadJobs.filter((job) => job.status === "completed"),
+    [downloadJobs, latestWorkerCompletedJobIds],
+  );
+  const recentCompletedVideoIds = useMemo(() => new Set(recentCompletedJobs.map((job) => job.video_id)), [recentCompletedJobs]);
+  const recentArchivedLibraryItems = useMemo(
+    () =>
+      recentCompletedVideoIds.size
+        ? (library?.items ?? []).filter((item) => recentCompletedVideoIds.has(item.id))
+        : (library?.items ?? []).filter((item) => item.archive_state === "archived" || item.media_count > 0),
+    [library, recentCompletedVideoIds],
   );
   const telemetryByJobId = useMemo(
     () => new Map(Object.values(downloadTelemetry).map((item) => [item.jobId, item])),
@@ -985,6 +1253,14 @@ function App() {
       null,
     [downloadTelemetry, queueConsoleActiveTelemetry],
   );
+  const queueConsoleHasActiveFilters =
+    queueConsoleSearch.trim().length > 0 ||
+    queueConsoleStatusFilter !== "all" ||
+    queueConsolePreflightFilter !== "all" ||
+    queueConsoleChannelFilter !== "all";
+  const queueConsoleClaimBlocked =
+    (queueConsoleWorkerPlan?.queued_count ?? queueConsoleCounts.queued) > 0 &&
+    ((queueConsoleWorkerPlan?.claimable_count ?? 0) === 0 || Boolean(queueConsoleWorkerPlan?.locked_reason));
   const visibleLibraryItems = useMemo(() => {
     const query = libraryQuery.trim().toLowerCase();
     const codec = libraryCodecFilter.trim().toLowerCase();
@@ -1008,6 +1284,12 @@ function App() {
       return matchesQuery && matchesIntegrity && matchesSidecar && matchesCodec;
     });
   }, [library, libraryCodecFilter, libraryIntegrityFilter, libraryQuery, librarySidecarFilter]);
+  const librarySourceItemCount = library?.items.length ?? 0;
+  const libraryHasActiveFilters =
+    libraryQuery.trim().length > 0 ||
+    libraryIntegrityFilter !== "all" ||
+    librarySidecarFilter !== "all" ||
+    libraryCodecFilter.trim().length > 0;
   const ytdlpBinary = useMemo(
     () => runtimeSettings?.binaries.find((binary) => binary.name === "yt-dlp") ?? null,
     [runtimeSettings],
@@ -1146,6 +1428,9 @@ function App() {
     () => runtimeEnvRows.map((row) => `${row.key}=${row.recommended}`).join("\n"),
     [runtimeEnvRows],
   );
+  const composeSmokeCommand = useMemo(() => buildComposeSmokeCommand(false), []);
+  const composeSmokeFastCommand = useMemo(() => buildComposeSmokeCommand(true), []);
+  const runtimeRestartPresets = useMemo(() => restartAdapterPresets(), []);
   const schedulerTickSummary = useMemo(
     () => summarizeSchedulerTicks(schedulerTickRows.length ? schedulerTickRows : runtimeSettings?.scheduler_ticks ?? []),
     [runtimeSettings?.scheduler_ticks, schedulerTickRows],
@@ -1163,6 +1448,9 @@ function App() {
     [eventLogFilter, eventLogSourceRows],
   );
   const eventLogSummary = useMemo(() => summarizeArchiveEvents(eventLogSourceRows), [eventLogSourceRows]);
+  const eventDetailTargetChannelId = eventDetail ? readEventNumber(eventDetail.data, "channel_id") : null;
+  const eventDetailTargetJobIds = eventDetail ? readEventNumberList(eventDetail.data, "job_ids") : [];
+  const eventDetailTargetJobId = eventDetail ? (readEventNumber(eventDetail.data, "job_id") ?? eventDetailTargetJobIds[0] ?? null) : null;
   const activeSavedLibraryView = useMemo(
     () => savedLibraryViews.find((view) => view.id === activeSavedLibraryViewId) ?? null,
     [activeSavedLibraryViewId, savedLibraryViews],
@@ -1224,6 +1512,14 @@ function App() {
   }, [savedLibraryViews]);
 
   useEffect(() => {
+    if (archiveTxtDraft.trim()) {
+      localStorage.setItem(archiveTxtDraftStorageKey, archiveTxtDraft);
+    } else {
+      localStorage.removeItem(archiveTxtDraftStorageKey);
+    }
+  }, [archiveTxtDraft]);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadLibraryViews() {
       try {
@@ -1274,10 +1570,18 @@ function App() {
     loadDashboard();
 
     const socket = new WebSocket(WS_EVENTS_URL);
+    setEventStreamStatus("connecting");
+    socket.onopen = () => {
+      setEventStreamStatus("live");
+    };
     socket.onmessage = (message) => {
       try {
         const event = JSON.parse(message.data) as ArchiveEvent;
+        setEventStreamStatus("live");
         setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 100));
+        if (event.type.startsWith("runtime.restart")) {
+          setRuntimeRestartEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 8));
+        }
         applyDownloadTelemetryEvent(event);
         getDashboard().then(setDashboard).catch(() => undefined);
         getStorageScan().then(setStorageScan).catch(() => undefined);
@@ -1296,12 +1600,38 @@ function App() {
         // Ignore malformed development events.
       }
     };
+    socket.onerror = () => {
+      setEventStreamStatus("error");
+    };
+    socket.onclose = () => {
+      if (!cancelled) setEventStreamStatus("closed");
+    };
 
     return () => {
       cancelled = true;
       socket.close();
     };
   }, []);
+
+  useEffect(() => {
+    setStorageLensCopyStatus("idle");
+    setStorageLensCommandCopyStatus("idle");
+    if (!activeStorageChannel?.relative_path) {
+      setStorageChannelPressureTrend(null);
+      return;
+    }
+    let cancelled = false;
+    getStorageChannelPressureTrend(activeStorageChannel.relative_path)
+      .then((trend) => {
+        if (!cancelled) setStorageChannelPressureTrend(trend);
+      })
+      .catch(() => {
+        if (!cancelled) setStorageChannelPressureTrend(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStorageChannel?.relative_path]);
 
   useEffect(() => {
     if (registeredChannelId || !dashboard?.channels.length) return;
@@ -1721,6 +2051,13 @@ function App() {
     );
   }
 
+  function handleResetQueueConsoleFilters() {
+    setQueueConsoleSearch("");
+    setQueueConsoleStatusFilter("all");
+    setQueueConsolePreflightFilter("all");
+    setQueueConsoleChannelFilter("all");
+  }
+
   async function handleToggleQueueConsoleDetails(job: DownloadJob) {
     if (expandedQueueConsoleJobId === job.id) {
       setExpandedQueueConsoleJobId(null);
@@ -1867,9 +2204,57 @@ function App() {
     }
   }
 
+  function resetArchiveTxtReviewState() {
+    setArchiveTxtPreview(null);
+    setArchiveTxtStageResult(null);
+    setArchiveTxtSyncResult(null);
+    setArchiveTxtSyncStatus("idle");
+    setArchiveTxtQueueStatus("idle");
+    setArchiveTxtStageStatus("idle");
+    setArchiveTxtStatus("idle");
+  }
+
+  function replaceArchiveTxtDraft(value: string) {
+    setArchiveTxtDraft(value);
+    resetArchiveTxtReviewState();
+  }
+
+  async function loadArchiveTxtFile(file: File) {
+    try {
+      const content = await file.text();
+      replaceArchiveTxtDraft(content);
+      setWorkflowStatus("idle");
+      setWorkflowMessage(t("archiveTxt.fileLoaded").replace("{name}", file.name));
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  function handleArchiveTxtFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (file) {
+      void loadArchiveTxtFile(file);
+    }
+    event.currentTarget.value = "";
+  }
+
+  function handleArchiveTxtDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const file = Array.from(event.dataTransfer.files).find((item) => item.type === "text/plain" || item.name.endsWith(".txt"));
+    if (file) {
+      void loadArchiveTxtFile(file);
+    }
+  }
+
   async function handlePreviewArchiveTxt() {
     if (!archiveTxtDraft.trim()) return;
     setArchiveTxtStatus("previewing");
+    setArchiveTxtStageStatus("idle");
+    setArchiveTxtStageResult(null);
+    setArchiveTxtSyncStatus("idle");
+    setArchiveTxtSyncResult(null);
+    setArchiveTxtQueueStatus("idle");
     setWorkflowMessage("");
     try {
       const preview = await previewArchiveTxt(archiveTxtDraft, registeredChannelId);
@@ -1884,6 +2269,196 @@ function App() {
       );
     } catch (error) {
       setArchiveTxtStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleStageArchiveTxt() {
+    if (!archiveTxtDraft.trim() || !registeredChannelId || archiveTxtStageableCount <= 0) return;
+    setArchiveTxtStageStatus("staging");
+    setArchiveTxtSyncStatus("idle");
+    setArchiveTxtSyncResult(null);
+    setArchiveTxtQueueStatus("idle");
+    setWorkflowMessage("");
+    try {
+      const result = await stageArchiveTxt(archiveTxtDraft, registeredChannelId, channelPolicy?.max_quality ?? maxQuality);
+      setArchiveTxtStageResult(result);
+      setArchiveTxtPreview(result.preview);
+      setArchiveTxtStageStatus("done");
+      setWorkflowStatus("idle");
+      const [snapshot, recentEvents] = await Promise.all([getDashboard(), getRecentEvents(100)]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      await refreshQueueConsoleState();
+      await loadChannelState(registeredChannelId);
+      setWorkflowMessage(
+        t("archiveTxt.stageDone")
+          .replace("{videos}", String(result.videos_created))
+          .replace("{candidates}", String(result.candidates_created)),
+      );
+    } catch (error) {
+      setArchiveTxtStageStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleArchiveTxtOpenQueue() {
+    setActiveNavId("queue");
+    setQueueConsoleSearch("");
+    setQueueConsoleStatusFilter("launchable");
+    setQueueConsolePreflightFilter("all");
+    if (registeredChannelId) {
+      setQueueConsoleChannelFilter(String(registeredChannelId));
+    }
+    setQueueConsoleSelectedJobIds(archiveTxtStageResult?.job_ids ?? []);
+    setQueueConsoleStatus("loading");
+    try {
+      await refreshQueueConsoleState();
+      setQueueConsoleStatus("idle");
+      window.setTimeout(() => scrollToAppSection(".queue-console-panel"), 0);
+    } catch (error) {
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleArchiveTxtPrepareQueue() {
+    if (!archiveTxtStageResult || !registeredChannelId) return;
+    const jobIds = archiveTxtStageResult.job_ids.slice(0, 5);
+    if (jobIds.length === 0) {
+      setWorkflowMessage(t("archiveTxt.queuePreparedEmpty"));
+      await handleArchiveTxtOpenQueue();
+      return;
+    }
+    setArchiveTxtQueueStatus("preparing");
+    setQueueConsoleStatus("bulk");
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = await bulkUpdateDownloadJobs({ job_ids: jobIds, action: "queue", priority: 85 });
+      await refreshQueueConsoleState();
+      await loadChannelState(registeredChannelId);
+      setQueueConsoleSearch("");
+      setQueueConsoleChannelFilter(String(registeredChannelId));
+      setQueueConsoleStatusFilter("queued");
+      setQueueConsolePreflightFilter("all");
+      setQueueConsoleSelectedJobIds(jobIds);
+      setArchiveTxtQueueStatus("done");
+      setQueueConsoleStatus("idle");
+      setWorkflowStatus("idle");
+      setActiveNavId("queue");
+      setWorkflowMessage(t("archiveTxt.queuePrepared").replace("{count}", String(result.updated)));
+      window.setTimeout(() => scrollToAppSection(".queue-console-panel"), 0);
+    } catch (error) {
+      setArchiveTxtQueueStatus("error");
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleArchiveTxtOpenRunConfirm() {
+    if (!archiveTxtStageResult || !registeredChannelId) return;
+    setArchiveTxtRunStatus("idle");
+    setWorkflowMessage("");
+    try {
+      const [plan, jobs] = await Promise.all([
+        getDownloadWorkerPlan(registeredChannelId, 5),
+        getDownloadJobs(registeredChannelId),
+      ]);
+      setWorkerPlan(plan);
+      setDownloadJobs(jobs);
+      setArchiveTxtRunConfirmOpen(true);
+    } catch (error) {
+      setArchiveTxtRunStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleArchiveTxtPrepareAndRun() {
+    if (!archiveTxtStageResult || !registeredChannelId || archiveTxtRunBlocked) return;
+    const jobIds = archiveTxtRunJobIds;
+    if (!jobIds.length) {
+      setWorkflowMessage(t("archiveTxt.queuePreparedEmpty"));
+      return;
+    }
+    setArchiveTxtRunStatus("running");
+    setArchiveTxtQueueStatus("preparing");
+    setQueueConsoleStatus("worker");
+    setWorkflowStatus("downloading");
+    setWorkflowMessage("");
+    try {
+      const quality = channelPolicy?.max_quality ?? maxQuality;
+      const queued = await bulkUpdateDownloadJobs({ job_ids: jobIds, action: "queue", priority: 85, quality });
+      const result = await runDownloadWorkerOnce({
+        channel_id: registeredChannelId,
+        limit: Math.min(5, jobIds.length),
+        dry_run: false,
+      });
+      await Promise.all([refreshQueueConsoleState(), loadChannelState(registeredChannelId)]);
+      const runs = await getDownloadWorkerRuns(registeredChannelId);
+      setWorkerPlan(result.plan);
+      setWorkerRuns(runs);
+      setQueueConsoleSearch("");
+      setQueueConsoleChannelFilter(String(registeredChannelId));
+      setQueueConsoleStatusFilter("all");
+      setQueueConsolePreflightFilter("all");
+      setQueueConsoleSelectedJobIds(jobIds);
+      setArchiveTxtRunStatus(result.failed > 0 ? "error" : "done");
+      setArchiveTxtQueueStatus(result.failed > 0 ? "error" : "done");
+      setQueueConsoleStatus(result.failed > 0 ? "error" : "idle");
+      setWorkflowStatus(result.failed > 0 ? "error" : "idle");
+      setActiveNavId("queue");
+      setArchiveTxtRunConfirmOpen(false);
+      setWorkflowMessage(
+        t("archiveTxt.runComplete")
+          .replace("{prepared}", String(queued.updated))
+          .replace("{completed}", String(result.completed))
+          .replace("{failed}", String(result.failed)),
+      );
+      window.setTimeout(() => scrollToAppSection(".queue-console-panel"), 0);
+    } catch (error) {
+      setArchiveTxtRunStatus("error");
+      setArchiveTxtQueueStatus("error");
+      setQueueConsoleStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleArchiveTxtMetadataSync() {
+    if (!registeredChannelId || !archiveTxtStageResult || archiveTxtStageResult.videos_created <= 0) return;
+    setArchiveTxtSyncStatus("syncing");
+    setWorkflowStatus("syncing");
+    setWorkflowMessage("");
+    try {
+      const result = await syncChannel(registeredChannelId, {
+        max_quality: channelPolicy?.max_quality ?? maxQuality,
+        audio_only: channelPolicy?.audio_only ?? audioOnly,
+        subtitles_enabled: channelPolicy?.subtitles_enabled ?? subtitlesEnabled,
+      });
+      setArchiveTxtSyncResult(result);
+      const failed = result.job.status === "failed";
+      setArchiveTxtSyncStatus(failed ? "error" : "done");
+      const [snapshot, recentEvents] = await Promise.all([getDashboard(), getRecentEvents(100)]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      await refreshQueueConsoleState();
+      await loadChannelState(registeredChannelId);
+      setWorkflowStatus(failed ? "error" : "idle");
+      setWorkflowMessage(
+        failed
+          ? result.job.error_message ?? t("workflow.error")
+          : t("archiveTxt.syncDone")
+              .replace("{enriched}", String(result.videos_enriched))
+              .replace("{created}", String(result.videos_created)),
+      );
+    } catch (error) {
+      setArchiveTxtSyncStatus("error");
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
     }
@@ -2067,6 +2642,28 @@ function App() {
     }
   }
 
+  async function handleCopyRestartPreset(preset: RestartAdapterPreset) {
+    try {
+      await copyTextToClipboard(preset.lines.join("\n"));
+      setRuntimeRestartPresetCopyStatus({ id: preset.id, status: "copied" });
+      window.setTimeout(() => setRuntimeRestartPresetCopyStatus(null), 1800);
+    } catch {
+      setRuntimeRestartPresetCopyStatus({ id: preset.id, status: "error" });
+      window.setTimeout(() => setRuntimeRestartPresetCopyStatus(null), 2200);
+    }
+  }
+
+  async function handleCopyComposeSmokeCommand() {
+    try {
+      await copyTextToClipboard(composeSmokeCommand);
+      setRuntimeComposeSmokeCopyStatus("copied");
+      window.setTimeout(() => setRuntimeComposeSmokeCopyStatus("idle"), 1800);
+    } catch {
+      setRuntimeComposeSmokeCopyStatus("error");
+      window.setTimeout(() => setRuntimeComposeSmokeCopyStatus("idle"), 2200);
+    }
+  }
+
   async function handleCopyLaunchCommands() {
     try {
       await copyTextToClipboard(launchCommandManifest);
@@ -2087,6 +2684,18 @@ function App() {
     } catch {
       setStorageLensCopyStatus("error");
       window.setTimeout(() => setStorageLensCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleCopyStorageLensOpenCommand() {
+    if (!activeStorageOpenCommand.command) return;
+    try {
+      await copyTextToClipboard(activeStorageOpenCommand.command);
+      setStorageLensCommandCopyStatus("copied");
+      window.setTimeout(() => setStorageLensCommandCopyStatus("idle"), 1800);
+    } catch {
+      setStorageLensCommandCopyStatus("error");
+      window.setTimeout(() => setStorageLensCommandCopyStatus("idle"), 2200);
     }
   }
 
@@ -2126,10 +2735,186 @@ function App() {
     }
   }
 
+  function buildSupportBundle() {
+    return {
+      kind: "channel_vault_support_bundle",
+      generated_at: new Date().toISOString(),
+      release_readiness: {
+        done: releaseReadinessDone,
+        total: releaseReadinessItems.length,
+        items: releaseReadinessItems.map((item) => ({
+          id: item.id,
+          ready: item.ready,
+          title: t(item.titleKey),
+        })),
+      },
+      active_channel: {
+        id: registeredChannelId,
+        title: registeredChannelId ? activeTitle : null,
+        handle: registeredChannelId ? activeHandle : null,
+        external_id: registeredChannelId ? activeExternalId : null,
+        videos: activeCounts?.video_count ?? channelVideos.length,
+        archived: activeArchivedCount,
+        missing: activeMissingCount,
+        last_synced_at: channelDetail?.last_synced_at ?? null,
+        next_sync_due_at: channelDetail?.next_sync_due_at ?? null,
+      },
+      queue: {
+        counts: queueConsoleCounts,
+        latest_telemetry: queueConsoleLatestTelemetry,
+        worker_plan: queueConsoleWorkerPlan
+          ? {
+              enabled: queueConsoleWorkerPlan.enabled,
+              dry_run: queueConsoleWorkerPlan.dry_run,
+              queued_count: queueConsoleWorkerPlan.queued_count,
+              claimable_count: queueConsoleWorkerPlan.claimable_count,
+              running_count: queueConsoleWorkerPlan.running_count,
+              locked_reason: queueConsoleWorkerPlan.locked_reason,
+            }
+          : null,
+      },
+      runtime: runtimeSettings
+        ? {
+            worker_enabled: runtimeSettings.download_worker_enabled,
+            scheduler_enabled: runtimeSettings.download_worker_scheduler_enabled,
+            metadata_scheduler_enabled: runtimeSettings.metadata_sync_scheduler_enabled,
+            pending_restart: runtimeSettings.pending_restart,
+            scheduler_state: runtimeSettings.scheduler_status?.state ?? null,
+            metadata_scheduler_state: runtimeSettings.metadata_scheduler_status?.state ?? null,
+            restart_adapter: runtimeSettings.restart_adapter?.adapter ?? null,
+            binaries: runtimeSettings.binaries.map((binary) => ({
+              name: binary.name,
+              available: binary.available,
+              command: binary.command,
+              resolved_path: binary.resolved_path,
+            })),
+          }
+        : null,
+      storage: storageScan
+        ? {
+            root: storageScan.volume.root,
+            archive_label: storageScan.volume.archive_label,
+            free_label: storageScan.volume.free_label,
+            pressure_percent: storageScan.volume.pressure_percent,
+            drift: {
+              unindexed_media_count: storageScan.drift.unindexed_media_count,
+              indexed_missing_count: storageScan.drift.indexed_missing_count,
+            },
+            orphan_sidecar_count: storageScan.orphan_sidecars.length,
+          }
+        : null,
+      library: {
+        total: library?.total ?? 0,
+        archived: library?.archived ?? 0,
+        missing: library?.missing ?? 0,
+        total_label: library?.total_label ?? "0 MB",
+        active_filters: {
+          query: libraryQuery || null,
+          integrity: libraryIntegrityFilter,
+          sidecar: librarySidecarFilter,
+          codec: libraryCodecFilter || null,
+        },
+      },
+      recent_events: events.slice(0, 12),
+    };
+  }
+
+  async function handleCopySupportBundle() {
+    try {
+      await copyTextToClipboard(JSON.stringify(buildSupportBundle(), null, 2));
+      setSupportBundleCopyStatus("copied");
+      window.setTimeout(() => setSupportBundleCopyStatus("idle"), 1800);
+    } catch {
+      setSupportBundleCopyStatus("error");
+      window.setTimeout(() => setSupportBundleCopyStatus("idle"), 2200);
+    }
+  }
+
+  function handleDownloadSupportBundle() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadTextFile(
+      `channel-vault-support-${timestamp}.json`,
+      JSON.stringify(buildSupportBundle(), null, 2),
+      "application/json;charset=utf-8",
+    );
+  }
+
+  async function handleCopyDownloadRunSummary() {
+    let serverSummary: Awaited<ReturnType<typeof getDownloadWorkerRunSummary>> | null = null;
+    try {
+      serverSummary = await getDownloadWorkerRunSummary(registeredChannelId ?? undefined, latestWorkerRun?.id);
+    } catch {
+      serverSummary = null;
+    }
+    const summarizeJob = (job: DownloadJob) => ({
+      id: job.id,
+      video_id: job.video_id,
+      video_external_id: job.video_external_id,
+      title: job.video_title,
+      status: job.status,
+      progress: job.progress,
+      quality: job.quality,
+      priority: job.priority,
+      archive_path: job.archive_path,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      error_message: job.error_message,
+    });
+    const payload = {
+      kind: "download_run_summary",
+      generated_at: new Date().toISOString(),
+      channel_id: registeredChannelId,
+      channel_title: channelDetail?.title ?? null,
+      server_summary: serverSummary,
+      latest_worker_run: serverSummary?.run ?? latestWorkerRun,
+      archive_txt: {
+        staged_job_ids: archiveTxtStageResult?.job_ids ?? [],
+        staged_video_ids: archiveTxtStageResult?.video_ids ?? [],
+        archived_skip_count: archiveTxtPreview?.archived_count ?? archiveSkipCount,
+        duplicate_count: archiveTxtPreview?.duplicate_count ?? 0,
+        invalid_count: archiveTxtPreview?.invalid_count ?? 0,
+        candidates_created: archiveTxtStageResult?.candidates_created ?? 0,
+      },
+      latest_worker_jobs: (serverSummary?.latest_worker_jobs ?? latestWorkerJobs).map(summarizeJob),
+      archive_txt_jobs: archiveTxtSummaryJobs.map(summarizeJob),
+      completed_jobs: (serverSummary?.completed_jobs ?? recentCompletedJobs).map(summarizeJob),
+      archived_files:
+        serverSummary?.archived_files ??
+        recentArchivedLibraryItems.map((item) => ({
+          video_id: item.id,
+          video_external_id: item.video_external_id,
+          title: item.title,
+          archive_state: item.archive_state,
+          integrity_state: item.integrity_state,
+          media_count: item.media_count,
+          total_bytes: item.total_bytes,
+          total_label: item.total_label,
+          media_files: item.media_files,
+        })),
+    };
+    try {
+      await copyTextToClipboard(JSON.stringify(payload, null, 2));
+      setDownloadRunSummaryCopyStatus("copied");
+      window.setTimeout(() => setDownloadRunSummaryCopyStatus("idle"), 1800);
+    } catch {
+      setDownloadRunSummaryCopyStatus("error");
+      window.setTimeout(() => setDownloadRunSummaryCopyStatus("idle"), 2200);
+    }
+  }
+
   function handleDownloadTickRows(kind: "scheduler" | "metadata", format: AuditExportFormat) {
     const rows = kind === "scheduler" ? schedulerTickRows : metadataTickRows;
     const filenamePrefix = kind === "scheduler" ? "download-scheduler-ticks" : "metadata-sync-ticks";
     downloadAuditRows(filenamePrefix, rows as unknown as Record<string, unknown>[], format);
+  }
+
+  function handleDownloadWorkerSummary(format: AuditExportFormat, scope: "channel" | "latest" = "channel") {
+    const params = new URLSearchParams({ format });
+    if (scope === "channel") {
+      if (typeof registeredChannelId === "number") params.set("channel_id", String(registeredChannelId));
+      if (typeof latestWorkerRun?.id === "number") params.set("run_id", String(latestWorkerRun.id));
+    }
+    triggerDownloadUrl(apiUrl(`/api/jobs/downloads/worker/summary/export?${params}`));
   }
 
   async function handlePruneTickRows(kind: "scheduler" | "metadata") {
@@ -2182,12 +2967,73 @@ function App() {
 
   async function handleOpenEventLog() {
     setEventLogFilter("all");
+    setEventLogHighlightId(null);
+    setEventDetail(null);
+    setEventDetailCopyStatus("idle");
+    setEventDetailCurlStatus("idle");
     setEventLogOpen(true);
     await loadEventLog({}, "");
   }
 
+  async function loadRuntimeRestartEvents() {
+    setRuntimeRestartEventsStatus("loading");
+    try {
+      const rows = await getRecentEvents(8, { type_prefix: "runtime.restart" });
+      setRuntimeRestartEvents(rows);
+      setRuntimeRestartEventsStatus("idle");
+    } catch {
+      setRuntimeRestartEventsStatus("error");
+    }
+  }
+
+  async function handleOpenRuntimeGuide() {
+    setRuntimeGuideCopyStatus("idle");
+    setRuntimeRestartCopyStatus("idle");
+    setRuntimeRestartStatus("idle");
+    setRuntimeRestartMessage("");
+    setRuntimeRestartPresetCopyStatus(null);
+    setRuntimeComposeSmokeCopyStatus("idle");
+    setRuntimeApplyStatus("idle");
+    setRuntimeApplyMessage("");
+    setRuntimeGuideOpen(true);
+    await loadRuntimeRestartEvents();
+  }
+
+  async function handleOpenRuntimeRestartEventLog() {
+    setEventLogFilter("runtime");
+    setEventLogHighlightId(null);
+    setEventDetail(null);
+    setEventDetailCopyStatus("idle");
+    setEventDetailCurlStatus("idle");
+    setEventLogOpen(true);
+    await loadEventLog({ type_prefix: "runtime.restart" }, t("runtime.restart.ledgerTitle"));
+  }
+
+  async function handleOpenRuntimeRestartMissionLog(mission: OperationMission) {
+    const targetEventId = Number(mission.target_id);
+    setEventLogFilter("runtime");
+    setEventLogHighlightId(Number.isFinite(targetEventId) ? targetEventId : null);
+    setEventDetail(null);
+    setEventDetailCopyStatus("idle");
+    setEventDetailCurlStatus("idle");
+    setEventLogOpen(true);
+    const query = Number.isFinite(targetEventId)
+      ? { event_id: targetEventId, type_prefix: "runtime.restart" }
+      : { type_prefix: "runtime.restart" };
+    await loadEventLog(
+      query,
+      Number.isFinite(targetEventId)
+        ? `${t("runtime.restart.ledgerTitle")} · #${targetEventId}`
+        : t("runtime.restart.ledgerTitle"),
+    );
+  }
+
   async function handleOpenQueueJobEventLog(job: DownloadJob) {
     setEventLogFilter("download");
+    setEventLogHighlightId(null);
+    setEventDetail(null);
+    setEventDetailCopyStatus("idle");
+    setEventDetailCurlStatus("idle");
     setEventLogOpen(true);
     await loadEventLog(
       { type_prefix: "download.", job_id: job.id },
@@ -2204,6 +3050,7 @@ function App() {
             filter: eventLogFilter,
             query: eventLogQuery,
             scope: eventLogScopeLabel || null,
+            highlighted_event_id: eventLogHighlightId,
             count: filteredEventLogRows.length,
             events: filteredEventLogRows,
           },
@@ -2219,8 +3066,76 @@ function App() {
     }
   }
 
+  async function handleCopyEventDetail() {
+    if (!eventDetail) return;
+    try {
+      await copyTextToClipboard(JSON.stringify(eventDetail, null, 2));
+      setEventDetailCopyStatus("copied");
+      window.setTimeout(() => setEventDetailCopyStatus("idle"), 1800);
+    } catch {
+      setEventDetailCopyStatus("error");
+      window.setTimeout(() => setEventDetailCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleCopyEventDetailCurl() {
+    if (typeof eventDetail?.id !== "number") return;
+    try {
+      await copyTextToClipboard(buildEventDetailCurlCommand(eventDetail.id));
+      setEventDetailCurlStatus("copied");
+      window.setTimeout(() => setEventDetailCurlStatus("idle"), 1800);
+    } catch {
+      setEventDetailCurlStatus("error");
+      window.setTimeout(() => setEventDetailCurlStatus("idle"), 2200);
+    }
+  }
+
+  async function handleOpenEventDetailChannelTarget() {
+    if (!eventDetailTargetChannelId) return;
+    setEventLogOpen(false);
+    setEventDetail(null);
+    setEventDetailCopyStatus("idle");
+    setEventDetailCurlStatus("idle");
+    setActiveNavId("channels");
+    setSelectedChannelId(eventDetailTargetChannelId);
+    setActiveChannelTab("overview");
+    setWorkflowStatus("idle");
+    setWorkflowMessage(t("events.detailOpenedChannel").replace("{id}", String(eventDetailTargetChannelId)));
+    await loadChannelState(eventDetailTargetChannelId).catch(() => undefined);
+    scrollToAppSection(".channel-detail-panel");
+  }
+
+  async function handleOpenEventDetailQueueTarget() {
+    if (!eventDetailTargetJobId) return;
+    const targetJobIds = eventDetailTargetJobIds.length ? eventDetailTargetJobIds : [eventDetailTargetJobId];
+    setEventLogOpen(false);
+    setEventDetail(null);
+    setEventDetailCopyStatus("idle");
+    setEventDetailCurlStatus("idle");
+    setActiveNavId("queue");
+    setQueueConsoleSearch("");
+    setQueueConsoleStatusFilter("all");
+    setQueueConsolePreflightFilter("all");
+    setQueueConsoleChannelFilter(eventDetailTargetChannelId ? String(eventDetailTargetChannelId) : "all");
+    setQueueConsoleSelectedJobIds(targetJobIds);
+    setExpandedQueueConsoleJobId(eventDetailTargetJobId);
+    setWorkflowStatus("idle");
+    setWorkflowMessage(t("events.detailOpenedQueue").replace("{id}", String(eventDetailTargetJobId)));
+    await refreshQueueConsoleState().catch(() => undefined);
+    scrollToAppSection(".queue-console-panel");
+  }
+
   function handleDownloadEventLog(format: AuditExportFormat) {
     downloadAuditRows("archive-event-log", filteredEventLogRows as unknown as Record<string, unknown>[], format);
+  }
+
+  function handleDownloadEventDetail(format: AuditExportFormat) {
+    if (!eventDetail) return;
+    if (typeof eventDetail.id === "number") {
+      triggerDownloadUrl(buildEventDetailExportUrl(eventDetail.id, format));
+      return;
+    }
+    downloadAuditRows("archive-event-detail", [eventDetail as unknown as Record<string, unknown>], format);
   }
 
   async function handlePruneEventLog() {
@@ -2265,6 +3180,7 @@ function App() {
       const result = await requestRuntimeRestart("operator requested runtime restart after env apply");
       const runtimeSnapshot = await getRuntimeSettings();
       setRuntimeSettings(runtimeSnapshot);
+      await loadRuntimeRestartEvents();
       setRuntimeRestartStatus(result.requested ? "requested" : "manual");
       setRuntimeRestartMessage(result.requested ? t("runtime.restart.requested") : result.message);
     } catch (error) {
@@ -2614,6 +3530,9 @@ function App() {
         getRecentEvents(100),
       ]);
       setStoragePressureTrend(trend);
+      if (activeStorageChannel?.relative_path) {
+        getStorageChannelPressureTrend(activeStorageChannel.relative_path).then(setStorageChannelPressureTrend).catch(() => undefined);
+      }
       setEvents(recentEvents);
       setStoragePressureStatus("done");
       setWorkflowStatus("idle");
@@ -3017,6 +3936,98 @@ function App() {
     setOperationsReadiness(readiness);
   }
 
+  function pushAppRoute(overrides: Partial<AppRoute>) {
+    const nav = overrides.nav ?? activeNavId;
+    const route: AppRoute = {
+      nav,
+      channelTab:
+        nav === "channels"
+          ? (overrides.channelTab ?? (activeChannelTab === "library" ? "overview" : activeChannelTab))
+          : undefined,
+      channelId: overrides.channelId ?? registeredChannelId ?? undefined,
+      queueJobIds:
+        nav === "queue"
+          ? (overrides.queueJobIds ??
+            (queueConsoleSelectedJobIds.length
+              ? queueConsoleSelectedJobIds
+              : expandedQueueConsoleJobId
+                ? [expandedQueueConsoleJobId]
+                : undefined))
+          : undefined,
+      runtimeGuide: overrides.runtimeGuide ?? (nav === "settings" && runtimeGuideOpen),
+      eventLog: overrides.eventLog ?? eventLogOpen,
+    };
+    writeAppHash(route, "push");
+  }
+
+  function handleTopbarSearch() {
+    if (!registeredChannelId) {
+      setActiveNavId("channels");
+      pushAppRoute({ nav: "channels", channelTab: "overview" });
+      setWorkflowStatus("idle");
+      setWorkflowMessage(t("channel.workbench.noChannel"));
+      window.setTimeout(() => scrollToAppSection(".registration-panel"), 0);
+      return;
+    }
+    setActiveNavId("library");
+    setActiveChannelTab("library");
+    pushAppRoute({ nav: "library" });
+    window.setTimeout(() => {
+      scrollToAppSection(".library-index-panel");
+      librarySearchInputRef.current?.focus();
+    }, 0);
+  }
+
+  function openCommandPalette() {
+    setCommandPaletteOpen(true);
+    setCommandPaletteQuery("");
+    window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
+  }
+
+  function closeCommandPalette() {
+    setCommandPaletteOpen(false);
+    setCommandPaletteQuery("");
+  }
+
+  function runCommandPaletteItem(item: CommandPaletteItem) {
+    if (item.disabled) return;
+    closeCommandPalette();
+    item.run();
+  }
+
+  async function handleTopbarRefresh() {
+    setTopbarRefreshStatus("refreshing");
+    setWorkflowMessage("");
+    try {
+      const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot] = await Promise.all([
+        getDashboard(),
+        getRecentEvents(100),
+        getRuntimeSettings(),
+        getStorageScan(),
+        getStoragePressureTrend(),
+        getOperationsReadiness(),
+      ]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      setRuntimeSettings(runtimeSnapshot);
+      setStorageScan(storageSnapshot);
+      setStoragePressureTrend(pressureTrend);
+      setOperationsReadiness(readinessSnapshot);
+      await refreshQueueConsoleState();
+      if (registeredChannelId) {
+        await loadChannelState(registeredChannelId);
+      }
+      setTopbarRefreshStatus("done");
+      setWorkflowStatus("idle");
+      window.setTimeout(() => setTopbarRefreshStatus("idle"), 1400);
+    } catch (error) {
+      setTopbarRefreshStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+      window.setTimeout(() => setTopbarRefreshStatus("idle"), 1800);
+    }
+  }
+
   async function handleRefreshOperationsReadiness() {
     setOperationsStatus("refreshing");
     try {
@@ -3036,17 +4047,48 @@ function App() {
       return;
     }
     if (mission.action_kind === "downloads") {
+      if (mission.id === "clear_failed_downloads") {
+        const jobId = Number(mission.target_id);
+        setActiveNavId("queue");
+        setQueueConsoleSearch("");
+        setQueueConsoleStatusFilter("failed");
+        setQueueConsolePreflightFilter("all");
+        setQueueConsoleChannelFilter(mission.target_channel_id ? String(mission.target_channel_id) : "all");
+        setQueueConsoleSelectedJobIds(Number.isFinite(jobId) ? [jobId] : []);
+        setExpandedQueueConsoleJobId(Number.isFinite(jobId) ? jobId : null);
+        await refreshQueueConsoleState().catch(() => undefined);
+        scrollToAppSection(".queue-console-panel");
+        return;
+      }
+      if (mission.id === "queue_missing_videos" && mission.target_channel_id) {
+        setActiveNavId("channels");
+        setSelectedChannelId(mission.target_channel_id);
+        setActiveChannelTab("downloads");
+        await loadChannelState(mission.target_channel_id).catch(() => undefined);
+        scrollToAppSection(".channel-detail-panel");
+        return;
+      }
       setActiveNavId("queue");
       return;
     }
     if (mission.action_kind === "runtime") {
-      setRuntimeGuideCopyStatus("idle");
-      setRuntimeRestartCopyStatus("idle");
-      setRuntimeRestartStatus("idle");
-      setRuntimeRestartMessage("");
-      setRuntimeApplyStatus("idle");
-      setRuntimeApplyMessage("");
-      setRuntimeGuideOpen(true);
+      if (mission.id === "resume_paused_channels" && mission.target_channel_id) {
+        setActiveNavId("channels");
+        setSelectedChannelId(mission.target_channel_id);
+        setActiveChannelTab("policy");
+        await loadChannelState(mission.target_channel_id).catch(() => undefined);
+        scrollToAppSection(".channel-detail-panel");
+        return;
+      }
+      if (mission.id === "resolve_runtime_restart") {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        await handleOpenRuntimeRestartMissionLog(mission);
+        scrollToAppSection(".runtime-console");
+        return;
+      }
+      setActiveNavId("settings");
+      await handleOpenRuntimeGuide();
       scrollToAppSection(".runtime-console");
       return;
     }
@@ -3061,7 +4103,17 @@ function App() {
       return;
     }
     if (mission.action_kind === "storage") {
-      setActiveNavId("settings");
+      if (mission.id === "review_channel_growth" && mission.target_channel_id) {
+        setActiveNavId("channels");
+        setSelectedChannelId(mission.target_channel_id);
+        setActiveChannelTab("library");
+        setStorageFocusPath(mission.target_path);
+        await loadChannelState(mission.target_channel_id).catch(() => undefined);
+        scrollToAppSection(".channel-storage-lens");
+        return;
+      }
+      setActiveNavId("insights");
+      setStorageFocusPath(mission.target_path);
       const target =
         mission.id === "recover_storage_drift"
           ? ".storage-drift-list"
@@ -3120,6 +4172,441 @@ function App() {
     setWorkerRuns(workerRunSnapshot);
   }
 
+  function handleSelectNav(id: NavId) {
+    setActiveNavId(id);
+    setActiveChannelTab((current) => {
+      if (id === "library") return "library";
+      if (id === "channels" && current === "library") return "overview";
+      return current;
+    });
+    pushAppRoute({
+      nav: id,
+      channelTab: id === "channels" ? (activeChannelTab === "library" ? "overview" : activeChannelTab) : undefined,
+      queueJobIds: id === "queue" ? queueConsoleSelectedJobIds : undefined,
+    });
+  }
+
+  function handleSelectChannelContext(value: string) {
+    const channelId = Number(value);
+    if (!Number.isFinite(channelId)) return;
+    setRegistration(null);
+    setProbe(null);
+    setSelectedChannelId(channelId);
+    if (activeNavId === "queue") {
+      setQueueConsoleChannelFilter(String(channelId));
+    }
+    pushAppRoute({ channelId });
+    setWorkflowStatus("idle");
+    setWorkflowMessage(t("channel.switcher.changed"));
+  }
+
+  function handleSelectChannelTab(tab: ChannelDetailTab) {
+    setActiveChannelTab(tab);
+    pushAppRoute({ nav: "channels", channelTab: tab });
+  }
+
+  function openChannelWorkspace(tab: ChannelDetailTab = "overview", selector = ".channel-detail-panel") {
+    setActiveNavId("channels");
+    setActiveChannelTab(tab);
+    pushAppRoute({ nav: "channels", channelTab: tab });
+    window.setTimeout(() => scrollToAppSection(selector), 0);
+  }
+
+  function openQueueWorkspace() {
+    setActiveNavId("queue");
+    pushAppRoute({ nav: "queue" });
+    window.setTimeout(() => scrollToAppSection(".queue-console-panel"), 0);
+  }
+
+  const commandPaletteItems: CommandPaletteItem[] = [
+    {
+      id: "dashboard",
+      icon: Gauge,
+      titleKey: "nav.dashboard",
+      detailKey: "commandPalette.dashboard.detail",
+      groupKey: "commandPalette.group.navigation",
+      keywords: ["dashboard", "cockpit", "home", "대시보드"],
+      run: () => handleSelectNav("dashboard"),
+    },
+    {
+      id: "register-source",
+      icon: Link2,
+      titleKey: "commandPalette.register.title",
+      detailKey: "commandPalette.register.detail",
+      groupKey: "commandPalette.group.channel",
+      keywords: ["channel", "source", "register", "url", "채널", "등록"],
+      run: () => openChannelWorkspace("overview", ".registration-panel"),
+    },
+    {
+      id: "channel-overview",
+      icon: ShieldCheck,
+      titleKey: "commandPalette.channelOverview.title",
+      detailKey: "commandPalette.channelOverview.detail",
+      groupKey: "commandPalette.group.channel",
+      keywords: ["channel", "overview", "detail", "sync", "채널", "상세"],
+      disabled: !registeredChannelId,
+      run: () => openChannelWorkspace("overview", ".channel-detail-panel"),
+    },
+    {
+      id: "channel-downloads",
+      icon: Download,
+      titleKey: "detail.tabs.downloads",
+      detailKey: "commandPalette.channelDownloads.detail",
+      groupKey: "commandPalette.group.channel",
+      keywords: ["download", "candidate", "launch", "worker", "다운로드", "후보"],
+      disabled: !registeredChannelId,
+      run: () => openChannelWorkspace("downloads", ".launch-control-panel"),
+    },
+    {
+      id: "channel-policy",
+      icon: SlidersHorizontal,
+      titleKey: "detail.tabs.policy",
+      detailKey: "commandPalette.channelPolicy.detail",
+      groupKey: "commandPalette.group.channel",
+      keywords: ["policy", "auto", "pause", "worker", "정책"],
+      disabled: !registeredChannelId,
+      run: () => openChannelWorkspace("policy", ".channel-detail-panel"),
+    },
+    {
+      id: "archive-txt",
+      icon: FileArchive,
+      titleKey: "commandPalette.archiveTxt.title",
+      detailKey: "commandPalette.archiveTxt.detail",
+      groupKey: "commandPalette.group.operations",
+      keywords: ["archive.txt", "import", "skip", "ledger", "가져오기", "스킵"],
+      run: () => openChannelWorkspace("overview", ".archive-pathway"),
+    },
+    {
+      id: "queue",
+      icon: Rocket,
+      titleKey: "queue.console.title",
+      detailKey: "commandPalette.queue.detail",
+      groupKey: "commandPalette.group.operations",
+      keywords: ["queue", "worker", "progress", "run", "큐", "진행"],
+      run: openQueueWorkspace,
+    },
+    {
+      id: "library",
+      icon: BookOpen,
+      titleKey: "nav.library",
+      detailKey: "commandPalette.library.detail",
+      groupKey: "commandPalette.group.navigation",
+      keywords: ["library", "media", "sidecar", "codec", "라이브러리"],
+      run: () => handleSelectNav("library"),
+    },
+    {
+      id: "storage",
+      icon: FolderTree,
+      titleKey: "nav.insights",
+      detailKey: "commandPalette.storage.detail",
+      groupKey: "commandPalette.group.operations",
+      keywords: ["storage", "scan", "drift", "orphan", "스토리지", "스캔"],
+      run: () => {
+        setActiveNavId("insights");
+        window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
+      },
+    },
+    {
+      id: "runtime",
+      icon: Server,
+      titleKey: "dashboard.route.runtime",
+      detailKey: "commandPalette.runtime.detail",
+      groupKey: "commandPalette.group.operations",
+      keywords: ["runtime", "worker", "scheduler", "restart", "런타임"],
+      run: () => {
+        setActiveNavId("settings");
+        window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
+      },
+    },
+    {
+      id: "runtime-guide",
+      icon: Terminal,
+      titleKey: "commandPalette.runtimeGuide.title",
+      detailKey: "commandPalette.runtimeGuide.detail",
+      groupKey: "commandPalette.group.operations",
+      keywords: ["env", "manifest", "docker", "compose", "runtime", "환경"],
+      run: () => {
+        setActiveNavId("settings");
+        window.setTimeout(() => {
+          scrollToAppSection(".runtime-console");
+          void handleOpenRuntimeGuide();
+        }, 0);
+      },
+    },
+    {
+      id: "event-log",
+      icon: History,
+      titleKey: "commandPalette.events.title",
+      detailKey: "commandPalette.events.detail",
+      groupKey: "commandPalette.group.operations",
+      keywords: ["event", "audit", "log", "runtime", "이벤트", "로그"],
+      run: () => {
+        setActiveNavId("settings");
+        window.setTimeout(() => void handleOpenEventLog(), 0);
+      },
+    },
+  ];
+  const commandPaletteSearch = commandPaletteQuery.trim().toLowerCase();
+  const commandPaletteResults = commandPaletteItems
+    .filter((item) => commandPaletteItemMatches(item, commandPaletteSearch, t))
+    .slice(0, 10);
+
+  const activeNavItem = navItems.find((item) => item.id === activeNavId) ?? navItems[0];
+  const activeNavTitle = activeNavId === "queue" ? t("queue.console.title") : t(activeNavItem.key);
+  const activeNavKicker =
+    activeNavId === "queue"
+      ? t("queue.console.kicker")
+      : activeNavId === "dashboard"
+        ? t("dashboard.kicker")
+        : t("topbar.eyebrow");
+  const showDashboardWorkspace = activeNavId === "dashboard";
+  const showChannelWorkspace = activeNavId === "channels";
+  const showLibraryWorkspace = activeNavId === "library";
+  const showInsightsWorkspace = activeNavId === "insights";
+  const showSettingsWorkspace = activeNavId === "settings";
+  const showLibraryIndex = registeredChannelId && (showLibraryWorkspace || (showChannelWorkspace && activeChannelTab === "library"));
+  const showLowerGrid = showChannelWorkspace || showInsightsWorkspace;
+  const hasAnyRegisteredChannel = Boolean(registeredChannelId || dashboard?.channels.length);
+  const cockpitStage = operationsReadiness?.stage ?? "setup";
+  const cockpitScore = operationsReadiness?.score ?? 0;
+  const cockpitMissions = operationsReadiness?.missions.filter((mission) => mission.action_kind !== "none").slice(0, 3) ?? [];
+  const cockpitQueueWork = queueConsoleCounts.candidate + queueConsoleCounts.queued + queueConsoleCounts.running;
+  const cockpitStorageIssues = storageDriftTotal + (storageScan?.orphan_sidecars.length ?? 0);
+  const cockpitStorageTone = cockpitStorageIssues > 0 || storagePressureTrend?.warning ? "warn" : "good";
+  const cockpitRuntimeTone = runtimeSettings?.pending_restart
+    ? "warn"
+    : runtimeSettings?.download_worker_enabled
+      ? "good"
+      : "active";
+  const cockpitQueueTone = queueConsoleCounts.failed ? "bad" : cockpitQueueWork ? "active" : "good";
+  const sidebarRuntimeTone = !runtimeSettings
+    ? "checking"
+    : runtimeSettings.pending_restart
+      ? "warn"
+      : runtimeSettings.download_worker_enabled
+        ? "good"
+        : "locked";
+  const sidebarRuntimeTitle = !runtimeSettings
+    ? t("sidebar.status.title")
+    : runtimeSettings.pending_restart
+      ? t("runtime.restart.pending")
+      : `${t("runtime.worker")} ${workerRuntimeLabel}`;
+  const sidebarRuntimeDetail = !runtimeSettings
+    ? t("runtime.checking")
+    : `${schedulerRuntimeLabel} · ${metadataSchedulerRuntimeLabel}`;
+  const sidebarNavBadges = useMemo<Record<NavId, NavStatusBadge>>(
+    () => ({
+      dashboard: {
+        value: String(cockpitScore),
+        tone: cockpitScore >= 80 ? "good" : cockpitScore >= 50 ? "warn" : "active",
+        label: `${t("ops.score")} ${cockpitScore}`,
+      },
+      channels: {
+        value: String(activeChannels.length),
+        tone: registeredChannelId ? "good" : "warn",
+        label: registeredChannelId ? activeTitle : t("channel.workbench.noChannel"),
+      },
+      library: {
+        value: `${activeArchivedCount}/${activeCounts?.video_count ?? activeTimeline.length}`,
+        tone: activeMissingCount > 0 ? "active" : "good",
+        label: t("detail.flow.skipSummary").replace("{archived}", String(activeArchivedCount)).replace("{fresh}", String(activeMissingCount)),
+      },
+      queue: {
+        value: String(cockpitQueueWork),
+        tone: queueConsoleCounts.failed ? "bad" : cockpitQueueWork ? "active" : "good",
+        label: `${queueConsoleCounts.queued} ${t("queue.queued")} · ${queueConsoleCounts.running} ${t("queue.running")} · ${queueConsoleCounts.failed} ${t("queue.failed")}`,
+      },
+      insights: {
+        value: String(cockpitStorageIssues),
+        tone: cockpitStorageIssues > 0 || storagePressureTrend?.warning ? "warn" : "good",
+        label: `${storageDriftTotal} drift · ${storageScan?.orphan_sidecars.length ?? 0} orphan`,
+      },
+      settings: {
+        value: runtimeSettings?.pending_restart ? "!" : runtimeSettings?.download_worker_enabled ? "On" : "Off",
+        tone: runtimeSettings?.pending_restart ? "warn" : runtimeSettings?.download_worker_enabled ? "good" : "neutral",
+        label: sidebarRuntimeDetail,
+      },
+    }),
+    [
+      activeArchivedCount,
+      activeChannels.length,
+      activeCounts?.video_count,
+      activeMissingCount,
+      activeTimeline.length,
+      activeTitle,
+      cockpitQueueWork,
+      cockpitScore,
+      cockpitStorageIssues,
+      queueConsoleCounts.failed,
+      queueConsoleCounts.queued,
+      queueConsoleCounts.running,
+      registeredChannelId,
+      runtimeSettings?.download_worker_enabled,
+      runtimeSettings?.pending_restart,
+      sidebarRuntimeDetail,
+      storageDriftTotal,
+      storagePressureTrend?.warning,
+      storageScan?.orphan_sidecars.length,
+      t,
+    ],
+  );
+  const eventStreamLabel = eventStreamStatusLabel(eventStreamStatus, t);
+  const eventStreamDetail =
+    eventStreamStatus === "live"
+      ? events[0]?.occurred_at
+        ? t("topbar.live.last").replace("{time}", formatEventTime(events[0].occurred_at))
+        : t("topbar.live.waiting")
+      : eventStreamStatusDetail(eventStreamStatus, t);
+  const launchRunwayCandidateCount = Math.max(launchableJobs.length, queueConsoleCounts.candidate);
+  const launchRunwayQueuedCount = Math.max(simpleFlowStats.queued + simpleFlowStats.running, queueConsoleCounts.queued + queueConsoleCounts.running);
+  const launchRunwayLibraryCount = library?.archived ?? activeArchivedCount;
+  const launchRunwaySteps: {
+    id: string;
+    icon: typeof Link2;
+    state: LaunchRunwayState;
+    titleKey: TranslationKey;
+    detailKey: TranslationKey;
+    actionKey: TranslationKey;
+    metric: string;
+    disabled?: boolean;
+    action: () => void;
+  }[] = [
+    {
+      id: "source",
+      icon: Link2,
+      state: registeredChannelId ? "ready" : "active",
+      titleKey: "launch.runway.source.title",
+      detailKey: "launch.runway.source.detail",
+      actionKey: "launch.runway.source.action",
+      metric: registeredChannelId ? activeTitle : t("launch.runway.source.metric"),
+      action: () => openChannelWorkspace("overview", ".registration-panel"),
+    },
+    {
+      id: "sync",
+      icon: RotateCcw,
+      state: !registeredChannelId ? "locked" : channelDetail?.last_synced_at || channelVideos.length ? "ready" : "active",
+      titleKey: "launch.runway.sync.title",
+      detailKey: "launch.runway.sync.detail",
+      actionKey: "launch.runway.sync.action",
+      metric: String(simpleFlowStats.seen),
+      disabled: !registeredChannelId || workflowStatus === "syncing",
+      action: () => {
+        openChannelWorkspace("overview");
+        if (registeredChannelId) void handleManualSync();
+      },
+    },
+    {
+      id: "candidates",
+      icon: ClipboardList,
+      state: !registeredChannelId || !channelVideos.length ? "locked" : launchRunwayCandidateCount ? "ready" : "active",
+      titleKey: "launch.runway.candidates.title",
+      detailKey: "launch.runway.candidates.detail",
+      actionKey: "launch.runway.candidates.action",
+      metric: String(launchRunwayCandidateCount),
+      disabled: !registeredChannelId || !channelVideos.length || workflowStatus === "candidates",
+      action: () => {
+        openChannelWorkspace("downloads", ".launch-control-panel");
+        if (registeredChannelId && channelVideos.length) void handleBuildCandidates();
+      },
+    },
+    {
+      id: "download",
+      icon: Download,
+      state: !registeredChannelId || !launchRunwayCandidateCount ? "locked" : launchRunwayQueuedCount || queueConsoleCounts.completed ? "ready" : "active",
+      titleKey: "launch.runway.download.title",
+      detailKey: "launch.runway.download.detail",
+      actionKey: "launch.runway.download.action",
+      metric: String(Math.max(launchRunwayQueuedCount, queueConsoleCounts.completed)),
+      disabled: !registeredChannelId || liveDownloadStatus === "running",
+      action: () => {
+        openChannelWorkspace("downloads", ".launch-control-panel");
+        if (registeredChannelId) window.setTimeout(() => handleOpenLiveDownloadConfirm(), 0);
+      },
+    },
+    {
+      id: "library",
+      icon: BookOpen,
+      state: !registeredChannelId ? "locked" : launchRunwayLibraryCount > 0 ? "ready" : "active",
+      titleKey: "launch.runway.library.title",
+      detailKey: "launch.runway.library.detail",
+      actionKey: "launch.runway.library.action",
+      metric: String(launchRunwayLibraryCount),
+      disabled: !registeredChannelId,
+      action: () => handleSelectNav("library"),
+    },
+  ];
+  const launchRunwayCompleted = launchRunwaySteps.filter((step) => step.state === "ready").length;
+  const launchRunwayProgress = Math.round((launchRunwayCompleted / launchRunwaySteps.length) * 100);
+  const launchRunwayCurrent = launchRunwaySteps.find((step) => step.state === "active") ?? launchRunwaySteps.find((step) => step.state === "locked") ?? launchRunwaySteps.at(-1);
+  const releaseReadinessItems: {
+    id: string;
+    icon: typeof Link2;
+    ready: boolean;
+    titleKey: TranslationKey;
+    detailKey: TranslationKey;
+    actionKey: TranslationKey;
+    action: () => void;
+  }[] = [
+    {
+      id: "source",
+      icon: Link2,
+      ready: hasAnyRegisteredChannel,
+      titleKey: "release.readiness.source.title",
+      detailKey: "release.readiness.source.detail",
+      actionKey: "release.readiness.source.action",
+      action: () => openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".registration-panel"),
+    },
+    {
+      id: "sync",
+      icon: RotateCcw,
+      ready: Boolean(channelDetail?.last_synced_at || channelVideos.length || metadataSchedulerStatus),
+      titleKey: "release.readiness.sync.title",
+      detailKey: "release.readiness.sync.detail",
+      actionKey: "release.readiness.sync.action",
+      action: () => {
+        if (registeredChannelId) void handleManualSync();
+        else openChannelWorkspace("overview", ".registration-panel");
+      },
+    },
+    {
+      id: "queue",
+      icon: Rocket,
+      ready: Boolean(queueConsoleWorkerPlan),
+      titleKey: "release.readiness.queue.title",
+      detailKey: "release.readiness.queue.detail",
+      actionKey: "release.readiness.queue.action",
+      action: openQueueWorkspace,
+    },
+    {
+      id: "library",
+      icon: BookOpen,
+      ready: (library?.total ?? activeArchivedCount) > 0,
+      titleKey: "release.readiness.library.title",
+      detailKey: "release.readiness.library.detail",
+      actionKey: "release.readiness.library.action",
+      action: () => handleSelectNav("library"),
+    },
+    {
+      id: "storage",
+      icon: FolderTree,
+      ready: Boolean(storageScan),
+      titleKey: "release.readiness.storage.title",
+      detailKey: "release.readiness.storage.detail",
+      actionKey: "release.readiness.storage.action",
+      action: () => handleSelectNav("insights"),
+    },
+    {
+      id: "audit",
+      icon: History,
+      ready: events.length > 0 || (runtimeSettings?.scheduler_ticks.length ?? 0) > 0 || (runtimeSettings?.metadata_sync_ticks.length ?? 0) > 0,
+      titleKey: "release.readiness.audit.title",
+      detailKey: "release.readiness.audit.detail",
+      actionKey: "release.readiness.audit.action",
+      action: () => handleSelectNav("settings"),
+    },
+  ];
+  const releaseReadinessDone = releaseReadinessItems.filter((item) => item.ready).length;
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label={t("nav.dashboard")}>
@@ -3134,23 +4621,28 @@ function App() {
         </div>
 
         <nav className="nav-list">
-          {navItems.map((item) => (
-            <button
-              className={item.id === activeNavId ? "nav-item active" : "nav-item"}
-              key={item.id}
-              onClick={() => setActiveNavId(item.id)}
-              type="button"
-            >
-              {t(item.key)}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const navBadge = sidebarNavBadges[item.id];
+            return (
+              <button
+                className={item.id === activeNavId ? "nav-item active" : "nav-item"}
+                key={item.id}
+                onClick={() => handleSelectNav(item.id)}
+                title={navBadge.label}
+                type="button"
+              >
+                <span>{t(item.key)}</span>
+                <em aria-hidden="true" className={`nav-badge ${navBadge.tone}`}>{navBadge.value}</em>
+              </button>
+            );
+          })}
         </nav>
 
-        <div className="sidebar-status">
+        <div className={`sidebar-status ${sidebarRuntimeTone}`}>
           <div className="status-dot" />
           <div>
-            <strong>{t("sidebar.status.title")}</strong>
-            <span>{t("sidebar.status.detail")}</span>
+            <strong>{sidebarRuntimeTitle}</strong>
+            <span>{sidebarRuntimeDetail}</span>
           </div>
         </div>
       </aside>
@@ -3158,16 +4650,69 @@ function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{activeNavId === "queue" ? t("queue.console.kicker") : t("topbar.eyebrow")}</p>
-            <h1>{activeNavId === "queue" ? t("queue.console.title") : t("topbar.title")}</h1>
+            <p className="eyebrow">{activeNavKicker}</p>
+            <h1>{showDashboardWorkspace ? t("dashboard.title") : activeNavTitle}</h1>
+            <div className={`channel-switcher ${registeredChannelId ? "ready" : "empty"}`} aria-label={t("channel.switcher.label")}>
+              <div className="channel-switcher-avatar">
+                {registeredChannelId ? activeInitials : <Link2 size={16} />}
+              </div>
+              <label>
+                <span>{t("channel.switcher.label")}</span>
+                <select
+                  aria-label={t("channel.switcher.label")}
+                  disabled={channelSwitcherOptions.length === 0}
+                  onChange={(event) => handleSelectChannelContext(event.target.value)}
+                  value={registeredChannelId ? String(registeredChannelId) : ""}
+                >
+                  {!registeredChannelId ? <option value="">{t("channel.switcher.noChannel")}</option> : null}
+                  {channelSwitcherOptions.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <small>{activeChannelContextDetail}</small>
+              <button
+                aria-label={registeredChannelId ? t("channel.switcher.open") : t("channel.switcher.add")}
+                onClick={() => openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".registration-panel")}
+                type="button"
+              >
+                {registeredChannelId ? <ExternalLink size={14} /> : <Link2 size={14} />}
+                {registeredChannelId ? t("channel.switcher.open") : t("channel.switcher.add")}
+              </button>
+            </div>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" title={t("actions.search")} aria-label={t("actions.search")}>
+            <button
+              className="icon-button command-palette-trigger"
+              onClick={openCommandPalette}
+              title={t("commandPalette.open")}
+              aria-label={t("commandPalette.open")}
+              type="button"
+            >
+              <Sparkles size={18} />
+            </button>
+            <button className="icon-button" onClick={handleTopbarSearch} title={t("actions.search")} aria-label={t("actions.search")} type="button">
               <Search size={18} />
             </button>
-            <button className="icon-button" title={t("actions.refresh")} aria-label={t("actions.refresh")}>
+            <button
+              className={`icon-button ${topbarRefreshStatus}`}
+              disabled={topbarRefreshStatus === "refreshing"}
+              onClick={() => void handleTopbarRefresh()}
+              title={topbarRefreshStatus === "refreshing" ? t("actions.refreshing") : t("actions.refresh")}
+              aria-label={topbarRefreshStatus === "refreshing" ? t("actions.refreshing") : t("actions.refresh")}
+              type="button"
+            >
               <RotateCcw size={18} />
             </button>
+            <div className={`topbar-live ${eventStreamStatus}`} aria-label={t("topbar.live.aria")}>
+              <span />
+              <div>
+                <strong>{eventStreamLabel}</strong>
+                <small>{eventStreamDetail}</small>
+              </div>
+            </div>
             <label className="language-control" title={t("actions.language")}>
               <Languages size={16} />
               <select
@@ -3182,107 +4727,411 @@ function App() {
                 ))}
               </select>
             </label>
-            <button className="command-button">
+            <button className="command-button" onClick={() => handleSelectNav("settings")} type="button">
               <Settings size={16} />
               {t("actions.policies")}
             </button>
           </div>
         </header>
 
-        <section className="metric-grid" aria-label={t("metrics.aria")}>
-          {activeMetrics.map((metric, index) => (
-            <MetricTile metric={metric} index={index} key={metric.labelKey ?? metric.label ?? index} />
-          ))}
-        </section>
-
-        <section className="ops-strip" aria-label={t("events.title")}>
-          <div className="ops-orbit">
-            <Waves size={18} />
-            <div>
-              <span>{t("events.title")}</span>
-              <strong>{events[0] ? eventLabel(events[0], t) : t("events.idle")}</strong>
-            </div>
-          </div>
-          <div className="event-rail">
-            {events.slice(0, 5).map((event) => (
-              <article className={`event-chip ${eventTone(event.type)}`} key={`${event.type}-${event.occurred_at}`}>
-                <Bell size={14} />
-                <span>{eventLabel(event, t)}</span>
-                <time>{formatEventTime(event.occurred_at)}</time>
-              </article>
-            ))}
-            {events.length === 0 ? <span className="event-empty">{t("events.empty")}</span> : null}
-          </div>
-          <button className="event-log-button" onClick={() => void handleOpenEventLog()} type="button">
-            <History size={14} />
-            {t("events.openLog")}
-          </button>
-        </section>
-
-        {operationsReadiness ? (
-          <section className={`ops-readiness ${operationsReadiness.stage}`} aria-label={t("ops.title")}>
-            <div className="ops-readiness-score">
-              <Gauge size={22} />
-              <div>
-                <span>{t("ops.score")}</span>
-                <strong>{operationsReadiness.score}</strong>
-                <em>{operationStageLabel(operationsReadiness.stage, t)}</em>
-              </div>
-            </div>
-            <div className="ops-readiness-main">
-              <div className="ops-readiness-head">
+        {commandPaletteOpen ? (
+          <div className="command-palette-backdrop" onClick={closeCommandPalette} role="presentation">
+            <aside
+              aria-label={t("commandPalette.title")}
+              className="command-palette"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="command-palette-head">
                 <div>
-                  <p className="panel-kicker">{t("ops.kicker")}</p>
-                  <h2>{t("ops.title")}</h2>
-                  <span>{t("ops.subtitle")}</span>
+                  <p className="panel-kicker">{t("commandPalette.kicker")}</p>
+                  <h2>{t("commandPalette.title")}</h2>
+                  <span>{t("commandPalette.subtitle")}</span>
                 </div>
                 <button
-                  className="command-button"
-                  disabled={operationsStatus === "refreshing"}
-                  onClick={() => void handleRefreshOperationsReadiness()}
+                  aria-label={t("actions.close")}
+                  className="icon-button"
+                  onClick={closeCommandPalette}
                   type="button"
                 >
-                  <RotateCcw size={15} />
-                  {operationsStatus === "refreshing"
-                    ? t("ops.refreshing")
-                    : operationsStatus === "done"
-                      ? t("ops.refreshed")
-                      : t("ops.refresh")}
+                  <X size={16} />
                 </button>
               </div>
-              <div className="ops-readiness-metrics">
-                {operationsReadiness.metrics.slice(0, 6).map((metric) => (
-                  <article className={metric.tone} key={metric.key}>
-                    <span>{operationMetricLabel(metric.key, t)}</span>
-                    <strong>{metric.value}</strong>
-                  </article>
-                ))}
-              </div>
-              <div className="ops-mission-list">
-                {operationsReadiness.missions.slice(0, 4).map((mission) => {
-                  const MissionIcon = operationMissionIcon(mission.id);
+              <label className="command-palette-search">
+                <Search size={16} />
+                <input
+                  aria-label={t("commandPalette.placeholder")}
+                  onChange={(event) => setCommandPaletteQuery(event.target.value)}
+                  placeholder={t("commandPalette.placeholder")}
+                  ref={commandPaletteInputRef}
+                  value={commandPaletteQuery}
+                />
+              </label>
+              <div className="command-palette-list">
+                {commandPaletteResults.map((item) => {
+                  const ItemIcon = item.icon;
                   return (
-                    <article className={`ops-mission ${mission.severity} ${mission.status}`} key={mission.id}>
-                      <div className="ops-mission-icon">
-                        <MissionIcon size={17} />
+                    <button
+                      className={item.disabled ? "disabled" : ""}
+                      disabled={item.disabled}
+                      key={item.id}
+                      onClick={() => runCommandPaletteItem(item)}
+                      type="button"
+                    >
+                      <span className="command-palette-icon">
+                        <ItemIcon size={16} />
+                      </span>
+                      <span>
+                        <strong>{t(item.titleKey)}</strong>
+                        <small>{t(item.detailKey)}</small>
+                      </span>
+                      <em>{item.disabled ? t("commandPalette.disabled") : t(item.groupKey)}</em>
+                    </button>
+                  );
+                })}
+                {!commandPaletteResults.length ? (
+                  <p className="command-palette-empty">{t("commandPalette.empty")}</p>
+                ) : null}
+              </div>
+            </aside>
+          </div>
+        ) : null}
+
+        {showDashboardWorkspace ? (
+          <>
+            <section className={`dashboard-cockpit ${cockpitStage}`} aria-label={t("dashboard.cockpit.aria")}>
+              <div className="cockpit-hero">
+                <div className="cockpit-copy">
+                  <p className="panel-kicker">{t("dashboard.cockpit.kicker")}</p>
+                  <h2>{t("dashboard.cockpit.title")}</h2>
+                  <span>{t("dashboard.cockpit.subtitle")}</span>
+                </div>
+                <div className="cockpit-score-card">
+                  <Gauge size={22} />
+                  <div>
+                    <span>{t("ops.score")}</span>
+                    <strong>{operationsReadiness ? cockpitScore : "..."}</strong>
+                    <em>{operationsReadiness ? operationStageLabel(cockpitStage, t) : t("runtime.checking")}</em>
+                  </div>
+                </div>
+              </div>
+
+              <div className="cockpit-route-grid" aria-label={t("dashboard.route.aria")}>
+                <button
+                  onClick={() => {
+                    openChannelWorkspace("overview", ".channel-detail-panel");
+                  }}
+                  type="button"
+                >
+                  <RotateCcw size={16} />
+                  <span>{t("dashboard.route.sync")}</span>
+                  <strong>{simpleFlowStats.fresh}</strong>
+                  <small>{t("dashboard.route.syncDetail")}</small>
+                </button>
+                <button onClick={() => handleSelectNav("queue")} type="button">
+                  <Rocket size={16} />
+                  <span>{t("dashboard.route.queue")}</span>
+                  <strong>{cockpitQueueWork}</strong>
+                  <small>{t("dashboard.route.queueDetail")}</small>
+                </button>
+                <button onClick={() => handleSelectNav("insights")} type="button">
+                  <HardDrive size={16} />
+                  <span>{t("dashboard.route.storage")}</span>
+                  <strong>{cockpitStorageIssues}</strong>
+                  <small>{t("dashboard.route.storageDetail")}</small>
+                </button>
+                <button onClick={() => handleSelectNav("settings")} type="button">
+                  <Settings size={16} />
+                  <span>{t("dashboard.route.runtime")}</span>
+                  <strong>{runtimeSettings?.pending_restart ? "!" : workerRuntimeLabel}</strong>
+                  <small>{t("dashboard.route.runtimeDetail")}</small>
+                </button>
+              </div>
+
+              <div className="cockpit-system-rail" aria-label={t("dashboard.system.aria")}>
+                <article className={cockpitRuntimeTone}>
+                  <ShieldCheck size={16} />
+                  <span>{t("runtime.worker")}</span>
+                  <strong>{workerRuntimeLabel}</strong>
+                  <small>{schedulerRuntimeLabel} · {metadataSchedulerRuntimeLabel}</small>
+                </article>
+                <article className={cockpitQueueTone}>
+                  <Activity size={16} />
+                  <span>{t("queue.console.title")}</span>
+                  <strong>{cockpitQueueWork}</strong>
+                  <small>
+                    {queueConsoleCounts.queued} {t("queue.queued")} · {queueConsoleCounts.running} {t("queue.running")} ·{" "}
+                    {queueConsoleCounts.failed} {t("queue.failed")}
+                  </small>
+                </article>
+                <article className={cockpitStorageTone}>
+                  <Database size={16} />
+                  <span>{t("panel.storage.title")}</span>
+                  <strong>{storageVolume?.archive_label ?? "0 MB"}</strong>
+                  <small>
+                    {storageVolume
+                      ? t("storage.scan.free").replace("{free}", storageVolume.free_label).replace("{total}", storageVolume.total_label)
+                      : t("runtime.checking")}
+                  </small>
+                </article>
+                <article className={activeMissingCount > 0 ? "active" : "good"}>
+                  <BookOpen size={16} />
+                  <span>{t("nav.library")}</span>
+                  <strong>{activeArchivedCount}/{activeCounts?.video_count ?? activeTimeline.length}</strong>
+                  <small>{t("detail.flow.skipSummary").replace("{archived}", String(activeArchivedCount)).replace("{fresh}", String(activeMissingCount))}</small>
+                </article>
+              </div>
+            </section>
+
+            <section className="launch-runway" aria-label={t("launch.runway.aria")}>
+              <div className="launch-runway-head">
+                <div>
+                  <p className="panel-kicker">{t("launch.runway.kicker")}</p>
+                  <h2>{t("launch.runway.title")}</h2>
+                  <span>{t("launch.runway.subtitle")}</span>
+                </div>
+                <div className="launch-runway-meter">
+                  <span>{t("launch.runway.progress")}</span>
+                  <strong>
+                    {launchRunwayCompleted}/{launchRunwaySteps.length}
+                  </strong>
+                  <em>
+                    {t("launch.runway.current")} · {launchRunwayCurrent ? t(launchRunwayCurrent.titleKey) : t("runtime.checking")}
+                  </em>
+                  <i>
+                    <b style={{ width: `${launchRunwayProgress}%` }} />
+                  </i>
+                </div>
+              </div>
+              <div className="launch-runway-grid">
+                {launchRunwaySteps.map((step, index) => {
+                  const StepIcon = step.icon;
+                  return (
+                    <article className={`launch-runway-step ${step.state}`} key={step.id}>
+                      <div className="launch-runway-step-index">
+                        <span>{index + 1}</span>
+                        <StepIcon size={15} />
                       </div>
+                      <div className="launch-runway-step-copy">
+                        <em>{t(`launch.runway.status.${step.state}` as TranslationKey)}</em>
+                        <strong>{t(step.titleKey)}</strong>
+                        <small>{t(step.detailKey)}</small>
+                      </div>
+                      <div className="launch-runway-step-action">
+                        <strong>{step.metric}</strong>
+                        <button disabled={step.disabled} onClick={step.action} type="button">
+                          {t(step.actionKey)}
+                          <ChevronRight size={13} />
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+
+            {!hasAnyRegisteredChannel ? (
+              <section className="first-source-panel" aria-label={t("firstRun.empty.aria")}>
+                <div className="first-source-head">
+                  <div>
+                    <p className="panel-kicker">{t("firstRun.empty.kicker")}</p>
+                    <h2>{t("firstRun.empty.title")}</h2>
+                    <span>{t("firstRun.empty.subtitle")}</span>
+                  </div>
+                  <button onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                    <Link2 size={15} />
+                    {t("firstRun.empty.primary")}
+                  </button>
+                </div>
+                <div className="first-source-grid">
+                  <article>
+                    <Link2 size={17} />
+                    <strong>{t("firstRun.empty.sourceTitle")}</strong>
+                    <span>{t("firstRun.empty.sourceDetail")}</span>
+                    <button onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                      {t("firstRun.empty.sourceAction")}
+                    </button>
+                  </article>
+                  <article>
+                    <FileArchive size={17} />
+                    <strong>{t("firstRun.empty.archiveTitle")}</strong>
+                    <span>{t("firstRun.empty.archiveDetail")}</span>
+                    <button
+                      onClick={() => {
+                        openChannelWorkspace("overview", ".quick-panel");
+                        window.setTimeout(() => scrollToAppSection(".quick-panel"), 0);
+                      }}
+                      type="button"
+                    >
+                      {t("firstRun.empty.archiveAction")}
+                    </button>
+                  </article>
+                  <article>
+                    <FolderTree size={17} />
+                    <strong>{t("firstRun.empty.storageTitle")}</strong>
+                    <span>{t("firstRun.empty.storageDetail")}</span>
+                    <button
+                      onClick={() => {
+                        handleSelectNav("insights");
+                        window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
+                      }}
+                      type="button"
+                    >
+                      {t("firstRun.empty.storageAction")}
+                    </button>
+                  </article>
+                </div>
+              </section>
+            ) : null}
+
+            <section className={`release-readiness ${releaseReadinessDone === releaseReadinessItems.length ? "ready" : "building"}`} aria-label={t("release.readiness.aria")}>
+              <div className="release-readiness-head">
+                <div>
+                  <p className="panel-kicker">{t("release.readiness.kicker")}</p>
+                  <h2>{t("release.readiness.title")}</h2>
+                  <span>{t("release.readiness.subtitle")}</span>
+                </div>
+                <div className="release-readiness-score">
+                  <ShieldCheck size={18} />
+                  <strong>
+                    {releaseReadinessDone}/{releaseReadinessItems.length}
+                  </strong>
+                  <span>
+                    {releaseReadinessDone === releaseReadinessItems.length
+                      ? t("release.readiness.scoreReady")
+                      : t("release.readiness.scoreBuilding")}
+                  </span>
+                </div>
+                <div className="release-readiness-actions">
+                  <button onClick={() => void handleCopySupportBundle()} type="button">
+                    <ClipboardList size={13} />
+                    {supportBundleCopyStatus === "copied"
+                      ? t("support.bundle.copied")
+                      : supportBundleCopyStatus === "error"
+                        ? t("support.bundle.copyError")
+                        : t("support.bundle.copy")}
+                  </button>
+                  <button onClick={handleDownloadSupportBundle} type="button">
+                    <Download size={13} />
+                    {t("support.bundle.download")}
+                  </button>
+                </div>
+              </div>
+              <div className="release-readiness-grid">
+                {releaseReadinessItems.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <article className={item.ready ? "ready" : "pending"} key={item.id}>
                       <div>
-                        <strong>{operationMissionTitle(mission.id, t)}</strong>
-                        <small>{operationMissionDetail(mission, t)}</small>
+                        <ItemIcon size={16} />
+                        <strong>{t(item.titleKey)}</strong>
                       </div>
-                      <button
-                        disabled={mission.action_kind === "none" || storagePressureStatus === "saving"}
-                        onClick={() => void handleOperationsMissionAction(mission)}
-                        type="button"
-                      >
-                        {operationMissionActionLabel(mission, t)}
+                      <span>{t(item.detailKey)}</span>
+                      <button onClick={item.action} type="button">
+                        {item.ready ? <CheckCircle2 size={13} /> : <ChevronRight size={13} />}
+                        {t(item.actionKey)}
                       </button>
                     </article>
                   );
                 })}
               </div>
-            </div>
-          </section>
+            </section>
+
+            <section className="metric-grid" aria-label={t("metrics.aria")}>
+              {activeMetrics.map((metric, index) => (
+                <MetricTile metric={metric} index={index} key={metric.labelKey ?? metric.label ?? index} />
+              ))}
+            </section>
+
+            <section className="ops-strip" aria-label={t("events.title")}>
+              <div className="ops-orbit">
+                <Waves size={18} />
+                <div>
+                  <span>{t("events.title")}</span>
+                  <strong>{events[0] ? eventLabel(events[0], t) : t("events.idle")}</strong>
+                </div>
+              </div>
+              <div className="event-rail">
+                {events.slice(0, 5).map((event) => (
+                  <article className={`event-chip ${eventTone(event.type)}`} key={`${event.type}-${event.occurred_at}`}>
+                    <Bell size={14} />
+                    <span>{eventLabel(event, t)}</span>
+                    <time>{formatEventTime(event.occurred_at)}</time>
+                  </article>
+                ))}
+                {events.length === 0 ? <span className="event-empty">{t("events.empty")}</span> : null}
+              </div>
+              <button className="event-log-button" onClick={() => void handleOpenEventLog()} type="button">
+                <History size={14} />
+                {t("events.openLog")}
+              </button>
+            </section>
+
+            {operationsReadiness ? (
+              <section className={`ops-readiness ${operationsReadiness.stage}`} aria-label={t("ops.title")}>
+                <div className="ops-readiness-score">
+                  <Gauge size={22} />
+                  <div>
+                    <span>{t("ops.score")}</span>
+                    <strong>{operationsReadiness.score}</strong>
+                    <em>{operationStageLabel(operationsReadiness.stage, t)}</em>
+                  </div>
+                </div>
+                <div className="ops-readiness-main">
+                  <div className="ops-readiness-head">
+                    <div>
+                      <p className="panel-kicker">{t("ops.kicker")}</p>
+                      <h2>{t("ops.title")}</h2>
+                      <span>{t("ops.subtitle")}</span>
+                    </div>
+                    <button
+                      className="command-button"
+                      disabled={operationsStatus === "refreshing"}
+                      onClick={() => void handleRefreshOperationsReadiness()}
+                      type="button"
+                    >
+                      <RotateCcw size={15} />
+                      {operationsStatus === "refreshing"
+                        ? t("ops.refreshing")
+                        : operationsStatus === "done"
+                          ? t("ops.refreshed")
+                          : t("ops.refresh")}
+                    </button>
+                  </div>
+                  <div className="ops-readiness-metrics">
+                    {operationsReadiness.metrics.slice(0, 6).map((metric) => (
+                      <article className={metric.tone} key={metric.key}>
+                        <span>{operationMetricLabel(metric.key, t)}</span>
+                        <strong>{metric.value}</strong>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="ops-mission-list">
+                    {operationsReadiness.missions.slice(0, 4).map((mission) => {
+                      const MissionIcon = operationMissionIcon(mission.id);
+                      return (
+                        <article className={`ops-mission ${mission.severity} ${mission.status}`} key={mission.id}>
+                          <div className="ops-mission-icon">
+                            <MissionIcon size={17} />
+                          </div>
+                          <div>
+                            <strong>{operationMissionTitle(mission.id, t)}</strong>
+                            <small>{operationMissionDetail(mission, t)}</small>
+                          </div>
+                          <button
+                            disabled={mission.action_kind === "none" || storagePressureStatus === "saving"}
+                            onClick={() => void handleOperationsMissionAction(mission)}
+                            type="button"
+                          >
+                            {operationMissionActionLabel(mission, t)}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+            ) : null}
+          </>
         ) : null}
 
         {activeNavId === "queue" ? (
@@ -3411,6 +5260,39 @@ function App() {
                 </button>
               ))}
             </div>
+
+            {queueConsoleClaimBlocked ? (
+              <div className="queue-console-state blocked" aria-live="polite">
+                <div className="queue-console-state-icon">
+                  <CirclePause size={19} />
+                </div>
+                <div>
+                  <strong>{t("queue.console.blocked.title")}</strong>
+                  <span>{queueConsoleWorkerPlan?.locked_reason ?? t("queue.console.blocked.detail")}</span>
+                  <small>
+                    {(queueConsoleWorkerPlan?.queued_count ?? queueConsoleCounts.queued)} {t("queue.queued")} ·{" "}
+                    {queueConsoleSkippedCount} {t("queue.console.confirmSkipped")}
+                  </small>
+                </div>
+                <div className="queue-console-state-actions">
+                  <button
+                    className="command-button"
+                    onClick={() => {
+                      setActiveNavId("settings");
+                      window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
+                    }}
+                    type="button"
+                  >
+                    <Settings size={15} />
+                    {t("queue.console.blocked.settings")}
+                  </button>
+                  <button className="command-button" disabled={queueConsoleStatus === "loading"} onClick={() => void handleRefreshQueueConsole()} type="button">
+                    <RotateCcw size={15} />
+                    {t("queue.console.empty.refresh")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="queue-console-bulk">
               <div>
@@ -3621,7 +5503,55 @@ function App() {
                     </article>
                   );
                 })}
-                {filteredQueueConsoleJobs.length === 0 ? <p className="empty-copy">{t("queue.empty")}</p> : null}
+                {filteredQueueConsoleJobs.length === 0 ? (
+                  <div className={`queue-console-empty-state ${globalDownloadJobs.length === 0 ? "empty" : "filtered"}`}>
+                    <div className="queue-console-empty-icon">
+                      {globalDownloadJobs.length === 0 ? <ClipboardList size={20} /> : <Search size={20} />}
+                    </div>
+                    <strong>
+                      {globalDownloadJobs.length === 0
+                        ? t("queue.console.empty.noJobsTitle")
+                        : t("queue.console.empty.filteredTitle")}
+                    </strong>
+                    <span>
+                      {globalDownloadJobs.length === 0
+                        ? t("queue.console.empty.noJobsDetail")
+                        : t("queue.console.empty.filteredDetail")}
+                    </span>
+                    <div className="queue-console-empty-actions">
+                      {globalDownloadJobs.length === 0 ? (
+                        <>
+                          <button className="primary-action" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                            <Link2 size={15} />
+                            {t("queue.console.empty.noJobsPrimary")}
+                          </button>
+                          <button
+                            className="command-button"
+                            onClick={() => {
+                              setActiveNavId("channels");
+                              window.setTimeout(() => scrollToAppSection(".quick-panel"), 0);
+                            }}
+                            type="button"
+                          >
+                            <FileArchive size={15} />
+                            {t("queue.console.empty.noJobsSecondary")}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="primary-action" disabled={!queueConsoleHasActiveFilters} onClick={handleResetQueueConsoleFilters} type="button">
+                            <ListFilter size={15} />
+                            {t("queue.console.empty.clear")}
+                          </button>
+                          <button className="command-button" disabled={queueConsoleStatus === "loading"} onClick={() => void handleRefreshQueueConsole()} type="button">
+                            <RotateCcw size={15} />
+                            {t("queue.console.empty.refresh")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <aside className="queue-console-side">
@@ -3652,6 +5582,7 @@ function App() {
 
         {activeNavId !== "queue" ? (
           <>
+        {showSettingsWorkspace ? (
         <section className="runtime-console" aria-label={t("runtime.title")}>
           <div className="runtime-header">
             <div>
@@ -3659,19 +5590,11 @@ function App() {
               <h2>{t("runtime.title")}</h2>
             </div>
             <div className="runtime-actions">
-              <button
-                className="runtime-guide-button"
-                onClick={() => {
-                  setRuntimeGuideCopyStatus("idle");
-                  setRuntimeRestartCopyStatus("idle");
-                  setRuntimeRestartStatus("idle");
-                  setRuntimeRestartMessage("");
-                  setRuntimeApplyStatus("idle");
-                  setRuntimeApplyMessage("");
-                  setRuntimeGuideOpen(true);
-                }}
-                type="button"
-              >
+                <button
+                  className="runtime-guide-button"
+                  onClick={() => void handleOpenRuntimeGuide()}
+                  type="button"
+                >
                 <FileText size={14} />
                 {t("runtime.guide.open")}
               </button>
@@ -3788,7 +5711,67 @@ function App() {
             </article>
           </div>
         </section>
+        ) : null}
 
+        {showChannelWorkspace ? (
+        <section className="channel-workbench" aria-label={t("channel.workbench.aria")}>
+          <article className="channel-workbench-intro">
+            <p className="panel-kicker">{t("channel.workbench.kicker")}</p>
+            <h2>{t("channel.workbench.title")}</h2>
+            <span>{registeredChannelId ? `${activeTitle} · ${activeHandle}` : t("channel.workbench.noChannel")}</span>
+          </article>
+          <button
+            onClick={() => {
+              scrollToAppSection(".registration-panel");
+            }}
+            type="button"
+          >
+            <Link2 size={16} />
+            <span>{t("channel.workbench.register")}</span>
+            <strong>{registeredChannelId ? t("registration.already") : t("registration.probe")}</strong>
+            <small>{t("channel.workbench.registerDetail")}</small>
+          </button>
+          <button
+            disabled={!registeredChannelId}
+            onClick={() => {
+              handleSelectChannelTab("overview");
+              scrollToAppSection(".channel-detail-panel");
+            }}
+            type="button"
+          >
+            <RotateCcw size={16} />
+            <span>{t("channel.workbench.sync")}</span>
+            <strong>{simpleFlowStats.fresh}</strong>
+            <small>{t("channel.workbench.syncDetail")}</small>
+          </button>
+          <button
+            disabled={!registeredChannelId}
+            onClick={() => {
+              handleSelectChannelTab("downloads");
+              scrollToAppSection(".launch-control-panel");
+            }}
+            type="button"
+          >
+            <Rocket size={16} />
+            <span>{t("channel.workbench.downloads")}</span>
+            <strong>{simpleFlowStats.queued || simpleFlowStats.running}</strong>
+            <small>{t("channel.workbench.downloadsDetail")}</small>
+          </button>
+          <button
+            onClick={() => {
+              scrollToAppSection(".quick-panel");
+            }}
+            type="button"
+          >
+            <FileArchive size={16} />
+            <span>{t("channel.workbench.archiveTxt")}</span>
+            <strong>{archiveTxtDraftLineCount}</strong>
+            <small>{t("channel.workbench.archiveTxtDetail")}</small>
+          </button>
+        </section>
+        ) : null}
+
+        {showChannelWorkspace ? (
         <section className="panel registration-panel">
           <div className="registration-copy">
             <p className="panel-kicker">{t("registration.kicker")}</p>
@@ -3924,8 +5907,9 @@ function App() {
             </motion.div>
           ) : null}
         </section>
+        ) : null}
 
-        {registeredChannelId ? (
+        {showChannelWorkspace && registeredChannelId ? (
           <section className="panel channel-detail-panel">
             <div className="panel-header compact">
               <div>
@@ -3979,7 +5963,7 @@ function App() {
                     ? downloadTelemetrySummary(latestDownloadTelemetry)
                     : t("detail.flow.queueSummary").replace("{queued}", String(simpleFlowStats.queued))}
                 </small>
-                <button onClick={() => setActiveChannelTab("downloads")} type="button">
+                <button onClick={() => handleSelectChannelTab("downloads")} type="button">
                   <History size={13} />
                   {t("detail.flow.progress")}
                 </button>
@@ -3992,7 +5976,7 @@ function App() {
                   <button
                     className={activeChannelTab === tab.id ? "active" : ""}
                     key={tab.id}
-                    onClick={() => setActiveChannelTab(tab.id)}
+                    onClick={() => handleSelectChannelTab(tab.id)}
                     type="button"
                   >
                     <TabIcon size={14} />
@@ -4071,6 +6055,10 @@ function App() {
                           <dd>{job.videos_created}</dd>
                         </div>
                         <div>
+                          <dt>{t("detail.syncJobs.enriched")}</dt>
+                          <dd>{job.videos_enriched}</dd>
+                        </div>
+                        <div>
                           <dt>{t("detail.syncJobs.candidates")}</dt>
                           <dd>{job.candidates_created}</dd>
                         </div>
@@ -4092,7 +6080,12 @@ function App() {
                   </span>
                   <div>
                     <strong>{activeStorageChannel?.label ?? "0 MB"}</strong>
-                    <button disabled={!activeStoragePath} onClick={() => void handleCopyStorageLensPath()} type="button">
+                    <button
+                      aria-label={t("detail.storageLens.copyPath")}
+                      disabled={!activeStoragePath}
+                      onClick={() => void handleCopyStorageLensPath()}
+                      type="button"
+                    >
                       <Folder size={13} />
                       {storageLensCopyStatus === "copied"
                         ? t("detail.storageLens.copied")
@@ -4123,15 +6116,110 @@ function App() {
                 <div className="channel-storage-meter" aria-label={t("detail.storageLens.share")}>
                   <span style={{ width: `${activeStorageShare}%` }} />
                 </div>
+                {storageChannelPressureTrend?.snapshots.length ? (
+                  <div className="channel-storage-history" aria-label={t("detail.storageLens.history")}>
+                    <div>
+                      <span>{t("detail.storageLens.history")}</span>
+                      <strong>
+                        {t("detail.storageLens.delta")} {storageChannelPressureTrend.delta_label} · {t("detail.storageLens.peak")}{" "}
+                        {storageChannelPressureTrend.peak_label}
+                      </strong>
+                    </div>
+                    <div className="channel-storage-history-bars">
+                      {storageChannelPressureTrend.snapshots.map((snapshot) => (
+                        <span
+                          key={snapshot.id}
+                          title={`${formatDateTimeLabel(snapshot.scanned_at, t("storage.quarantine.unknownTime"))} · ${snapshot.label}`}
+                        >
+                          <i style={{ height: `${Math.max(8, Math.round((snapshot.bytes / activeStorageHistoryPeakBytes) * 100))}%` }} />
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <small className="channel-storage-clean">{t("detail.storageLens.noHistory")}</small>
+                )}
+                {activeStorageGrowthComparisons.length ? (
+                  <div
+                    className={`channel-storage-growth ${activeStorageGrowthWarning ? "warn" : "stable"}`}
+                    aria-label={t("detail.storageLens.growthTitle")}
+                  >
+                    <div className="channel-storage-growth-head">
+                      <span>
+                        <Activity size={13} />
+                        {t("detail.storageLens.growthTitle")}
+                      </span>
+                      <strong>
+                        {activeStorageGrowthWarning
+                          ? storageChannelPressureWarningLabel(activeStorageGrowthWarning, t)
+                          : t("detail.storageLens.growthStable")}
+                      </strong>
+                    </div>
+                    <div className="channel-storage-growth-grid">
+                      {activeStorageGrowthComparisons.map((comparison) => (
+                        <article className={comparison.warning ? "warn" : "stable"} key={comparison.window_days}>
+                          <span>{comparison.label}</span>
+                          <strong>{comparison.delta_label}</strong>
+                          <small>
+                            {t("detail.storageLens.dailyGrowth")} {comparison.daily_growth_label} ·{" "}
+                            {formatSignedPercent(comparison.growth_percent)}
+                          </small>
+                          <em>
+                            {comparison.warning
+                              ? storageChannelPressureWarningLabel(comparison.warning, t)
+                              : t("detail.storageLens.growthStable")}
+                          </em>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="channel-storage-command">
+                  <div>
+                    <span>
+                      <Terminal size={13} />
+                      {t("detail.storageLens.openCommand")}
+                    </span>
+                    <small>
+                      {activeStorageOpenCommand.label} · {activeStorageOpenCommand.note}
+                    </small>
+                  </div>
+                  <code>{activeStorageOpenCommand.command || activeStoragePath || t("detail.storageLens.noPath")}</code>
+                  <button
+                    aria-label={t("detail.storageLens.copyCommand")}
+                    disabled={!activeStorageOpenCommand.command}
+                    onClick={() => void handleCopyStorageLensOpenCommand()}
+                    type="button"
+                  >
+                    <ClipboardList size={13} />
+                    {storageLensCommandCopyStatus === "copied"
+                      ? t("detail.storageLens.copied")
+                      : storageLensCommandCopyStatus === "error"
+                        ? t("detail.storageLens.copyFailed")
+                        : t("detail.storageLens.copyCommand")}
+                  </button>
+                </div>
                 {activeStorageDriftRows.length ? (
                   <div className="channel-storage-drift">
-                    {activeStorageDriftRows.slice(0, 3).map((item) => (
-                      <article key={`${item.kind}-${item.relative_path}`}>
-                        <span>{item.kind === "unindexed_media" ? t("storage.scan.unindexed") : t("storage.scan.indexedMissing")}</span>
-                        <code>{item.relative_path}</code>
-                        <em>{item.label}</em>
-                      </article>
-                    ))}
+                    {activeStorageDriftRows.slice(0, 3).map((item) => {
+                      const isRecover = item.kind === "unindexed_media";
+                      const actionStatus = storageDriftActionStatus[storageDriftActionKey(item)] ?? "idle";
+                      return (
+                        <article key={`${item.kind}-${item.relative_path}`}>
+                          <span>{isRecover ? t("storage.scan.unindexed") : t("storage.scan.indexedMissing")}</span>
+                          <code>{item.relative_path}</code>
+                          <em>{item.label}</em>
+                          <button disabled={actionStatus === "running"} onClick={() => void handlePreviewStorageDrift(item)} type="button">
+                            {isRecover ? <RotateCcw size={13} /> : <Trash2 size={13} />}
+                            {actionStatus === "running"
+                              ? t("storage.drift.running")
+                              : isRecover
+                                ? t("detail.storageLens.recover")
+                                : t("detail.storageLens.prune")}
+                          </button>
+                        </article>
+                      );
+                    })}
                   </div>
                 ) : (
                   <small className="channel-storage-clean">{t("detail.storageLens.clean")}</small>
@@ -4303,7 +6391,7 @@ function App() {
           </section>
         ) : null}
 
-        {registeredChannelId && activeChannelTab === "downloads" ? (
+        {showChannelWorkspace && registeredChannelId && activeChannelTab === "downloads" ? (
           <section className="panel launch-control-panel">
             <div className="launch-hero">
               <div>
@@ -4476,27 +6564,27 @@ function App() {
             ) : null}
 
             {preflightPlan ? (
-              <div className="launch-preflight-runway" aria-label={t("launch.runway.title")}>
+              <div className="launch-preflight-runway" aria-label={t("launch.preflightRunway.title")}>
                 <div>
                   <ClipboardList size={15} />
-                  <span>{t("launch.runway.title")}</span>
+                  <span>{t("launch.preflightRunway.title")}</span>
                   <strong>{preflightPlan.estimated_label}</strong>
                 </div>
                 <article>
-                  <span>{t("launch.runway.ready")}</span>
+                  <span>{t("launch.preflightRunway.ready")}</span>
                   <strong>{preflightReadyCount}</strong>
                 </article>
                 <article>
-                  <span>{t("launch.runway.review")}</span>
+                  <span>{t("launch.preflightRunway.review")}</span>
                   <strong>{preflightReviewCount}</strong>
                 </article>
                 <article>
-                  <span>{t("launch.runway.free")}</span>
+                  <span>{t("launch.preflightRunway.free")}</span>
                   <strong>{launchRunwayFreeLabel}</strong>
                 </article>
                 <article>
-                  <span>{t("launch.runway.mode")}</span>
-                  <strong>{t("launch.runway.dbOnly")}</strong>
+                  <span>{t("launch.preflightRunway.mode")}</span>
+                  <strong>{t("launch.preflightRunway.dbOnly")}</strong>
                 </article>
               </div>
             ) : null}
@@ -4696,10 +6784,22 @@ function App() {
                     <div className="worker-run-ledger">
                       <div className="worker-run-ledger-head">
                         <span>{t("worker.history")}</span>
-                        <button onClick={() => void handleOpenWorkerHistory()} type="button">
-                          <History size={12} />
-                          {t("worker.history.open")}
-                        </button>
+                        <div>
+                          <button
+                            onClick={() => {
+                              setDownloadRunSummaryCopyStatus("idle");
+                              setDownloadRunSummaryOpen(true);
+                            }}
+                            type="button"
+                          >
+                            <ClipboardList size={12} />
+                            {t("worker.summary.open")}
+                          </button>
+                          <button onClick={() => void handleOpenWorkerHistory()} type="button">
+                            <History size={12} />
+                            {t("worker.history.open")}
+                          </button>
+                        </div>
                       </div>
                       {workerRuns.slice(0, 3).map((run) => (
                         <article key={run.id}>
@@ -4735,7 +6835,7 @@ function App() {
           </section>
         ) : null}
 
-        {registeredChannelId && activeChannelTab === "library" ? (
+        {showLibraryIndex ? (
           <section className="panel library-index-panel">
             <div className="panel-header compact">
               <div>
@@ -4745,6 +6845,7 @@ function App() {
               <label className="library-search">
                 <Search size={15} />
                 <input
+                  ref={librarySearchInputRef}
                   aria-label={t("library.search")}
                   onChange={(event) => {
                     setActiveSavedLibraryViewId(null);
@@ -4938,147 +7039,67 @@ function App() {
                   </div>
                 </button>
               ))}
-              {visibleLibraryItems.length === 0 ? <p className="empty-copy">{t("library.empty")}</p> : null}
+              {visibleLibraryItems.length === 0 ? (
+                <div className={`library-empty-state ${librarySourceItemCount === 0 ? "empty" : "filtered"}`}>
+                  <div className="library-empty-icon">
+                    {librarySourceItemCount === 0 ? <BookOpen size={20} /> : <ListFilter size={20} />}
+                  </div>
+                  <strong>
+                    {librarySourceItemCount === 0
+                      ? t("library.empty.noItemsTitle")
+                      : t("library.empty.filteredTitle")}
+                  </strong>
+                  <span>
+                    {librarySourceItemCount === 0
+                      ? t("library.empty.noItemsDetail")
+                      : t("library.empty.filteredDetail")}
+                  </span>
+                  <div className="library-empty-actions">
+                    {librarySourceItemCount === 0 ? (
+                      <>
+                        <button
+                          className="primary-action"
+                          disabled={!registeredChannelId || workflowStatus === "syncing"}
+                          onClick={() => void handleManualSync()}
+                          type="button"
+                        >
+                          <RotateCcw size={15} />
+                          {t("library.empty.sync")}
+                        </button>
+                        <button className="command-button" onClick={openQueueWorkspace} type="button">
+                          <Rocket size={15} />
+                          {t("library.empty.queue")}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="primary-action" disabled={!libraryHasActiveFilters} onClick={handleResetLibraryFilters} type="button">
+                          <ListFilter size={15} />
+                          {t("library.empty.clear")}
+                        </button>
+                        <button
+                          className="command-button"
+                          onClick={() => {
+                            setActiveNavId("insights");
+                            window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
+                          }}
+                          type="button"
+                        >
+                          <FolderTree size={15} />
+                          {t("library.empty.storage")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         ) : null}
 
-        <section className="archive-grid">
-          <motion.div
-            className="panel backup-panel"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12, duration: 0.45 }}
-          >
-            <div className="panel-header compact">
-              <div className="channel-brief">
-                <div className="channel-avatar">{activeInitials}</div>
-                <div>
-                  <p className="panel-kicker">{t("panel.backup.kicker")}</p>
-                  <h2>{activeTitle}</h2>
-                  <span>{activeHandle} · {activeExternalId}</span>
-                </div>
-              </div>
-              <ShieldCheck size={20} className="panel-icon emerald" />
-            </div>
-            <div className="backup-stats">
-              {activeBackupStats.map((stat) => (
-                <article className="backup-stat" key={stat.labelKey}>
-                  <span>{t(stat.labelKey)}</span>
-                  <strong>{stat.value}</strong>
-                  <small>{t(stat.detailKey)}</small>
-                </article>
-              ))}
-            </div>
-            <div className="cadence-block">
-              <div>
-                <p className="panel-kicker">{t("panel.cadence.kicker")}</p>
-                <h3>{t("panel.cadence.title")}</h3>
-                <div className="cadence-meta">
-                  <span><Clock3 size={14} /> {latestUploadLabel}</span>
-                  <span><TimerReset size={14} /> {cadenceAverageLabel}</span>
-                </div>
-              </div>
-              <div className="cadence-strip" aria-label={t("panel.cadence.title")}>
-                {activeRhythm.map((day) => (
-                  <div className="cadence-day" key={day.labelKey}>
-                    <span>{t(day.labelKey)}</span>
-                    <i style={{ height: `${Math.max(18, day.intensity * 88)}px` }} />
-                    <strong>{day.count}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            className="panel folder-panel"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18, duration: 0.45 }}
-          >
-            <div className="panel-header compact">
-              <div>
-                <p className="panel-kicker">{t("panel.folder.kicker")}</p>
-                <h2>{t("panel.folder.title")}</h2>
-              </div>
-              <FolderTree size={20} className="panel-icon" />
-            </div>
-            <code className="folder-root">{activeFolderRoot}</code>
-            <div className="folder-tree" aria-label={t("panel.folder.title")}>
-              {activeFolderRows.map((item) => (
-                <div className={`folder-row folder-${item.kind}`} key={`${item.depth}-${item.name}`}>
-                  <span style={{ width: `${item.depth * 18}px` }} />
-                  {item.kind === "file" ? <FileText size={15} /> : <Folder size={15} />}
-                  <code>{item.name}</code>
-                </div>
-              ))}
-            </div>
-            {storageScan?.folder_tree.length ? (
-              <div className="storage-folder-scan" aria-label={t("storage.scan.tree")}>
-                <strong>{t("storage.scan.tree")}</strong>
-                {storageScan.folder_tree.slice(0, 8).map((node) => (
-                  <div className="folder-row folder-channel" key={node.relative_path}>
-                    <span style={{ width: `${node.depth * 18}px` }} />
-                    <Folder size={15} />
-                    <code>{node.name}</code>
-                    <em>{node.label}</em>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <div className="fidelity-list" aria-label={t("panel.fidelity.title")}>
-              <p className="panel-kicker">{t("panel.fidelity.kicker")}</p>
-              {fidelityChecks.map((item) => (
-                <span className={`fidelity-pill ${item.status}`} key={item.labelKey}>
-                  <ShieldCheck size={14} />
-                  {t(item.labelKey)}
-                </span>
-              ))}
-            </div>
-            <div className="folder-meta">
-              <span><Film size={15} /> {t("folder.quality")}</span>
-              <span><CalendarDays size={15} /> {t("folder.template")}</span>
-            </div>
-          </motion.div>
-          <motion.div
-            className="panel constellation-panel"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.45 }}
-          >
-            <div className="panel-header">
-              <div>
-                <p className="panel-kicker">{t("panel.channelHealth.kicker")}</p>
-                <h2>{t("panel.channelHealth.title")}</h2>
-              </div>
-              <div className="legend-row">
-                <span><i className="legend-dot healthy" /> {t("legend.healthy")}</span>
-                <span><i className="legend-dot warning" /> {t("legend.pressure")}</span>
-                <span><i className="legend-dot failed" /> {t("legend.failed")}</span>
-              </div>
-            </div>
-            <ChannelConstellation channels={activeChannels} links={activeLinks} />
-          </motion.div>
-
-          <motion.div
-            className="panel queue-panel"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.22, duration: 0.45 }}
-          >
-            <div className="panel-header compact">
-              <div>
-                <p className="panel-kicker">{t("panel.liveJobs.kicker")}</p>
-                <h2>{t("panel.liveJobs.title")}</h2>
-              </div>
-              <Activity size={20} className="panel-icon" />
-            </div>
-            <QueueFlow lanes={activeQueue} />
-          </motion.div>
-        </section>
-
-        <section className="lower-grid">
+        {showLowerGrid ? (
+        <section className={`lower-grid ${showChannelWorkspace ? "channel-lower-grid" : ""}`}>
+          {showDashboardWorkspace ? (
           <motion.div
             className="panel activity-panel"
             initial={{ opacity: 0, y: 12 }}
@@ -5105,7 +7126,9 @@ function App() {
               ))}
             </div>
           </motion.div>
+          ) : null}
 
+          {showDashboardWorkspace || showInsightsWorkspace ? (
           <motion.div
             className="panel storage-panel"
             initial={{ opacity: 0, y: 12 }}
@@ -5402,7 +7425,10 @@ function App() {
                   const isRecover = item.kind === "unindexed_media";
                   const DriftActionIcon = isRecover ? RotateCcw : Trash2;
                   return (
-                    <article className={item.kind} key={`${item.kind}-${item.relative_path}`}>
+                    <article
+                      className={`${item.kind} ${storageFocusPath === item.relative_path ? "focused" : ""}`}
+                      key={`${item.kind}-${item.relative_path}`}
+                    >
                       <span>
                         {isRecover ? t("storage.scan.unindexed") : t("storage.scan.indexedMissing")}
                       </span>
@@ -5467,6 +7493,9 @@ function App() {
             ) : null}
           </motion.div>
 
+          ) : null}
+
+          {showDashboardWorkspace || showChannelWorkspace ? (
           <motion.div
             className="panel quick-panel"
             initial={{ opacity: 0, y: 12 }}
@@ -5506,8 +7535,7 @@ function App() {
                   <strong>{registeredChannelId ? activeTitle : t("archiveTxt.path.noSource")}</strong>
                   <button
                     onClick={() => {
-                      setActiveNavId("channels");
-                      scrollToAppSection(".registration-panel");
+                      openChannelWorkspace("overview", ".registration-panel");
                     }}
                     type="button"
                   >
@@ -5543,8 +7571,7 @@ function App() {
                   <button
                     disabled={!registeredChannelId}
                     onClick={() => {
-                      setActiveChannelTab("downloads");
-                      scrollToAppSection(".launch-control-panel");
+                      openChannelWorkspace("downloads", ".launch-control-panel");
                     }}
                     type="button"
                   >
@@ -5569,9 +7596,82 @@ function App() {
                   {archiveTxtStatus === "previewing" ? t("archiveTxt.previewing") : t("archiveTxt.preview")}
                 </button>
               </div>
+              <div className="archive-txt-wizard" aria-label={t("archiveTxt.wizard.title")}>
+                {[
+                  {
+                    label: t("archiveTxt.wizard.source"),
+                    detail: archiveTxtDraft.trim()
+                      ? t("archiveTxt.wizard.sourceReady").replace("{count}", String(archiveTxtDraftLineCount))
+                      : t("archiveTxt.wizard.sourceIdle"),
+                  },
+                  {
+                    label: t("archiveTxt.wizard.preview"),
+                    detail: archiveTxtPreview
+                      ? t("archiveTxt.wizard.previewReady")
+                          .replace("{archived}", String(archiveTxtPreview.archived_count))
+                          .replace("{missing}", String(archiveTxtPreview.known_missing_count))
+                          .replace("{unknown}", String(archiveTxtPreview.unknown_count))
+                      : t("archiveTxt.wizard.previewIdle"),
+                  },
+                  {
+                    label: t("archiveTxt.wizard.stage"),
+                    detail: archiveTxtStageResult
+                      ? t("archiveTxt.wizard.stageReady")
+                          .replace("{videos}", String(archiveTxtStageResult.videos_created))
+                          .replace("{candidates}", String(archiveTxtStageResult.candidates_created))
+                      : t("archiveTxt.wizard.stageIdle").replace("{count}", String(archiveTxtStageableCount)),
+                  },
+                  {
+                    label: t("archiveTxt.wizard.queue"),
+                    detail: archiveTxtStageResult
+                      ? t("archiveTxt.wizard.queueReady").replace("{count}", String(archiveTxtStageResult.candidates_created))
+                      : t("archiveTxt.wizard.queueIdle").replace("{queued}", String(simpleFlowStats.queued)),
+                  },
+                ].map((step, index) => (
+                  <article
+                    className={`${index < archiveTxtWizardStepIndex ? "ready" : ""} ${index === archiveTxtWizardStepIndex ? "active" : ""}`.trim()}
+                    key={step.label}
+                  >
+                    <span>{index + 1}</span>
+                    <div>
+                      <strong>{step.label}</strong>
+                      <small>{step.detail}</small>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div
+                className="archive-txt-file-tools"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleArchiveTxtDrop}
+              >
+                <div>
+                  <strong>{t("archiveTxt.dropTitle")}</strong>
+                  <small>{t("archiveTxt.dropDetail")}</small>
+                </div>
+                <div className="archive-txt-file-actions">
+                  <label className="archive-txt-file-button">
+                    <input
+                      accept=".txt,text/plain"
+                      aria-label={t("archiveTxt.fileSelect")}
+                      onChange={handleArchiveTxtFileChange}
+                      type="file"
+                    />
+                    <FileText size={13} />
+                    {t("archiveTxt.fileSelect")}
+                  </label>
+                  <button disabled={!archiveTxtDraft.trim()} onClick={() => replaceArchiveTxtDraft("")} type="button">
+                    <Trash2 size={13} />
+                    {t("archiveTxt.clear")}
+                  </button>
+                </div>
+              </div>
+              {archiveTxtDraft.trim() ? <p className="archive-txt-autosave">{t("archiveTxt.autosaved")}</p> : null}
               <textarea
                 aria-label={t("archiveTxt.input")}
-                onChange={(event) => setArchiveTxtDraft(event.target.value)}
+                onChange={(event) => {
+                  replaceArchiveTxtDraft(event.target.value);
+                }}
                 placeholder={t("archiveTxt.placeholder")}
                 spellCheck={false}
                 value={archiveTxtDraft}
@@ -5596,6 +7696,136 @@ function App() {
                       {t("archiveTxt.review")}
                     </span>
                   </div>
+                  <div className="archive-txt-stage">
+                    <div>
+                      <strong>{t("archiveTxt.stageTitle")}</strong>
+                      <small>
+                        {registeredChannelId
+                          ? t("archiveTxt.stageSubtitle")
+                              .replace("{count}", String(archiveTxtStageableCount))
+                              .replace("{quality}", channelPolicy?.max_quality ?? maxQuality)
+                          : t("archiveTxt.stageNeedsChannel")}
+                      </small>
+                    </div>
+                    <button
+                      disabled={!registeredChannelId || archiveTxtStageStatus === "staging" || archiveTxtStageableCount <= 0}
+                      onClick={() => void handleStageArchiveTxt()}
+                      type="button"
+                    >
+                      <Rocket size={13} />
+                      {archiveTxtStageStatus === "staging" ? t("archiveTxt.staging") : t("archiveTxt.stage")}
+                    </button>
+                  </div>
+                  {archiveTxtStageResult ? (
+                    <>
+                      <div className="archive-txt-stage-result">
+                        <span>
+                          <strong>{archiveTxtStageResult.videos_created}</strong>
+                          {t("archiveTxt.stageVideos")}
+                        </span>
+                        <span>
+                          <strong>{archiveTxtStageResult.candidates_created}</strong>
+                          {t("archiveTxt.stageCandidates")}
+                        </span>
+                        <span>
+                          <strong>{archiveTxtStageResult.skipped_count}</strong>
+                          {t("archiveTxt.stageSkipped")}
+                        </span>
+                      </div>
+                      {archiveTxtStageResult.videos_created > 0 ? (
+                        <div className={`archive-txt-sync-handoff ${archiveTxtSyncStatus}`}>
+                          <div>
+                            <strong>{t("archiveTxt.syncTitle")}</strong>
+                            <small>{t("archiveTxt.syncSubtitle")}</small>
+                          </div>
+                          <button
+                            disabled={archiveTxtSyncStatus === "syncing" || !registeredChannelId}
+                            onClick={() => void handleArchiveTxtMetadataSync()}
+                            type="button"
+                          >
+                            <Sparkles size={13} />
+                            {archiveTxtSyncStatus === "syncing" ? t("archiveTxt.syncing") : t("archiveTxt.sync")}
+                          </button>
+                          {archiveTxtSyncResult ? (
+                            <div className="archive-txt-sync-metrics">
+                              <span>
+                                <strong>{archiveTxtSyncResult.videos_enriched}</strong>
+                                {t("archiveTxt.syncEnriched")}
+                              </span>
+                              <span>
+                                <strong>{archiveTxtSyncResult.videos_created}</strong>
+                                {t("archiveTxt.syncCreated")}
+                              </span>
+                              <span>
+                                <strong>{archiveTxtSyncResult.videos_seen}</strong>
+                                {t("archiveTxt.syncSeen")}
+                              </span>
+                            </div>
+                          ) : null}
+                          {archiveTxtStageResult.video_ids.length > 0 ? (
+                            <div className="archive-txt-enrichment-review">
+                              <div className="archive-txt-enrichment-counts">
+                                <span>
+                                  <strong>{archiveTxtStagedVideoRows.enriched.length}</strong>
+                                  {t("archiveTxt.enrichmentUpgraded")}
+                                </span>
+                                <span>
+                                  <strong>{archiveTxtStagedVideoRows.pending.length}</strong>
+                                  {t("archiveTxt.enrichmentPending")}
+                                </span>
+                              </div>
+                              <div className="archive-txt-enrichment-rows">
+                                {archiveTxtStagedVideoRows.rows.slice(0, 4).map((video) => {
+                                  const pending = video.title.startsWith(archiveTxtPlaceholderPrefix);
+                                  return (
+                                    <article className={pending ? "pending" : "ready"} key={video.id}>
+                                      <span>{pending ? t("archiveTxt.enrichmentPendingLabel") : t("archiveTxt.enrichmentReadyLabel")}</span>
+                                      <strong>{pending ? video.external_id : video.title}</strong>
+                                      <small>{video.upload_date ?? video.published_at ?? video.external_id}</small>
+                                    </article>
+                                  );
+                                })}
+                                {archiveTxtStagedVideoRows.rows.length === 0 ? (
+                                  <p className="empty-copy">{t("archiveTxt.enrichmentEmpty")}</p>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {archiveTxtStageResult.candidates_created > 0 ? (
+                        <div className={`archive-txt-queue-handoff ${archiveTxtQueueStatus}`}>
+                          <div>
+                            <strong>{t("archiveTxt.queueTitle")}</strong>
+                            <small>
+                              {t("archiveTxt.queueSubtitle").replace(
+                                "{count}",
+                                String(Math.min(5, archiveTxtStageResult.job_ids.length)),
+                              )}
+                            </small>
+                          </div>
+                          <div className="archive-txt-queue-actions">
+                            <button disabled={queueConsoleStatus === "loading"} onClick={() => void handleArchiveTxtOpenQueue()} type="button">
+                              <History size={13} />
+                              {t("archiveTxt.queueOpen")}
+                            </button>
+                            <button disabled={archiveTxtQueueStatus === "preparing"} onClick={() => void handleArchiveTxtPrepareQueue()} type="button">
+                              <Rocket size={13} />
+                              {archiveTxtQueueStatus === "preparing" ? t("archiveTxt.queuePreparing") : t("archiveTxt.queuePrepare")}
+                            </button>
+                            <button
+                              disabled={archiveTxtRunStatus === "running" || archiveTxtQueueStatus === "preparing"}
+                              onClick={() => void handleArchiveTxtOpenRunConfirm()}
+                              type="button"
+                            >
+                              <Zap size={13} />
+                              {archiveTxtRunStatus === "running" ? t("archiveTxt.runRunning") : t("archiveTxt.runPrepare")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                   <div className="archive-txt-rows">
                     {archiveTxtPreview.items.slice(0, 5).map((item) => (
                       <article className={item.state} key={`${item.line_number}-${item.video_external_id ?? item.raw}`}>
@@ -5629,7 +7859,9 @@ function App() {
               {workflowStatus === "bulk" ? t("import.rescan.running") : t("import.review")}
             </button>
           </motion.div>
+          ) : null}
         </section>
+        ) : null}
           </>
         ) : null}
       </section>
@@ -6149,6 +8381,95 @@ function App() {
           </aside>
         </div>
       ) : null}
+      {archiveTxtRunConfirmOpen ? (
+        <div
+          className="download-confirm-backdrop"
+          onClick={() => {
+            if (archiveTxtRunStatus !== "running") setArchiveTxtRunConfirmOpen(false);
+          }}
+          role="presentation"
+        >
+          <aside
+            aria-label={t("archiveTxt.runConfirmTitle")}
+            className="download-confirm-modal archive-txt-run-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="download-confirm-head">
+              <div>
+                <p className="panel-kicker">archive.txt</p>
+                <h2>{t("archiveTxt.runConfirmTitle")}</h2>
+                <span>{t("archiveTxt.runConfirmSubtitle")}</span>
+              </div>
+              <button
+                aria-label={t("actions.close")}
+                className="icon-button"
+                disabled={archiveTxtRunStatus === "running"}
+                onClick={() => setArchiveTxtRunConfirmOpen(false)}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="download-confirm-grid">
+              <article>
+                <span>{t("worker.liveConfirm.limit")}</span>
+                <strong>{archiveTxtRunLimit}</strong>
+              </article>
+              <article>
+                <span>{t("worker.liveConfirm.skipped")}</span>
+                <strong>{archiveTxtPreview?.archived_count ?? 0}</strong>
+              </article>
+              <article>
+                <span>{t("archiveTxt.runCandidates")}</span>
+                <strong>{archiveTxtStageResult?.candidates_created ?? 0}</strong>
+              </article>
+            </div>
+            <div className="download-confirm-list">
+              {archiveTxtRunJobs.map((job) => (
+                <span key={job.id}>
+                  <CheckCircle2 size={13} />
+                  <strong>{job.video_title}</strong>
+                  <em>{jobStatusLabel(job.status, t)}</em>
+                </span>
+              ))}
+              {archiveTxtRunJobs.length === 0
+                ? archiveTxtRunJobIds.map((jobId) => (
+                    <span key={jobId}>
+                      <CheckCircle2 size={13} />
+                      <strong>job #{jobId}</strong>
+                      <em>{t("archiveTxt.runQueuedAfterConfirm")}</em>
+                    </span>
+                  ))
+                : null}
+              {archiveTxtRunJobIds.length === 0 ? <p className="empty-copy">{t("archiveTxt.queuePreparedEmpty")}</p> : null}
+            </div>
+            {workerPlan?.locked_reason ? (
+              <code className="worker-lock">{workerPlan.locked_reason}</code>
+            ) : !workerPlan?.enabled ? (
+              <code className="worker-lock">{t("archiveTxt.runWorkerDisabled")}</code>
+            ) : null}
+            <div className="download-confirm-actions">
+              <button
+                className="command-button"
+                disabled={archiveTxtRunStatus === "running"}
+                onClick={() => setArchiveTxtRunConfirmOpen(false)}
+                type="button"
+              >
+                {t("worker.liveCancel")}
+              </button>
+              <button
+                className="primary-action"
+                disabled={archiveTxtRunBlocked}
+                onClick={() => void handleArchiveTxtPrepareAndRun()}
+                type="button"
+              >
+                <Rocket size={16} />
+                {archiveTxtRunStatus === "running" ? t("archiveTxt.runRunning") : t("archiveTxt.runStart")}
+              </button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
       {liveDownloadConfirmOpen ? (
         <div className="download-confirm-backdrop" onClick={() => setLiveDownloadConfirmOpen(false)} role="presentation">
           <aside
@@ -6272,6 +8593,22 @@ function App() {
                   {restartAdapter?.environment ?? t("runtime.checking")} · {restartAdapterDetail}
                 </span>
                 <code>{restartAdapter?.command ?? runtimeSettings?.restart_command ?? ""}</code>
+                {restartAdapter?.setup_hints.length ? (
+                  <div className="runtime-adapter-hints">
+                    <strong>{t("runtime.restart.setupHints")}</strong>
+                    {restartAdapter.setup_hints.map((hint) => (
+                      <span key={hint}>{hint}</span>
+                    ))}
+                  </div>
+                ) : null}
+                {restartAdapter?.env_lines.length ? (
+                  <div className="runtime-adapter-env" aria-label={t("runtime.restart.envLines")}>
+                    <strong>{t("runtime.restart.envLines")}</strong>
+                    {restartAdapter.env_lines.map((line) => (
+                      <code key={line}>{line}</code>
+                    ))}
+                  </div>
+                ) : null}
                 <button
                   className="runtime-apply-button runtime-restart-request"
                   disabled={!restartAdapter?.executable || runtimeRestartStatus === "requesting"}
@@ -6283,11 +8620,136 @@ function App() {
                 </button>
               </div>
             </div>
+            <div
+              className={`runtime-compose-smoke ${restartAdapter?.adapter === "docker-compose" ? "good" : "warn"}`}
+              aria-label={t("runtime.composeSmoke.title")}
+            >
+              <div className="runtime-apply-heading">
+                <Terminal size={16} />
+                <div>
+                  <strong>{t("runtime.composeSmoke.title")}</strong>
+                  <span>{t("runtime.composeSmoke.subtitle")}</span>
+                </div>
+                <button className="runtime-copy-button" onClick={() => void handleCopyComposeSmokeCommand()} type="button">
+                  <ClipboardList size={14} />
+                  {runtimeComposeSmokeCopyStatus === "copied"
+                    ? t("runtime.composeSmoke.copied")
+                    : runtimeComposeSmokeCopyStatus === "error"
+                      ? t("runtime.composeSmoke.copyError")
+                      : t("runtime.composeSmoke.copy")}
+                </button>
+              </div>
+              <div className="runtime-compose-smoke-grid">
+                <article>
+                  <span>{t("runtime.composeSmoke.adapter")}</span>
+                  <strong>{restartAdapterLabel}</strong>
+                  <small>
+                    {restartAdapter?.executable ? t("runtime.composeSmoke.executable") : t("runtime.composeSmoke.copyOnly")}
+                  </small>
+                </article>
+                <article>
+                  <span>{t("runtime.composeSmoke.isolation")}</span>
+                  <strong>{t("runtime.composeSmoke.isolationValue")}</strong>
+                  <small>15174 / 18001</small>
+                </article>
+                <article>
+                  <span>{t("runtime.composeSmoke.cleanup")}</span>
+                  <strong>{t("runtime.composeSmoke.cleanupValue")}</strong>
+                  <small>CVN_COMPOSE_SMOKE_CLEANUP=true</small>
+                </article>
+              </div>
+              <code>{composeSmokeCommand}</code>
+              <div className="runtime-compose-smoke-fast">
+                <span>{t("runtime.composeSmoke.fastLabel")}</span>
+                <code>{composeSmokeFastCommand}</code>
+              </div>
+            </div>
             {runtimeRestartMessage ? (
               <div className={`runtime-copy-status ${runtimeRestartStatus === "error" ? "error" : "copied"}`}>
                 {runtimeRestartMessage}
               </div>
             ) : null}
+            <div className="runtime-restart-presets" aria-label={t("runtime.restart.presetsLabel")}>
+              <div className="runtime-apply-heading">
+                <Terminal size={16} />
+                <div>
+                  <strong>{t("runtime.restart.presetsTitle")}</strong>
+                  <span>{t("runtime.restart.presetsSubtitle")}</span>
+                </div>
+              </div>
+              <div className="runtime-restart-preset-grid">
+                {runtimeRestartPresets.map((preset) => {
+                  const copyState =
+                    runtimeRestartPresetCopyStatus?.id === preset.id ? runtimeRestartPresetCopyStatus.status : "idle";
+                  return (
+                    <article key={preset.id}>
+                      <div>
+                        <strong>{t(preset.labelKey)}</strong>
+                        <span>{t(preset.detailKey)}</span>
+                      </div>
+                      <code>{preset.command}</code>
+                      <div className="runtime-restart-preset-lines">
+                        {preset.lines.map((line) => (
+                          <code key={line}>{line}</code>
+                        ))}
+                      </div>
+                      <button
+                        aria-label={`${t("runtime.restart.presetsCopy")} ${t(preset.labelKey)}`}
+                        className="runtime-copy-button"
+                        onClick={() => void handleCopyRestartPreset(preset)}
+                        type="button"
+                      >
+                        <ClipboardList size={14} />
+                        {copyState === "copied"
+                          ? t("runtime.restart.presetsCopied")
+                          : copyState === "error"
+                            ? t("runtime.restart.presetsCopyError")
+                            : t("runtime.restart.presetsCopy")}
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="runtime-restart-ledger">
+              <div className="runtime-apply-heading">
+                <History size={16} />
+                <div>
+                  <strong>{t("runtime.restart.ledgerTitle")}</strong>
+                  <span>{t("runtime.restart.ledgerSubtitle")}</span>
+                </div>
+                <button
+                  className="runtime-copy-button"
+                  disabled={runtimeRestartEventsStatus === "loading"}
+                  onClick={() => void loadRuntimeRestartEvents()}
+                  type="button"
+                >
+                  <RotateCcw size={14} />
+                  {runtimeRestartEventsStatus === "loading" ? t("events.refreshing") : t("events.refresh")}
+                </button>
+                <button className="runtime-copy-button" onClick={() => void handleOpenRuntimeRestartEventLog()} type="button">
+                  <ExternalLink size={14} />
+                  {t("runtime.restart.ledgerOpen")}
+                </button>
+              </div>
+              {runtimeRestartEventsStatus === "error" ? (
+                <div className="runtime-copy-status error">{t("runtime.restart.ledgerError")}</div>
+              ) : null}
+              <div className="runtime-restart-ledger-list">
+                {runtimeRestartEvents.map((event, index) => (
+                  <article className={`runtime-restart-event ${eventTone(event.type)}`} key={`${event.type}-${event.occurred_at}-${index}`}>
+                    <div>
+                      <strong>{eventLabel(event, t)}</strong>
+                      <span>{runtimeRestartEventDetail(event, t)}</span>
+                    </div>
+                    <time>{formatEventTime(event.occurred_at)}</time>
+                  </article>
+                ))}
+                {!runtimeRestartEvents.length && runtimeRestartEventsStatus !== "loading" ? (
+                  <p className="empty-copy">{t("runtime.restart.ledgerEmpty")}</p>
+                ) : null}
+              </div>
+            </div>
 
             <div className="runtime-guide-state">
               <article>
@@ -6318,6 +8780,39 @@ function App() {
                 <strong>{workerRuntimeLabel}</strong>
                 <small>{runtimeSettings?.download_worker_enabled ? t("runtime.worker.liveDetail") : t("runtime.worker.lockedDetail")}</small>
               </article>
+            </div>
+
+            <div className="runtime-operator-export" aria-label={t("runtime.workerSummary.aria")}>
+              <div className="runtime-apply-heading">
+                <div>
+                  <strong>{t("runtime.workerSummary.title")}</strong>
+                  <span>{t("runtime.workerSummary.subtitle")}</span>
+                </div>
+                <div className="runtime-heading-actions">
+                  <button
+                    className="runtime-apply-button"
+                    onClick={() => handleDownloadWorkerSummary("ndjson", "latest")}
+                    type="button"
+                  >
+                    <Download size={14} />
+                    {t("runtime.ticks.exportNdjson")}
+                  </button>
+                  <button className="runtime-apply-button" onClick={() => handleDownloadWorkerSummary("csv", "latest")} type="button">
+                    <Download size={14} />
+                    {t("runtime.ticks.exportCsv")}
+                  </button>
+                </div>
+              </div>
+              <div className="runtime-export-endpoints">
+                <article>
+                  <span>{t("runtime.workerSummary.summaryEndpoint")}</span>
+                  <code>GET /api/jobs/downloads/worker/summary</code>
+                </article>
+                <article>
+                  <span>{t("runtime.workerSummary.exportEndpoint")}</span>
+                  <code>GET /api/jobs/downloads/worker/summary/export?format=ndjson|csv</code>
+                </article>
+              </div>
             </div>
 
             <form className="runtime-apply-panel" onSubmit={(event) => void handleApplyRuntimeSettings(event)}>
@@ -6523,6 +9018,10 @@ function App() {
                     <strong>{metadataSyncTickSummary.videos}</strong>
                   </article>
                   <article>
+                    <span>{t("runtime.metadataTicks.enriched")}</span>
+                    <strong>{metadataSyncTickSummary.enriched}</strong>
+                  </article>
+                  <article>
                     <span>{t("runtime.metadataTicks.candidates")}</span>
                     <strong>{metadataSyncTickSummary.candidates}</strong>
                   </article>
@@ -6597,6 +9096,18 @@ function App() {
                     value={eventLogRetentionKeep}
                   />
                 </label>
+                <div className="retention-preset-strip" aria-label={t("runtime.retention.presets")}>
+                  {retentionPresetValues.map((value) => (
+                    <button
+                      className={eventLogRetentionKeep === String(value) ? "active" : ""}
+                      key={value}
+                      onClick={() => setEventLogRetentionKeep(String(value))}
+                      type="button"
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
                 <button
                   className="runtime-apply-button danger"
                   disabled={eventLogRetentionStatus === "pruning"}
@@ -6663,24 +9174,136 @@ function App() {
                 <strong>{eventLogSummary.storage}</strong>
               </article>
               <article>
+                <span>{t("events.filter.runtime")}</span>
+                <strong>{eventLogSummary.runtime}</strong>
+              </article>
+              <article>
                 <span>{t("events.filter.failure")}</span>
                 <strong>{eventLogSummary.failure}</strong>
               </article>
             </div>
 
             {eventLogStatus === "error" ? <div className="runtime-copy-status error">{t("events.loadError")}</div> : null}
-            <div className="event-log-list">
-              {filteredEventLogRows.map((event, index) => (
-                <article className={`event-log-card ${eventTone(event.type)}`} key={`${event.type}-${event.occurred_at}-${index}`}>
-                  <div className="event-log-card-head">
-                    <em>{event.type}</em>
-                    <time>{formatEventTime(event.occurred_at)}</time>
+            {eventDetail ? (
+              <section className="event-detail-panel" aria-label={t("events.detailTitle")}>
+                <div className="event-detail-head">
+                  <div>
+                    <span>{t("events.detailTitle")}</span>
+                    <strong>{eventLabel(eventDetail, t)}</strong>
+                    <small>
+                      {typeof eventDetail.id === "number" ? `#${eventDetail.id} · ` : ""}
+                      {eventDetail.type} · {formatEventTime(eventDetail.occurred_at)}
+                    </small>
                   </div>
-                  <strong>{eventLabel(event, t)}</strong>
-                  <small>{eventEntityLabel(event, t)}</small>
-                  <code className="event-log-data">{eventDataDigest(event)}</code>
-                </article>
-              ))}
+                  <div className="event-detail-actions">
+                    <button className="runtime-apply-button" onClick={() => void handleCopyEventDetail()} type="button">
+                      <ClipboardList size={14} />
+                      {eventDetailCopyStatus === "copied"
+                        ? t("events.detailCopied")
+                        : eventDetailCopyStatus === "error"
+                          ? t("events.detailCopyError")
+                          : t("events.detailCopy")}
+                    </button>
+                    <button
+                      className="runtime-apply-button"
+                      disabled={typeof eventDetail.id !== "number"}
+                      onClick={() => void handleCopyEventDetailCurl()}
+                      title={typeof eventDetail.id === "number" ? t("events.detailCurl") : t("events.detailCurlUnavailable")}
+                      type="button"
+                    >
+                      <Terminal size={14} />
+                      {typeof eventDetail.id !== "number"
+                        ? t("events.detailCurlUnavailable")
+                        : eventDetailCurlStatus === "copied"
+                          ? t("events.detailCurlCopied")
+                          : eventDetailCurlStatus === "error"
+                            ? t("events.detailCurlCopyError")
+                            : t("events.detailCurl")}
+                    </button>
+                    <button className="runtime-apply-button" onClick={() => handleDownloadEventDetail("ndjson")} type="button">
+                      <Download size={14} />
+                      {t("events.exportNdjson")}
+                    </button>
+                    <button className="runtime-apply-button" onClick={() => handleDownloadEventDetail("csv")} type="button">
+                      <Download size={14} />
+                      {t("events.exportCsv")}
+                    </button>
+                    <button
+                      aria-label={`${t("events.detailOpen")} ${t("actions.close")}`}
+                      className="icon-button"
+                      onClick={() => {
+                        setEventDetail(null);
+                        setEventDetailCopyStatus("idle");
+                        setEventDetailCurlStatus("idle");
+                      }}
+                      title={t("actions.close")}
+                      type="button"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+                <div className="event-detail-grid">
+                  <article>
+                    <span>{t("events.detailEntity")}</span>
+                    <strong>{eventEntityLabel(eventDetail, t)}</strong>
+                  </article>
+                  <article>
+                    <span>{t("events.detailTone")}</span>
+                    <strong>{eventTone(eventDetail.type)}</strong>
+                  </article>
+                </div>
+                {eventDetailTargetChannelId || eventDetailTargetJobId ? (
+                  <div className="event-detail-link-actions" aria-label={t("events.detailLinkedActions")}>
+                    {eventDetailTargetChannelId ? (
+                      <button className="runtime-inline-action" onClick={() => void handleOpenEventDetailChannelTarget()} type="button">
+                        <ExternalLink size={13} />
+                        {t("events.detailOpenChannel")}
+                      </button>
+                    ) : null}
+                    {eventDetailTargetJobId ? (
+                      <button className="runtime-inline-action" onClick={() => void handleOpenEventDetailQueueTarget()} type="button">
+                        <ExternalLink size={13} />
+                        {t("events.detailOpenQueue")}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                <code className="event-log-data event-detail-data">{JSON.stringify(eventDetail.data, null, 2)}</code>
+              </section>
+            ) : null}
+            <div className="event-log-list">
+              {filteredEventLogRows.map((event, index) => {
+                const isHighlightedEvent = typeof event.id === "number" && eventLogHighlightId === event.id;
+                return (
+                  <article
+                    className={`event-log-card ${eventTone(event.type)} ${isHighlightedEvent ? "target" : ""}`}
+                    key={`${event.id ?? event.type}-${event.occurred_at}-${index}`}
+                  >
+                    <div className="event-log-card-head">
+                      <em>{event.type}</em>
+                      <span>
+                        {typeof event.id === "number" ? <b className="event-log-id">#{event.id}</b> : null}
+                        <time>{formatEventTime(event.occurred_at)}</time>
+                      </span>
+                    </div>
+                    <strong>{eventLabel(event, t)}</strong>
+                    <small>{eventEntityLabel(event, t)}</small>
+                    <button
+                      className="event-log-detail-button"
+                      onClick={() => {
+                        setEventDetail(event);
+                        setEventDetailCopyStatus("idle");
+                        setEventDetailCurlStatus("idle");
+                      }}
+                      type="button"
+                    >
+                      {t("events.detailOpen")}
+                    </button>
+                    <code className="event-log-data">{eventDataDigest(event)}</code>
+                  </article>
+                );
+              })}
               {filteredEventLogRows.length === 0 ? <p className="empty-copy">{t("events.logEmpty")}</p> : null}
             </div>
           </aside>
@@ -6812,6 +9435,18 @@ function App() {
                     value={schedulerRetentionKeep}
                   />
                 </label>
+                <div className="retention-preset-strip" aria-label={t("runtime.retention.presets")}>
+                  {retentionPresetValues.map((value) => (
+                    <button
+                      className={schedulerRetentionKeep === String(value) ? "active" : ""}
+                      key={value}
+                      onClick={() => setSchedulerRetentionKeep(String(value))}
+                      type="button"
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -7001,6 +9636,18 @@ function App() {
                     value={metadataRetentionKeep}
                   />
                 </label>
+                <div className="retention-preset-strip" aria-label={t("runtime.retention.presets")}>
+                  {retentionPresetValues.map((value) => (
+                    <button
+                      className={metadataRetentionKeep === String(value) ? "active" : ""}
+                      key={value}
+                      onClick={() => setMetadataRetentionKeep(String(value))}
+                      type="button"
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -7018,6 +9665,10 @@ function App() {
                 <strong>{metadataDrawerSummary.videos}</strong>
               </article>
               <article>
+                <span>{t("runtime.metadataTicks.enriched")}</span>
+                <strong>{metadataDrawerSummary.enriched}</strong>
+              </article>
+              <article>
                 <span>{t("runtime.metadataTicks.candidates")}</span>
                 <strong>{metadataDrawerSummary.candidates}</strong>
               </article>
@@ -7031,7 +9682,7 @@ function App() {
                       {schedulerTickStatusLabel(tick.status, t)} #{tick.id}
                     </span>
                     <strong>
-                      {tick.synced_count}/{tick.videos_created_count}/{tick.candidates_created_count}
+                      {tick.synced_count}/{tick.videos_created_count}/{tick.videos_enriched_count}/{tick.candidates_created_count}
                     </strong>
                     <small>
                       {formatEventTime(tick.created_at)}
@@ -7060,6 +9711,10 @@ function App() {
                       <dd>{tick.videos_created_count}</dd>
                     </div>
                     <div>
+                      <dt>{t("runtime.metadataTicks.enriched")}</dt>
+                      <dd>{tick.videos_enriched_count}</dd>
+                    </div>
+                    <div>
                       <dt>{t("runtime.metadataTicks.candidates")}</dt>
                       <dd>{tick.candidates_created_count}</dd>
                     </div>
@@ -7084,6 +9739,149 @@ function App() {
                 </article>
               ))}
               {metadataTickRows.length === 0 ? <p className="empty-copy">{t("runtime.metadataTicks.empty")}</p> : null}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+      {downloadRunSummaryOpen ? (
+        <div className="worker-history-backdrop" onClick={() => setDownloadRunSummaryOpen(false)} role="presentation">
+          <aside
+            aria-label={t("worker.summary.title")}
+            className="worker-history-drawer download-run-summary-drawer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="worker-history-header">
+              <div>
+                <p className="panel-kicker">download audit</p>
+                <h2>{t("worker.summary.title")}</h2>
+                <span>{t("worker.summary.subtitle")}</span>
+              </div>
+              <div className="runtime-heading-actions">
+                <button className="runtime-apply-button" onClick={() => void handleCopyDownloadRunSummary()} type="button">
+                  <ClipboardList size={14} />
+                  {downloadRunSummaryCopyStatus === "copied"
+                    ? t("runtime.ticks.copyCopied")
+                    : downloadRunSummaryCopyStatus === "error"
+                      ? t("runtime.ticks.copyError")
+                      : t("runtime.ticks.copyJson")}
+                </button>
+                <button className="runtime-apply-button" onClick={() => handleDownloadWorkerSummary("ndjson")} type="button">
+                  <Download size={14} />
+                  {t("runtime.ticks.exportNdjson")}
+                </button>
+                <button className="runtime-apply-button" onClick={() => handleDownloadWorkerSummary("csv")} type="button">
+                  <Download size={14} />
+                  {t("runtime.ticks.exportCsv")}
+                </button>
+                <button aria-label={t("actions.close")} className="icon-button" onClick={() => setDownloadRunSummaryOpen(false)} type="button">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="worker-history-summary download-run-summary-grid">
+              <article>
+                <span>{t("worker.summary.archiveTxt")}</span>
+                <strong>{archiveTxtSummaryJobIds.size}</strong>
+              </article>
+              <article>
+                <span>{t("worker.summary.skipped")}</span>
+                <strong>{archiveTxtPreview?.archived_count ?? archiveSkipCount}</strong>
+              </article>
+              <article>
+                <span>{t("worker.summary.completed")}</span>
+                <strong>{recentCompletedJobs.length}</strong>
+              </article>
+              <article>
+                <span>{t("worker.summary.files")}</span>
+                <strong>{recentArchivedLibraryItems.length}</strong>
+              </article>
+            </div>
+            <div className="download-run-summary-section">
+              <div className="section-title">
+                <History size={15} />
+                <strong>{t("worker.summary.latestRun")}</strong>
+              </div>
+              {latestWorkerRun ? (
+                <>
+                  <article className={`worker-history-card ${latestWorkerRun.failed_count ? "failed-run" : latestWorkerRun.status}`}>
+                    <div className="worker-history-card-head">
+                      <div>
+                        <strong>{latestWorkerRun.status}</strong>
+                        <small>
+                          {latestWorkerRun.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(latestWorkerRun.created_at)}
+                        </small>
+                      </div>
+                      <em>{formatDuration(latestWorkerRun.duration_seconds)}</em>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>{t("worker.history.started")}</dt>
+                        <dd>{latestWorkerRun.started_count}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("worker.history.completed")}</dt>
+                        <dd>{latestWorkerRun.completed_count}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("worker.history.failed")}</dt>
+                        <dd>{latestWorkerRun.failed_count}</dd>
+                      </div>
+                    </dl>
+                    {latestWorkerRun.skipped_reason ? <code className="worker-history-reason">{latestWorkerRun.skipped_reason}</code> : null}
+                  </article>
+                  {latestWorkerJobs.length ? (
+                    <div className="download-run-summary-list compact">
+                      {latestWorkerJobs.slice(0, 5).map((job) => (
+                        <article key={job.id}>
+                          <strong>{job.video_title}</strong>
+                          <span>job #{job.id} · {job.video_external_id}</span>
+                          <em>
+                            {latestWorkerFailedJobIds.has(job.id)
+                              ? t("worker.summary.failedStatus")
+                              : latestWorkerCompletedJobIds.has(job.id)
+                                ? t("worker.summary.completedStatus")
+                                : jobStatusLabel(job.status, t)}
+                          </em>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="empty-copy">{t("worker.summary.noRuns")}</p>
+              )}
+            </div>
+            <div className="download-run-summary-section">
+              <div className="section-title">
+                <FileArchive size={15} />
+                <strong>{t("worker.summary.archiveRows")}</strong>
+              </div>
+              <div className="download-run-summary-list">
+                {archiveTxtSummaryJobs.slice(0, 5).map((job) => (
+                  <article key={job.id}>
+                    <strong>{job.video_title}</strong>
+                    <span>{job.video_external_id}</span>
+                    <em>{jobStatusLabel(job.status, t)}</em>
+                  </article>
+                ))}
+                {archiveTxtSummaryJobs.length === 0 ? <p className="empty-copy">{t("worker.summary.noArchiveRows")}</p> : null}
+              </div>
+            </div>
+            <div className="download-run-summary-section">
+              <div className="section-title">
+                <FileCheck2 size={15} />
+                <strong>{t("worker.summary.completedFiles")}</strong>
+              </div>
+              <div className="download-run-summary-list">
+                {recentArchivedLibraryItems.slice(0, 5).map((item) => (
+                  <article key={item.id}>
+                    <strong>{item.title}</strong>
+                    <span>{item.video_external_id}</span>
+                    <em>{item.total_label}</em>
+                  </article>
+                ))}
+                {recentArchivedLibraryItems.length === 0 ? <p className="empty-copy">{t("worker.summary.noFiles")}</p> : null}
+              </div>
             </div>
           </aside>
         </div>
@@ -7298,6 +10096,14 @@ function loadSavedLibraryViews(): SavedLibraryView[] {
   }
 }
 
+function loadArchiveTxtDraft(): string {
+  try {
+    return localStorage.getItem(archiveTxtDraftStorageKey) || archiveTxtDefaultDraft;
+  } catch {
+    return archiveTxtDefaultDraft;
+  }
+}
+
 function toSavedLibraryView(view: LibrarySavedView): SavedLibraryView {
   return {
     id: String(view.id),
@@ -7394,6 +10200,7 @@ function summarizeMetadataSyncTicks(ticks: MetadataSyncTick[]) {
     due: ticks.reduce((sum, tick) => sum + tick.due_channel_count, 0),
     synced: ticks.reduce((sum, tick) => sum + tick.synced_count, 0),
     videos: ticks.reduce((sum, tick) => sum + tick.videos_created_count, 0),
+    enriched: ticks.reduce((sum, tick) => sum + tick.videos_enriched_count, 0),
     candidates: ticks.reduce((sum, tick) => sum + tick.candidates_created_count, 0),
   };
 }
@@ -7403,9 +10210,231 @@ function restartAdapterLabelText(adapter: string, t: (key: TranslationKey) => st
   if (adapter === "supervisor") return t("runtime.restart.adapter.supervisor");
   if (adapter === "docker-compose") return t("runtime.restart.adapter.compose");
   if (adapter === "systemd") return t("runtime.restart.adapter.systemd");
+  if (adapter === "synology-package") return t("runtime.restart.adapter.synology");
+  if (adapter === "qnap-package") return t("runtime.restart.adapter.qnap");
   if (adapter === "local-dev") return t("runtime.restart.adapter.local");
   if (adapter === "disabled") return t("runtime.restart.adapter.disabled");
   return t("runtime.restart.adapter.manual");
+}
+
+function restartAdapterPresets(): RestartAdapterPreset[] {
+  return [
+    {
+      id: "docker-compose",
+      labelKey: "runtime.restart.adapter.compose",
+      detailKey: "runtime.restart.presetsDocker",
+      command: "docker compose restart api",
+      lines: [
+        "CVN_RESTART_ADAPTER=docker-compose",
+        "CVN_RESTART_SERVICE_NAME=api",
+        "CVN_RESTART_ADAPTER_EXECUTE=true",
+      ],
+    },
+    {
+      id: "systemd",
+      labelKey: "runtime.restart.adapter.systemd",
+      detailKey: "runtime.restart.presetsSystemd",
+      command: "systemctl restart channel-vault-nas",
+      lines: [
+        "CVN_RESTART_ADAPTER=systemd",
+        "CVN_RESTART_SERVICE_NAME=channel-vault-nas",
+        "CVN_RESTART_ADAPTER_EXECUTE=true",
+      ],
+    },
+    {
+      id: "supervisor",
+      labelKey: "runtime.restart.adapter.supervisor",
+      detailKey: "runtime.restart.presetsSupervisor",
+      command: "supervisorctl restart channel-vault-nas",
+      lines: [
+        "CVN_RESTART_ADAPTER=supervisor",
+        "CVN_RESTART_SERVICE_NAME=channel-vault-nas",
+        "CVN_RESTART_ADAPTER_EXECUTE=true",
+      ],
+    },
+    {
+      id: "synology-package",
+      labelKey: "runtime.restart.adapter.synology",
+      detailKey: "runtime.restart.presetsSynology",
+      command: "synopkg restart ChannelVault",
+      lines: [
+        "CVN_RESTART_ADAPTER=synology-package",
+        "CVN_RESTART_SERVICE_NAME=ChannelVault",
+        "CVN_RESTART_ADAPTER_EXECUTE=true",
+      ],
+    },
+    {
+      id: "qnap-package",
+      labelKey: "runtime.restart.adapter.qnap",
+      detailKey: "runtime.restart.presetsQnap",
+      command: "/etc/init.d/ChannelVault.sh restart",
+      lines: [
+        "CVN_RESTART_ADAPTER=qnap-package",
+        "CVN_RESTART_SERVICE_NAME=ChannelVault",
+        "CVN_RESTART_ADAPTER_EXECUTE=true",
+      ],
+    },
+  ];
+}
+
+function buildComposeSmokeCommand(fastRepeat: boolean) {
+  return [
+    "CVN_WEB_PORT=15174",
+    "CVN_API_PORT=18001",
+    "CVN_COMPOSE_SMOKE_CLEANUP=true",
+    fastRepeat ? "CVN_COMPOSE_SMOKE_BUILD=false" : null,
+    "scripts/compose-smoke.sh",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildStorageOpenCommand(
+  path: string,
+  adapter: RuntimeRestartAdapter | null,
+  t: (key: TranslationKey) => string,
+) {
+  if (!path) {
+    return {
+      label: t("detail.storageLens.commandLocal"),
+      note: t("detail.storageLens.noPath"),
+      command: "",
+    };
+  }
+  const quotedPath = shellQuote(path);
+  if (adapter?.adapter === "docker-compose") {
+    const service = adapter.service_name ?? "channel-vault-nas";
+    const composeFile = adapter.compose_file ? `-f ${shellQuote(adapter.compose_file)} ` : "";
+    const innerCommand = `cd ${quotedPath} && pwd && ls -la`;
+    return {
+      label: t("detail.storageLens.commandDocker"),
+      note: t("detail.storageLens.commandDockerNote"),
+      command: `docker compose ${composeFile}exec ${shellQuote(service)} sh -lc ${shellQuote(innerCommand)}`,
+    };
+  }
+  if (adapter?.adapter === "systemd" || adapter?.adapter === "supervisor" || adapter?.adapter === "supervised-hook") {
+    return {
+      label: t("detail.storageLens.commandService"),
+      note: t("detail.storageLens.commandServiceNote"),
+      command: `xdg-open ${quotedPath} || gio open ${quotedPath}`,
+    };
+  }
+  return {
+    label: t("detail.storageLens.commandLocal"),
+    note: t("detail.storageLens.commandLocalNote"),
+    command: `open ${quotedPath}`,
+  };
+}
+
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function readAppRouteFromHash() {
+  if (typeof window === "undefined") return null;
+  return parseAppHash(window.location.hash);
+}
+
+function parseAppHash(hash: string): AppRoute | null {
+  const trimmed = hash.replace(/^#\/?/, "").trim();
+  if (!trimmed) return null;
+  const [pathPart, queryPart = ""] = trimmed.split("?");
+  const [navPart, tabPart] = pathPart.split("/");
+  const nav = navItems.some((item) => item.id === navPart) ? (navPart as NavId) : null;
+  if (!nav) return null;
+
+  const params = new URLSearchParams(queryPart);
+  const channelParam = Number(params.get("channel") ?? "");
+  const channelId = Number.isFinite(channelParam) && channelParam > 0 ? channelParam : undefined;
+  const queueJobIds = (params.get("jobs") ?? "")
+    .split(",")
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const channelTab =
+    nav === "channels" && channelDetailTabs.some((tab) => tab.id === tabPart)
+      ? (tabPart as ChannelDetailTab)
+      : nav === "channels"
+        ? "overview"
+        : undefined;
+
+  return {
+    nav,
+    channelTab,
+    channelId,
+    queueJobIds: queueJobIds.length ? queueJobIds : undefined,
+    runtimeGuide: params.get("runtime") === "guide",
+    eventLog: params.get("events") === "open",
+  };
+}
+
+function buildAppHash(route: AppRoute) {
+  const path = route.nav === "channels" ? `channels/${route.channelTab ?? "overview"}` : route.nav;
+  const params = new URLSearchParams();
+  if (route.channelId) params.set("channel", String(route.channelId));
+  if (route.nav === "queue" && route.queueJobIds?.length) params.set("jobs", route.queueJobIds.join(","));
+  if (route.runtimeGuide) params.set("runtime", "guide");
+  if (route.eventLog) params.set("events", "open");
+  const query = params.toString();
+  return `#/${path}${query ? `?${query}` : ""}`;
+}
+
+function writeAppHash(route: AppRoute, mode: "push" | "replace") {
+  if (typeof window === "undefined") return;
+  const hash = buildAppHash(route);
+  if (window.location.hash === hash) return;
+  const nextUrl = `${window.location.pathname}${window.location.search}${hash}`;
+  if (mode === "push") {
+    window.history.pushState(null, "", nextUrl);
+    return;
+  }
+  window.history.replaceState(null, "", nextUrl);
+}
+
+function commandPaletteItemMatches(
+  item: CommandPaletteItem,
+  query: string,
+  t: (key: TranslationKey) => string,
+) {
+  if (!query) return true;
+  const haystack = [t(item.titleKey), t(item.detailKey), t(item.groupKey), ...item.keywords].join(" ").toLowerCase();
+  return query
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((token) => haystack.includes(token));
+}
+
+function eventStreamStatusLabel(status: EventStreamStatus, t: (key: TranslationKey) => string) {
+  if (status === "live") return t("topbar.live.live");
+  if (status === "error") return t("topbar.live.error");
+  if (status === "closed") return t("topbar.live.closed");
+  return t("topbar.live.connecting");
+}
+
+function eventStreamStatusDetail(status: EventStreamStatus, t: (key: TranslationKey) => string) {
+  if (status === "error") return t("topbar.live.errorDetail");
+  if (status === "closed") return t("topbar.live.closedDetail");
+  return t("topbar.live.connectingDetail");
+}
+
+function buildEventDetailExportUrl(eventId: number, format: AuditExportFormat) {
+  const params = new URLSearchParams({
+    event_id: String(eventId),
+    format,
+  });
+  return apiUrl(`/api/events/recent/export?${params}`);
+}
+
+function buildEventDetailCurlCommand(eventId: number) {
+  return [
+    "curl",
+    "--fail",
+    "--location",
+    "--silent",
+    "--show-error",
+    "--output",
+    shellQuote(`archive-event-${eventId}.ndjson`),
+    shellQuote(buildEventDetailExportUrl(eventId, "ndjson")),
+  ].join(" ");
 }
 
 function defaultLibraryViewName(
@@ -7656,6 +10685,18 @@ function storagePressureWarningLabel(warning: string, t: (key: TranslationKey) =
   return warning;
 }
 
+function storageChannelPressureWarningLabel(warning: string, t: (key: TranslationKey) => string) {
+  if (warning === "new_growth") return t("detail.storageLens.growthNew");
+  if (warning === "rapid_growth") return t("detail.storageLens.growthRapid");
+  if (warning === "growing") return t("detail.storageLens.growthGrowing");
+  return warning;
+}
+
+function formatSignedPercent(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "0%";
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
 function operationStageLabel(stage: string, t: (key: TranslationKey) => string) {
   return t(`ops.stage.${stage}` as TranslationKey);
 }
@@ -7731,13 +10772,17 @@ function csvCell(value: unknown) {
 function downloadTextFile(filename: string, body: string, mime: string) {
   const blob = new Blob([body], { type: mime });
   const url = URL.createObjectURL(blob);
+  triggerDownloadUrl(url, filename);
+  URL.revokeObjectURL(url);
+}
+
+function triggerDownloadUrl(url: string, filename?: string) {
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  if (filename) link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
 }
 
 function eventTone(type: string) {
@@ -7762,6 +10807,7 @@ function eventMatchesFilter(event: ArchiveEvent, filter: ArchiveEventFilter) {
   if (filter === "sync") return event.type.startsWith("sync.") || event.type.startsWith("channel.");
   if (filter === "library") return event.type.startsWith("library.");
   if (filter === "storage") return event.type.startsWith("storage.");
+  if (filter === "runtime") return event.type.startsWith("runtime.");
   if (filter === "policy") return event.type.startsWith("policy.");
   return event.type.includes("failed") || event.type.includes("cancelled") || typeof event.data.error_message === "string";
 }
@@ -7772,6 +10818,7 @@ function summarizeArchiveEvents(events: ArchiveEvent[]) {
     download: events.filter((event) => event.type.startsWith("download.")).length,
     sync: events.filter((event) => event.type.startsWith("sync.") || event.type.startsWith("channel.")).length,
     storage: events.filter((event) => event.type.startsWith("storage.")).length,
+    runtime: events.filter((event) => event.type.startsWith("runtime.")).length,
     failure: events.filter((event) => eventMatchesFilter(event, "failure")).length,
   };
 }
@@ -7791,6 +10838,20 @@ function eventDataDigest(event: ArchiveEvent) {
   } catch {
     return "{}";
   }
+}
+
+function runtimeRestartEventDetail(event: ArchiveEvent, t: (key: TranslationKey) => string) {
+  const adapter = readEventString(event.data, "adapter");
+  const reason = readEventString(event.data, "reason");
+  const message = readEventString(event.data, "message");
+  const exitCode = readEventNumber(event.data, "exit_code");
+  const parts = [
+    adapter ? `${t("runtime.restart.ledgerAdapter")} ${adapter}` : "",
+    reason,
+    typeof exitCode === "number" ? `exit ${exitCode}` : "",
+    message,
+  ].filter(Boolean);
+  return parts.join(" · ") || t("runtime.restart.ledgerNoDetail");
 }
 
 function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
@@ -7851,6 +10912,11 @@ function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
   if (event.type === "storage.pressure.snapshot") return t("event.storage.pressureSnapshot");
   if (event.type === "channel.settings.updated") return t("event.channel.settings");
   if (event.type === "policy.updated") return t("event.policy.updated");
+  if (event.type === "runtime.restart.requested") return t("event.runtime.restartRequested");
+  if (event.type === "runtime.restart.manual_required") return t("event.runtime.restartManual");
+  if (event.type === "runtime.restart.dispatched") return t("event.runtime.restartDispatched");
+  if (event.type === "runtime.restart.completed") return t("event.runtime.restartCompleted");
+  if (event.type === "runtime.restart.failed") return t("event.runtime.restartFailed");
   return event.type;
 }
 
@@ -7961,6 +11027,12 @@ function downloadTelemetryStatusFromEvent(type: string): DownloadTelemetryStatus
 function readEventNumber(data: Record<string, unknown>, key: string) {
   const value = data[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readEventNumberList(data: Record<string, unknown>, key: string) {
+  const value = data[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is number => typeof item === "number" && Number.isFinite(item));
 }
 
 function readEventString(data: Record<string, unknown>, key: string) {

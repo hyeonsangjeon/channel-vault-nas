@@ -193,6 +193,7 @@ export type SyncJob = {
   completed_at: string | null;
   videos_seen: number;
   videos_created: number;
+  videos_enriched: number;
   candidates_created: number;
   error_message: string | null;
   created_at: string;
@@ -203,6 +204,7 @@ export type ChannelSyncResult = {
   channel: RegisteredChannel;
   videos_seen: number;
   videos_created: number;
+  videos_enriched: number;
   candidates_created: number;
 };
 
@@ -297,11 +299,50 @@ export type DownloadWorkerRunAudit = {
   started_count: number;
   completed_count: number;
   failed_count: number;
+  planned_job_ids: number[];
+  started_job_ids: number[];
+  completed_job_ids: number[];
+  failed_job_ids: number[];
   skipped_reason: string | null;
   duration_seconds: number | null;
   started_at: string;
   completed_at: string | null;
   created_at: string;
+};
+
+export type DownloadWorkerRunSummaryFile = {
+  id: number;
+  video_id: number;
+  video_external_id: string;
+  video_title: string;
+  channel_id: number;
+  channel_title: string;
+  relative_path: string;
+  filename: string;
+  size_bytes: number | null;
+  size_label: string;
+  container: string | null;
+  video_codec: string | null;
+  audio_codec: string | null;
+  fps: number | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  info_json_path: string | null;
+  nfo_path: string | null;
+  thumbnail_path: string | null;
+  created_at: string;
+};
+
+export type DownloadWorkerRunSummary = {
+  generated_at: string;
+  channel_id: number | null;
+  channel_title: string | null;
+  run: DownloadWorkerRunAudit | null;
+  latest_worker_jobs: DownloadJob[];
+  completed_jobs: DownloadJob[];
+  failed_jobs: DownloadJob[];
+  archived_files: DownloadWorkerRunSummaryFile[];
 };
 
 export type DownloadCandidateResult = {
@@ -312,12 +353,14 @@ export type DownloadCandidateResult = {
 };
 
 export type ArchiveEvent = {
+  id?: number | null;
   type: string;
   data: Record<string, unknown>;
   occurred_at: string;
 };
 
 export type ArchiveEventFilters = {
+  event_id?: number;
   type_prefix?: string;
   channel_id?: number;
   job_id?: number;
@@ -404,6 +447,10 @@ export type OperationMission = {
   count: number;
   primary_value: string;
   secondary_value: string;
+  target_kind: string;
+  target_id: string;
+  target_channel_id: number | null;
+  target_path: string;
   resolved: boolean;
 };
 
@@ -590,6 +637,9 @@ export type RuntimeRestartAdapter = {
   executable: boolean;
   manual_required: boolean;
   reason: string;
+  command_available: boolean;
+  setup_hints: string[];
+  env_lines: string[];
   service_name: string | null;
   compose_file: string | null;
 };
@@ -633,6 +683,7 @@ export type MetadataSyncTick = {
   failed_count: number;
   videos_seen_count: number;
   videos_created_count: number;
+  videos_enriched_count: number;
   candidates_created_count: number;
   skipped_reason: string | null;
   error_message: string | null;
@@ -717,6 +768,17 @@ export type ArchiveTxtPreviewResult = {
   duplicate_count: number;
   invalid_count: number;
   items: ArchiveTxtPreviewItem[];
+};
+
+export type ArchiveTxtStageResult = {
+  channel_id: number;
+  videos_created: number;
+  candidates_created: number;
+  skipped_count: number;
+  video_ids: number[];
+  job_ids: number[];
+  preview: ArchiveTxtPreviewResult;
+  warnings: string[];
 };
 
 export type StorageVolume = {
@@ -904,6 +966,50 @@ export type StoragePressureTrend = {
   warning: string | null;
 };
 
+export type StorageChannelPressureSnapshot = {
+  id: number;
+  snapshot_id: number;
+  root: string;
+  channel_relative_path: string;
+  title: string;
+  bytes: number;
+  label: string;
+  file_count: number;
+  media_count: number;
+  sidecar_count: number;
+  orphan_sidecar_count: number;
+  video_folder_count: number;
+  pressure_score: number;
+  scanned_at: string;
+  created_at: string;
+};
+
+export type StorageChannelPressureComparison = {
+  window_days: number;
+  label: string;
+  snapshot_count: number;
+  baseline: StorageChannelPressureSnapshot | null;
+  delta_bytes: number;
+  delta_label: string;
+  daily_growth_bytes: number;
+  daily_growth_label: string;
+  growth_percent: number;
+  warning: string | null;
+};
+
+export type StorageChannelPressureTrend = {
+  relative_path: string;
+  snapshots: StorageChannelPressureSnapshot[];
+  latest: StorageChannelPressureSnapshot | null;
+  previous: StorageChannelPressureSnapshot | null;
+  delta_bytes: number;
+  delta_label: string;
+  peak_bytes: number;
+  peak_label: string;
+  comparisons: StorageChannelPressureComparison[];
+  warning: string | null;
+};
+
 export async function probeChannel(payload: ChannelRegistrationPayload): Promise<ChannelProbeResult> {
   return postJson("/api/channels/_probe", payload);
 }
@@ -1026,6 +1132,13 @@ export async function getDownloadWorkerRuns(
   return getJson(`/api/jobs/downloads/worker/runs?${params}`);
 }
 
+export async function getDownloadWorkerRunSummary(channelId?: number, runId?: number): Promise<DownloadWorkerRunSummary> {
+  const params = new URLSearchParams();
+  if (typeof channelId === "number") params.set("channel_id", String(channelId));
+  if (typeof runId === "number") params.set("run_id", String(runId));
+  return getJson(`/api/jobs/downloads/worker/summary?${params}`);
+}
+
 export async function bulkUpdateDownloadJobs(payload: DownloadJobBulkRequest): Promise<{ updated: number; jobs: DownloadJob[] }> {
   return postJson("/api/jobs/downloads/bulk", payload);
 }
@@ -1045,6 +1158,7 @@ export async function stopDownloadJob(jobId: number): Promise<{ job: DownloadJob
 export async function getRecentEvents(limit = 50, filters: ArchiveEventFilters = {}): Promise<ArchiveEvent[]> {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
+  if (typeof filters.event_id === "number") params.set("event_id", String(filters.event_id));
   if (filters.type_prefix) params.set("type_prefix", filters.type_prefix);
   if (typeof filters.channel_id === "number") params.set("channel_id", String(filters.channel_id));
   if (typeof filters.job_id === "number") params.set("job_id", String(filters.job_id));
@@ -1159,6 +1273,13 @@ export async function getStoragePressureTrend(limit = 24): Promise<StoragePressu
   return getJson(`/api/storage/pressure/trend?limit=${limit}`);
 }
 
+export async function getStorageChannelPressureTrend(relativePath: string, limit = 24): Promise<StorageChannelPressureTrend> {
+  const params = new URLSearchParams();
+  params.set("relative_path", relativePath);
+  params.set("limit", String(limit));
+  return getJson(`/api/storage/pressure/channels/trend?${params}`);
+}
+
 export async function captureStoragePressureSnapshot(limit = 24): Promise<StoragePressureTrend> {
   return postJson(`/api/storage/pressure/snapshots?limit=${limit}`, {});
 }
@@ -1210,6 +1331,21 @@ export async function applyLibraryRescan(): Promise<RescanApplyResult> {
 
 export async function previewArchiveTxt(content: string, channelId?: number | null): Promise<ArchiveTxtPreviewResult> {
   return postJson("/api/imports/archive-txt/preview", { content, channel_id: channelId ?? null });
+}
+
+export async function stageArchiveTxt(
+  content: string,
+  channelId: number,
+  quality = "1080p",
+  limit = 50,
+): Promise<ArchiveTxtStageResult> {
+  return postJson("/api/imports/archive-txt/stage", {
+    content,
+    channel_id: channelId,
+    quality,
+    limit,
+    create_candidates: true,
+  });
 }
 
 async function getJson<T>(path: string): Promise<T> {

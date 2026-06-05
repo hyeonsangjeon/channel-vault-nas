@@ -153,10 +153,22 @@ Restart requests use deployment adapters instead of assuming one process model:
 - Manual/local dev remains the safe default and returns a copyable command.
 - Docker Compose is detected from compose files and returns a generated
   `docker compose restart` command.
+- Containerized Compose deployments can also declare
+  `CVN_RESTART_ADAPTER=docker-compose` and `CVN_RESTART_SERVICE_NAME=api` so the
+  runtime console remains accurate even when the compose file is not mounted
+  inside the backend container.
 - System service mode can generate a `systemctl restart` command when service
   name and execution are explicitly configured.
+- Supervisor, Synology package, and QNAP package adapters generate
+  `supervisorctl restart <service>`, `synopkg restart <package>`, and
+  `/etc/init.d/<package>.sh restart` commands respectively.
 - A supervised NAS/package install can provide `CVN_RESTART_HOOK_COMMAND`; only
   this explicit hook is executable by default from the UI.
+- Adapter execution stays opt-in: generated commands are shown and copyable,
+  but `POST /api/settings/runtime/restart` only executes when the adapter can
+  verify its command/script and `CVN_RESTART_ADAPTER_EXECUTE=true` is set.
+- Restart attempts persist `runtime.restart.*` audit events before manual
+  handoff, before command execution, and after command completion/failure.
 
 Scheduled worker ticks persist into `download_scheduler_ticks`. The operational
 reader endpoint `/api/jobs/downloads/scheduler/ticks` supports status,
@@ -635,8 +647,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./metadata:/app/metadata
-      - ./downfolder:/app/downfolder
+      - ${CVN_METADATA_HOST_DIR:-./metadata}:/app/metadata
+      - ${CVN_DOWNLOAD_HOST_DIR:-./downfolder}:/app/downfolder
+      - ${CVN_RUNTIME_HOST_DIR:-./runtime}:/app/runtime
     environment:
       - CVN_ADMIN_ID=admin
       - CVN_ADMIN_PASSWORD=admin
@@ -651,6 +664,63 @@ services:
 ```
 
 The existing `youtube-dl-nas` image and `latest` tag must remain untouched.
+
+### Restart Adapter Env Bundles
+
+The runtime Env guide can copy restart-only env bundles for common deployment
+targets. Operators should validate the generated command on the NAS host before
+setting `CVN_RESTART_ADAPTER_EXECUTE=true`.
+
+Docker Compose host:
+
+```env
+CVN_RESTART_ADAPTER=docker-compose
+CVN_RESTART_SERVICE_NAME=api
+CVN_RESTART_ADAPTER_EXECUTE=true
+```
+
+The public Compose alpha defaults this adapter to copy-only
+(`CVN_RESTART_ADAPTER_EXECUTE=false`). Running the restart from the UI requires
+an intentionally supervised host path, such as a validated hook or a backend
+container that has safe access to the host Docker CLI/socket.
+
+Systemd service:
+
+```env
+CVN_RESTART_ADAPTER=systemd
+CVN_RESTART_SERVICE_NAME=channel-vault-nas
+CVN_RESTART_ADAPTER_EXECUTE=true
+```
+
+Supervisor service:
+
+```env
+CVN_RESTART_ADAPTER=supervisor
+CVN_RESTART_SERVICE_NAME=channel-vault-nas
+CVN_RESTART_ADAPTER_EXECUTE=true
+```
+
+Synology package:
+
+```env
+CVN_RESTART_ADAPTER=synology-package
+CVN_RESTART_SERVICE_NAME=ChannelVault
+CVN_RESTART_ADAPTER_EXECUTE=true
+```
+
+QNAP package:
+
+```env
+CVN_RESTART_ADAPTER=qnap-package
+CVN_RESTART_SERVICE_NAME=ChannelVault
+CVN_RESTART_ADAPTER_EXECUTE=true
+```
+
+Manual supervised hook remains available for custom NAS package managers:
+
+```env
+CVN_RESTART_HOOK_COMMAND=/path/to/restart-channel-vault.sh
+```
 
 ## MVP Implementation Order
 

@@ -145,6 +145,7 @@ async def run_metadata_sync_scheduler_tick(*, force: bool = False, trigger: str 
                     failed_count=0,
                     videos_seen_count=0,
                     videos_created_count=0,
+                    videos_enriched_count=0,
                     candidates_created_count=0,
                     skipped_reason="no due channels",
                     error_message=None,
@@ -158,6 +159,7 @@ async def run_metadata_sync_scheduler_tick(*, force: bool = False, trigger: str 
                 "failed": 0,
                 "videos_seen": 0,
                 "videos_created": 0,
+                "videos_enriched": 0,
                 "candidates_created": 0,
             }
             errors: list[str] = []
@@ -178,6 +180,7 @@ async def run_metadata_sync_scheduler_tick(*, force: bool = False, trigger: str 
                         totals["synced"] += 1
                         totals["videos_seen"] += result.videos_seen
                         totals["videos_created"] += result.videos_created
+                        totals["videos_enriched"] += result.videos_enriched
                         candidates_created = await _auto_create_candidates(
                             session=session,
                             channel_id=channel.id,
@@ -203,6 +206,7 @@ async def run_metadata_sync_scheduler_tick(*, force: bool = False, trigger: str 
                 failed_count=totals["failed"],
                 videos_seen_count=totals["videos_seen"],
                 videos_created_count=totals["videos_created"],
+                videos_enriched_count=totals["videos_enriched"],
                 candidates_created_count=totals["candidates_created"],
                 skipped_reason=None,
                 error_message="; ".join(errors[:3]) if errors else None,
@@ -222,6 +226,7 @@ async def run_metadata_sync_scheduler_tick(*, force: bool = False, trigger: str 
             "synced_count": totals["synced"],
             "failed_count": totals["failed"],
             "videos_created_count": totals["videos_created"],
+            "videos_enriched_count": totals["videos_enriched"],
             "candidates_created_count": totals["candidates_created"],
         },
     )
@@ -386,6 +391,7 @@ async def _complete_tick(
     failed_count: int,
     videos_seen_count: int,
     videos_created_count: int,
+    videos_enriched_count: int,
     candidates_created_count: int,
     skipped_reason: str | None,
     error_message: str | None,
@@ -399,6 +405,7 @@ async def _complete_tick(
     tick.failed_count = failed_count
     tick.videos_seen_count = videos_seen_count
     tick.videos_created_count = videos_created_count
+    tick.videos_enriched_count = videos_enriched_count
     tick.candidates_created_count = candidates_created_count
     tick.skipped_reason = skipped_reason
     tick.error_message = error_message
@@ -438,6 +445,7 @@ def _to_metadata_tick_read(row: MetadataSyncTick) -> MetadataSyncTickRead:
         failed_count=row.failed_count,
         videos_seen_count=row.videos_seen_count,
         videos_created_count=row.videos_created_count,
+        videos_enriched_count=row.videos_enriched_count,
         candidates_created_count=row.candidates_created_count,
         skipped_reason=row.skipped_reason,
         error_message=row.error_message,
