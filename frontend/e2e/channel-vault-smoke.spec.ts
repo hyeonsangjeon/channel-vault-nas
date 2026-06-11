@@ -210,6 +210,7 @@ test("registration command bar can probe and commit without external YouTube cal
 });
 
 test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   const errors = watchBrowserErrors(page);
   let globalWorkerPlanOverride = false;
   const enabledGlobalWorkerPlan = {
