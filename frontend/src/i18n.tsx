@@ -1,9 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import en from "./locales/en.json";
-import hi from "./locales/hi.json";
-import ja from "./locales/ja.json";
-import ko from "./locales/ko.json";
-import zh from "./locales/zh.json";
 
 export const languages = {
   en: "English",
@@ -15,15 +11,19 @@ export const languages = {
 
 export type Language = keyof typeof languages;
 export type TranslationKey = keyof typeof en;
+type TranslationCatalog = Record<TranslationKey, string>;
+type TranslationModule = { default: TranslationCatalog };
 
 const languageOrder: Language[] = ["en", "ko", "ja", "zh", "hi"];
 
-const translations: Record<Language, Record<TranslationKey, string>> = {
-  en,
-  ko,
-  ja,
-  zh,
-  hi,
+const fallbackTranslations = en as TranslationCatalog;
+
+const translationLoaders: Record<Language, () => Promise<TranslationModule>> = {
+  en: () => Promise.resolve({ default: fallbackTranslations }),
+  ko: () => import("./locales/ko.json") as Promise<TranslationModule>,
+  ja: () => import("./locales/ja.json") as Promise<TranslationModule>,
+  zh: () => import("./locales/zh.json") as Promise<TranslationModule>,
+  hi: () => import("./locales/hi.json") as Promise<TranslationModule>,
 };
 
 type I18nValue = {
@@ -55,11 +55,28 @@ function getInitialLanguage(): Language {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(getInitialLanguage);
+  const [translations, setTranslations] = useState<Partial<Record<Language, TranslationCatalog>>>({
+    en: fallbackTranslations,
+  });
 
   useEffect(() => {
     localStorage.setItem("channel-vault-language", language);
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    if (translations[language]) return;
+    let cancelled = false;
+    void translationLoaders[language]()
+      .then((module) => {
+        if (cancelled) return;
+        setTranslations((current) => ({ ...current, [language]: module.default }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [language, translations]);
 
   const value = useMemo<I18nValue>(() => {
     const setLanguage = (nextLanguage: Language) => setLanguageState(nextLanguage);
@@ -68,7 +85,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         const index = languageOrder.indexOf(current);
         return languageOrder[(index + 1) % languageOrder.length];
       });
-    const t = (key: TranslationKey) => translations[language][key] ?? translations.en[key] ?? key;
+    const activeTranslations = translations[language] ?? fallbackTranslations;
+    const t = (key: TranslationKey) => activeTranslations[key] ?? fallbackTranslations[key] ?? key;
     return {
       language,
       languageLabel: languages[language],
@@ -76,7 +94,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       toggleLanguage,
       t,
     };
-  }, [language]);
+  }, [language, translations]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

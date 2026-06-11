@@ -1,7 +1,38 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-export const WS_EVENTS_URL = API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "") + "/ws/events";
+const API_AUTH_TOKEN_STORAGE_KEY = "cvn.authToken";
+const BUILD_AUTH_TOKEN = String(import.meta.env.VITE_CVN_AUTH_TOKEN ?? "");
+
+export class ApiAuthError extends Error {
+  constructor(message = "Channel Vault NAS auth token required") {
+    super(message);
+    this.name = "ApiAuthError";
+    Object.setPrototypeOf(this, ApiAuthError.prototype);
+  }
+}
+
+export function setApiAuthToken(token: string) {
+  const trimmed = token.trim();
+  if (trimmed) {
+    localStorage.setItem(API_AUTH_TOKEN_STORAGE_KEY, trimmed);
+  } else {
+    localStorage.removeItem(API_AUTH_TOKEN_STORAGE_KEY);
+  }
+}
+
+export function clearApiAuthToken() {
+  localStorage.removeItem(API_AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function getApiAuthToken(): string {
+  return (localStorage.getItem(API_AUTH_TOKEN_STORAGE_KEY) || BUILD_AUTH_TOKEN).trim();
+}
+
+export function wsEventsUrl() {
+  return withAuthQuery(API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "") + "/ws/events");
+}
+
 export function apiUrl(path: string) {
-  return `${API_BASE_URL}${path}`;
+  return withAuthQuery(`${API_BASE_URL}${path}`);
 }
 
 export type SourceVideoPreview = {
@@ -429,6 +460,7 @@ export type OperationActionKind =
   | "runtime"
   | "downloads"
   | "library"
+  | "security"
   | "refresh"
   | "none";
 
@@ -461,6 +493,60 @@ export type OperationsReadiness = {
   metrics: OperationMetric[];
   missions: OperationMission[];
   warnings: string[];
+};
+
+export type MountDoctorPathKind = "database" | "metadata" | "download" | "runtime";
+
+export type MountDoctorPath = {
+  id: MountDoctorPathKind;
+  label: string;
+  configured: string;
+  resolved: string;
+  exists: boolean;
+  writable: boolean;
+  is_directory: boolean;
+  is_file: boolean;
+  is_mount: boolean;
+  parent_exists: boolean;
+  parent_writable: boolean;
+  free_bytes: number | null;
+  free_label: string;
+  total_bytes: number | null;
+  total_label: string;
+  pressure_percent: number | null;
+  error: string | null;
+};
+
+export type MountDoctorIssue = {
+  id: string;
+  severity: OperationSeverity;
+  title: string;
+  detail: string;
+  path_id: MountDoctorPathKind | null;
+};
+
+export type MountDoctor = {
+  generated_at: string;
+  status: "healthy" | "warning" | "critical" | string;
+  score: number;
+  running_in_container: boolean;
+  database_kind: string;
+  paths: MountDoctorPath[];
+  issues: MountDoctorIssue[];
+  summary: string;
+};
+
+export type SupportBundle = {
+  kind: "channel_vault_support_bundle";
+  generated_at: string;
+  redaction: Record<string, unknown>;
+  app: Record<string, unknown>;
+  counts: Record<string, unknown>;
+  queue: Record<string, unknown>;
+  schedulers: Record<string, unknown>;
+  storage: Record<string, unknown>;
+  readiness: OperationsReadiness;
+  recent_events: Record<string, unknown>[];
 };
 
 export type LibraryFidelity = {
@@ -1010,6 +1096,27 @@ export type StorageChannelPressureTrend = {
   warning: string | null;
 };
 
+export type DemoWorkspaceResult = {
+  created: boolean;
+  skipped_reason: string | null;
+  channel_id: number | null;
+  channel_title: string;
+  videos_created: number;
+  jobs_created: number;
+  files_created: number;
+  archive_root: string;
+};
+
+export type DemoWorkspaceClearResult = {
+  cleared: boolean;
+  skipped_reason: string | null;
+  channel_id: number | null;
+  channel_title: string;
+  db_rows_removed: number;
+  files_removed: number;
+  archive_root: string;
+};
+
 export async function probeChannel(payload: ChannelRegistrationPayload): Promise<ChannelProbeResult> {
   return postJson("/api/channels/_probe", payload);
 }
@@ -1178,6 +1285,22 @@ export async function getOperationsReadiness(): Promise<OperationsReadiness> {
   return getJson("/api/ops/readiness");
 }
 
+export async function getMountDoctor(): Promise<MountDoctor> {
+  return getJson("/api/ops/mount-doctor");
+}
+
+export async function getSupportBundle(): Promise<SupportBundle> {
+  return getJson("/api/ops/support-bundle");
+}
+
+export async function seedDemoWorkspace(): Promise<DemoWorkspaceResult> {
+  return postJson("/api/ops/demo-workspace", {});
+}
+
+export async function clearDemoWorkspace(): Promise<DemoWorkspaceClearResult> {
+  return deleteJson("/api/ops/demo-workspace");
+}
+
 export async function getLibrary(channelId?: number, query?: string, filters: LibraryFilters = {}): Promise<LibrarySnapshot> {
   const params = new URLSearchParams();
   if (typeof channelId === "number") params.set("channel_id", String(channelId));
@@ -1198,7 +1321,10 @@ export async function saveLibraryView(payload: LibrarySavedViewPayload): Promise
 }
 
 export async function deleteLibraryView(viewId: number): Promise<{ deleted: boolean }> {
-  const response = await fetch(`${API_BASE_URL}/api/library/views/${viewId}`, { method: "DELETE" });
+  const response = await fetch(`${API_BASE_URL}/api/library/views/${viewId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
   return readJsonResponse<{ deleted: boolean }>(response);
 }
 
@@ -1349,14 +1475,14 @@ export async function stageArchiveTxt(
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() });
   return readJsonResponse<T>(response);
 }
 
 async function patchJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -1366,7 +1492,7 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -1374,11 +1500,15 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function deleteJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE" });
+  const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
   return readJsonResponse<T>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
+  if (response.status === 401) {
+    throw new ApiAuthError();
+  }
+
   if (!response.ok) {
     let detail = `Request failed with ${response.status}`;
     try {
@@ -1393,4 +1523,21 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getApiAuthToken();
+  return token ? { Authorization: `Bearer ${token}`, "X-CVN-Token": token } : {};
+}
+
+function jsonHeaders(): Record<string, string> {
+  return { ...authHeaders(), "Content-Type": "application/json" };
+}
+
+function withAuthQuery(rawUrl: string) {
+  const token = getApiAuthToken();
+  if (!token) return rawUrl;
+  const url = new URL(rawUrl, window.location.href);
+  url.searchParams.set("cvn_token", token);
+  return url.toString();
 }
