@@ -34,6 +34,8 @@ async def test_operations_readiness_guides_empty_first_run(
     await init_db()
     await _clear_archive_tables()
     monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "auth_token", "")
+    monkeypatch.setattr(settings, "app_host", "0.0.0.0")
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -45,8 +47,35 @@ async def test_operations_readiness_guides_empty_first_run(
     assert data["stage"] == "setup"
     assert data["score"] < 80
     assert "register_first_channel" in mission_ids
+    assert "enable_access_token" in mission_ids
     assert "capture_pressure_snapshot" in mission_ids
-    assert {metric["key"] for metric in data["metrics"]} >= {"channels", "coverage", "storage_pressure"}
+    assert {metric["key"] for metric in data["metrics"]} >= {"channels", "coverage", "security", "storage_pressure"}
+    assert next(metric for metric in data["metrics"] if metric["key"] == "security")["raw_value"] == 0
+    assert "auth_token_disabled" in data["warnings"]
+
+
+@pytest.mark.asyncio
+async def test_operations_readiness_accepts_protected_public_bind(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_archive_tables()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "auth_token", "ops-token")
+    monkeypatch.setattr(settings, "app_host", "0.0.0.0")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test", headers={"Authorization": "Bearer ops-token"}) as client:
+        response = await client.get("/api/ops/readiness")
+
+    assert response.status_code == 200
+    data = response.json()
+    mission_ids = {mission["id"] for mission in data["missions"]}
+    assert "enable_access_token" not in mission_ids
+    assert next(metric for metric in data["metrics"] if metric["key"] == "security")["raw_value"] == 1
+    assert "auth_token_disabled" not in data["warnings"]
 
 
 @pytest.mark.asyncio

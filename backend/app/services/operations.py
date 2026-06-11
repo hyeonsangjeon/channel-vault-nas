@@ -29,6 +29,8 @@ async def build_operations_readiness(
     worker_enabled: bool,
     download_scheduler_enabled: bool,
     metadata_scheduler_enabled: bool,
+    auth_enabled: bool,
+    app_host: str,
 ) -> OperationsReadiness:
     """Return the next best operational moves for the current archive state."""
     generated_at = datetime.now(UTC)
@@ -88,6 +90,8 @@ async def build_operations_readiness(
     pressure_percent = scan.volume.pressure_percent
     coverage_percent = round((archived_count / source_count) * 100, 1) if source_count else 0.0
     queue_ready_count = candidate_downloads + queued_downloads
+    network_bound = _host_exposes_network(app_host)
+    security_tone = "good" if auth_enabled else "critical" if network_bound else "warning"
 
     missions: list[OperationMission] = []
     score = 100
@@ -103,6 +107,20 @@ async def build_operations_readiness(
             )
         )
         score -= 34
+
+    if not auth_enabled:
+        missions.append(
+            OperationMission(
+                id="enable_access_token",
+                severity="critical" if network_bound else "warning",
+                status="blocked" if network_bound else "watch",
+                action_kind="security",
+                count=1 if network_bound else 0,
+                primary_value=app_host or "localhost",
+                secondary_value="CVN_AUTH_TOKEN",
+            )
+        )
+        score -= 18 if network_bound else 8
 
     if drift_count:
         missions.append(
@@ -156,23 +174,6 @@ async def build_operations_readiness(
                 )
             )
             score -= 4
-
-    if growth_target:
-        missions.append(
-            OperationMission(
-                id="review_channel_growth",
-                severity="warning",
-                status="watch",
-                action_kind="storage",
-                count=int(growth_target["window_days"]),
-                primary_value=str(growth_target["delta_label"]),
-                secondary_value=f"{growth_target['growth_percent']}%",
-                target_kind="channel_storage_growth",
-                target_channel_id=growth_target["channel_id"],
-                target_path=str(growth_target["relative_path"]),
-            )
-        )
-        score -= 7
 
     if failed_downloads:
         missions.append(
@@ -249,6 +250,23 @@ async def build_operations_readiness(
         )
         score -= min(10, paused_channels * 3)
 
+    if growth_target:
+        missions.append(
+            OperationMission(
+                id="review_channel_growth",
+                severity="warning",
+                status="watch",
+                action_kind="storage",
+                count=int(growth_target["window_days"]),
+                primary_value=str(growth_target["delta_label"]),
+                secondary_value=f"{growth_target['growth_percent']}%",
+                target_kind="channel_storage_growth",
+                target_channel_id=growth_target["channel_id"],
+                target_path=str(growth_target["relative_path"]),
+            )
+        )
+        score -= 7
+
     if pressure_percent >= 90:
         missions.append(
             OperationMission(
@@ -294,8 +312,11 @@ async def build_operations_readiness(
         )
         score -= 3
 
-    if scan.warnings:
-        score -= min(8, len(scan.warnings) * 2)
+    warnings = list(scan.warnings)
+    if not auth_enabled:
+        warnings.append("auth_token_disabled")
+    if warnings:
+        score -= min(8, len(warnings) * 2)
 
     score = max(0, min(100, score))
     missions = missions[:6]
@@ -318,6 +339,7 @@ async def build_operations_readiness(
         metrics=[
             OperationMetric(key="channels", value=str(channel_count), raw_value=channel_count, tone="good" if channel_count else "warning"),
             OperationMetric(key="coverage", value=f"{coverage_percent}%", raw_value=coverage_percent, tone="good" if missing_count == 0 and source_count else "info"),
+            OperationMetric(key="security", value="guarded" if auth_enabled else "open", raw_value=1 if auth_enabled else 0, tone=security_tone),
             OperationMetric(key="queue", value=str(queue_ready_count), raw_value=queue_ready_count, tone="info" if queue_ready_count else "good"),
             OperationMetric(key="storage_pressure", value=f"{pressure_percent}%", raw_value=pressure_percent, tone=_pressure_tone(pressure_percent)),
             OperationMetric(key="drift", value=str(drift_count), raw_value=drift_count, tone="warning" if drift_count else "good"),
@@ -325,7 +347,7 @@ async def build_operations_readiness(
             OperationMetric(key="running", value=str(running_downloads), raw_value=running_downloads, tone="info" if running_downloads else "good"),
         ],
         missions=missions,
-        warnings=scan.warnings,
+        warnings=warnings,
     )
 
 
@@ -355,6 +377,17 @@ def _pressure_tone(pressure_percent: float) -> str:
     if pressure_percent >= 80:
         return "warning"
     return "good"
+
+
+def _host_exposes_network(host: str) -> bool:
+    normalized = host.strip().lower()
+    if not normalized:
+        return False
+    if normalized in {"0.0.0.0", "::", "[::]", "*"}:
+        return True
+    if normalized == "localhost" or normalized.startswith("127.") or normalized == "::1":
+        return False
+    return True
 
 
 def _channel_growth_target(

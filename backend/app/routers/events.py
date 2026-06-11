@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Query, Response, WebSocket, WebSocketDisconnect
 
 from app.schemas.events import ArchiveEvent, ArchiveEventPruneResult
+from app.security import websocket_token_valid
 from app.services.audit_export import audit_export_response
 from app.services.event_bus import event_bus
 from app.services.event_log import list_archive_events, prune_archive_events
@@ -71,6 +72,9 @@ async def prune_recent_events(keep_latest: int = Query(default=500, ge=1, le=50_
 @router.websocket("/ws/events")
 async def websocket_events(websocket: WebSocket) -> None:
     """Stream archive events to the UI."""
+    if not websocket_token_valid(websocket):
+        await websocket.close(code=1008, reason="auth token required")
+        return
     await event_bus.connect(websocket)
     try:
         while True:
