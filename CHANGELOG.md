@@ -35,6 +35,12 @@ The project is in active alpha. Dates use Korea Standard Time.
 - GitHub Container Registry image publish workflow (`Release images`, triggered
   on `v*` tags) plus a pull-based Docker Compose install mode via the
   `CVN_API_IMAGE` / `CVN_WEB_IMAGE` overrides.
+- NAS deployment-confidence docs and examples: Synology/QNAP install guide
+  (`docs/nas-install.md`), systemd/supervisor service examples (`deploy/`), and a
+  SQLite + sidecar backup/restore runbook (`docs/backup-restore.md`).
+- Restart-adapter validation tests (`backend/tests/test_restart_adapter.py`)
+  covering docker-compose/systemd/supervisor/Synology/QNAP/hook/disabled command
+  generation and execute-gating.
 
 ### Changed
 
