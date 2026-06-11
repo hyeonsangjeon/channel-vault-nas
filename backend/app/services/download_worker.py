@@ -360,9 +360,9 @@ async def stop_running_download_job(*, db: AsyncSession, job_id: int) -> Downloa
         job.completed_at = now
         job.updated_at = now
         process = _RUNNING_PROCESSES.get(job.id)
+        await _commit_worker_state(db)
         if process is not None and process.returncode is None:
             process.terminate()
-        await _commit_worker_state(db)
         await event_bus.publish(
             "download.stop_requested" if previous_status == "running" else "download.cancelled",
             {

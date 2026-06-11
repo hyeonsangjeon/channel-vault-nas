@@ -56,6 +56,9 @@ The project is in active alpha. Dates use Korea Standard Time.
 - The optional access-gate notice now re-translates after the lazy locale chunk
   loads, so a non-English console no longer freezes on the English fallback
   string when the API returns 401 during initial load.
+- The worker stop action now commits the cancelled job state before terminating
+  the download subprocess, removing a race that could finalize a stopped job as
+  `failed` on slower hosts.
 
 ## 0.1.0-alpha
 
