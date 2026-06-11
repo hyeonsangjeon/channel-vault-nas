@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     admin_id: str = "admin"
     admin_password: str = "admin"
     secret_key: str = ""
+    auth_token: str = ""
+    auth_header_name: str = "X-CVN-Token"
 
     database_url: str = "sqlite+aiosqlite:///./metadata/app.db"
     download_dir: str = "./downfolder"

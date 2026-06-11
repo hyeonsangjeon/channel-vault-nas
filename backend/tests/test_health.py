@@ -7,6 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 
+from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.main import app
 from app.models.archive import (
@@ -31,6 +32,23 @@ async def test_health_endpoint() -> None:
     data = response.json()
     assert data["status"] == "ok"
     assert data["app"] == "Channel Vault NAS"
+
+
+@pytest.mark.asyncio
+async def test_optional_auth_token_protects_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "auth_token", "test-secret")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        health = await client.get("/api/health")
+        locked = await client.get("/api/dashboard")
+        bearer = await client.get("/api/dashboard", headers={"Authorization": "Bearer test-secret"})
+        header = await client.get("/api/dashboard", headers={"X-CVN-Token": "test-secret"})
+
+    assert health.status_code == 200
+    assert locked.status_code == 401
+    assert locked.json()["detail"] == "Channel Vault NAS auth token required"
+    assert bearer.status_code == 200
+    assert header.status_code == 200
 
 
 @pytest.mark.asyncio

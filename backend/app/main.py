@@ -22,6 +22,7 @@ from app.routers import (
     videos,
 )
 from app.routers import settings as settings_router
+from app.security import require_optional_auth
 from app.services.download_scheduler import download_worker_scheduler
 from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import metadata_sync_scheduler
@@ -59,6 +60,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.middleware("http")(require_optional_auth)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
