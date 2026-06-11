@@ -2,6 +2,11 @@
 
 NAS-first YouTube channel archive console.
 
+[![CI](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg)](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml)
+![Status](https://img.shields.io/badge/status-active_alpha-38bdf8)
+![Downloads](https://img.shields.io/badge/downloads-guarded_by_default-22c55e)
+![Archive](https://img.shields.io/badge/archive-sidecar_recoverable-a78bfa)
+
 Channel Vault NAS turns a simple `archive.txt` idea into an operator console for
 private media archives: register a channel, sync metadata, skip videos already
 stored on disk, queue only missing videos, run bounded download passes, and keep
@@ -23,6 +28,17 @@ Channel Vault NAS answers the NAS operator question:
 The filesystem remains the durable archive. SQLite is the index over that
 archive.
 
+## What Makes It Different
+
+- `archive.txt` is treated as an operator ledger, not a hidden downloader flag.
+- Downloads are disabled by default, bounded per pass, and always visible in
+  queue/audit surfaces.
+- The app can rebuild trust from NAS files because media, sidecars, subtitles,
+  thumbnails, and DB indexes are inspected together.
+- Empty installs can load a safe demo workspace without YouTube calls or real
+  downloads.
+- Public issue support bundles are redacted on the server before export.
+
 ## Current Status
 
 This is an active alpha. The core loop is working locally:
@@ -38,15 +54,66 @@ This is an active alpha. The core loop is working locally:
 - Storage scanner for real NAS folders, drift, pressure, and orphan sidecars
 - Library index with media files, sidecar fidelity, codec/profile filters, and saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
+- Safe in-app demo workspace for empty installs, without YouTube calls or downloads
 
 Not ready yet:
 
-- Auth hardening for exposed networks
-- Polished screenshot/demo assets
-- Published container images
+- Multi-user auth/session hardening for exposed networks
+- Published demo video/GIF assets
+- Widely published container images (the GHCR release workflow is wired, but the
+  first public `v*` tag has not been cut yet)
 - Production install guide for Synology/QNAP/systemd packages
 
-Do not expose this alpha directly to the public internet.
+The current release direction and public-alpha gate are tracked in
+[`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md).
+
+Do not expose this alpha directly to the public internet. For private LAN or
+NAS access, enable the optional operator token described below and still prefer
+VPN or a trusted reverse proxy.
+See [`docs/deployment-security.md`](docs/deployment-security.md) for concrete
+Nginx, Caddy, and Cloudflare Tunnel examples.
+
+## Known Limitations
+
+This is a guarded alpha. Knowing the boundaries up front keeps deployments safe:
+
+- Alpha is for localhost, private LAN, VPN, or trusted reverse-proxy use, not
+  direct public internet exposure.
+- Downloads depend on `yt-dlp` behavior and source availability; most failures
+  reflect upstream changes rather than app state.
+- There is no multi-user account system yet. Access is a single shared operator
+  view.
+- The optional `CVN_AUTH_TOKEN` is an operator gate, not a full identity
+  provider.
+- Public internet exposure should sit behind SSO, VPN, or reverse-proxy policy.
+- Some NAS package-manager restart hooks are guidance/copy-first unless a safe
+  supervised hook is configured (`CVN_RESTART_ADAPTER_EXECUTE=true` plus a
+  verified command).
+- You are responsible for backing up the metadata database and archive folders;
+  the app does not manage off-NAS backups.
+
+See [`docs/roadmap.md`](docs/roadmap.md) for non-goals and
+[`SECURITY.md`](SECURITY.md) for exposure and token boundaries.
+
+## Preview
+
+These screenshots are generated from the seeded browser smoke fixture, not from
+static mockups.
+
+| Dashboard cockpit | Channel downloads |
+| --- | --- |
+| ![Dashboard cockpit showing readiness, missions, and live archive state](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads tab showing guarded queue staging and worker controls](docs/assets/screenshots/channel-downloads.png) |
+
+| Queue console | Library shelf | Runtime guide |
+| --- | --- | --- |
+| ![Global queue console with candidate and worker detail](docs/assets/screenshots/queue-console.png) | ![Library shelf with saved views, sidecars, and channel NAS footprint](docs/assets/screenshots/library-shelf.png) | ![Runtime env guide with the public access guard token setup, restart adapter, and Compose smoke verification](docs/assets/screenshots/runtime-guide.png) |
+
+Refresh the public screenshot set:
+
+```bash
+cd frontend
+CVN_CAPTURE_PUBLIC_SCREENSHOTS=true npx playwright test e2e/public-screenshots.spec.ts --project=chromium
+```
 
 ## Product Tour
 
@@ -94,6 +161,16 @@ restart adapters, tick logs, worker summaries, and runtime audit events.
 This is the easiest public-preview path. It builds local images from this repo
 and stores archive data in bind-mounted folders.
 
+There are three ways to run Channel Vault NAS:
+
+- **Local development** — run the backend and frontend dev servers directly
+  (see [Quickstart: Local Development](#quickstart-local-development)).
+- **Compose build from source** — build images from this repo with Docker
+  Compose (the steps below). Best for evaluating the current `main`/branch code.
+- **Pull a published image** — run tagged images from GHCR without building
+  (see [Run a published image](#run-a-published-image-no-build)). Best for a
+  fast, reproducible install.
+
 ```bash
 git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
 cd channel-vault-nas
@@ -101,6 +178,28 @@ cp .env.example .env
 mkdir -p metadata downfolder runtime
 docker compose up --build
 ```
+
+For NAS deployment, keep SQLite metadata, downloaded media, and runtime
+overrides on separate host folders before the first start:
+
+```bash
+mkdir -p /volume1/channel-vault-nas/{metadata,archive,runtime}
+```
+
+```env
+CVN_METADATA_HOST_DIR=/volume1/channel-vault-nas/metadata
+CVN_DOWNLOAD_HOST_DIR=/volume1/channel-vault-nas/archive
+CVN_RUNTIME_HOST_DIR=/volume1/channel-vault-nas/runtime
+```
+
+After startup, the dashboard `NAS Mount Doctor` strip verifies those paths are
+writable and separated. The same preset is copyable from Settings -> Env guide.
+
+For anything beyond localhost, edit `.env` first:
+
+- set `CVN_AUTH_TOKEN` to a long random value
+- when using a reverse proxy, publish only the web port and set
+  `CVN_API_PORT=127.0.0.1:8000`
 
 Open:
 
@@ -147,7 +246,12 @@ Useful overrides:
 CVN_COMPOSE_SMOKE_BUILD=false scripts/compose-smoke.sh
 CVN_COMPOSE_SMOKE_CLEANUP=true scripts/compose-smoke.sh
 CVN_WEB_PORT=15174 CVN_API_PORT=18001 scripts/compose-smoke.sh
+CVN_WEB_PORT=127.0.0.1:15174 CVN_API_PORT=127.0.0.1:18001 scripts/compose-smoke.sh
 ```
+
+The smoke script checks for occupied ports before building. If your normal
+Compose stack is already using the default smoke ports, pass alternate
+`CVN_WEB_PORT` and `CVN_API_PORT` values as shown above.
 
 Real downloads remain disabled until you edit `.env`:
 
@@ -165,6 +269,94 @@ The Compose profile also sets `CVN_RESTART_ADAPTER=docker-compose` and
 `CVN_RESTART_SERVICE_NAME=api` so the Settings tab can show the correct restart
 command. It remains copy-only by default because the backend container does not
 mount the host Docker socket or ship with a Docker CLI.
+
+### Run a published image (no build)
+
+Tagged releases publish `api` and `web` images to GitHub Container Registry via
+the `Release images` workflow (`.github/workflows/release-images.yml`, triggered
+on `v*` tags). Once a release tag exists, run the app without building from
+source by pointing Compose at the published images:
+
+```bash
+git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
+cd channel-vault-nas
+cp .env.example .env
+mkdir -p metadata downfolder runtime
+
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+docker compose pull
+docker compose up -d --no-build
+```
+
+Notes:
+
+- No public release tag has been cut yet. Until one is, use the build-from-source
+  path above; the pull commands will return `manifest unknown` against a tag that
+  does not exist.
+- GHCR packages are private by default. The first time a tag is published, the
+  maintainer must set both packages to Public (and link them to this repo) so
+  anonymous `docker compose pull` works. Otherwise, run
+  `docker login ghcr.io` with a token that can read the packages.
+- Set `CVN_API_IMAGE` and `CVN_WEB_IMAGE` together. If only one is set, Compose
+  tries to pull the other from its default local tag and the pull fails.
+- `docker-compose.yml` defaults to local build tags
+  (`channel-vault-nas-api:local` / `channel-vault-nas-web:local`), so unset both
+  overrides to go back to building from source.
+
+The same `CVN_METADATA_HOST_DIR`, `CVN_DOWNLOAD_HOST_DIR`, and
+`CVN_RUNTIME_HOST_DIR` volume separation and `CVN_AUTH_TOKEN` guidance above
+apply to published images too; the NAS Mount Doctor strip still verifies the
+mounted host folders.
+
+### Optional Local Access Token
+
+For LAN/NAS demos, set an operator token before starting the stack:
+
+```env
+CVN_AUTH_TOKEN=replace-with-a-long-random-token
+```
+
+You can also generate, copy, and verify a token without leaving the app: open
+**Settings -> Env guide -> Public access guard**. It creates a strong token in
+your browser, copies the `CVN_AUTH_TOKEN=...` line for `.env.runtime`, and copies
+a 401/200 smoke-test command. The token is generated locally and is never sent to
+the backend, logged, or included in support bundles.
+
+When enabled, every API route except `/api/health` requires the token. The UI
+shows an access gate and stores the token only in the current browser. API
+clients can send either:
+
+```bash
+curl -H "Authorization: Bearer $CVN_AUTH_TOKEN" http://127.0.0.1:8000/api/dashboard
+```
+
+or:
+
+```bash
+curl -H "X-CVN-Token: $CVN_AUTH_TOKEN" http://127.0.0.1:8000/api/dashboard
+```
+
+This is a local operator guardrail, not full production internet auth. Use a
+VPN, trusted reverse proxy, and network-level access control for anything
+outside your private network.
+
+Deployment examples for private LAN or tunnel access are in
+[`docs/deployment-security.md`](docs/deployment-security.md).
+
+### Safe First-Run Demo
+
+On a fresh empty workspace, the Dashboard first-run panel includes a safe demo
+workspace action. It seeds a deterministic `Signal Lab` channel, one archived
+media item, missing-video candidates, queue history, scheduler ticks, library
+sidecars, storage drift, and orphan sidecars.
+
+The demo path does not call YouTube and does not start downloads. It is intended
+for first impressions, screenshots, public-alpha walkthroughs, and contributor
+orientation. If the workspace already has real registered channels, the backend
+refuses to seed the demo so existing archives are not mixed with fixture data.
+Once loaded, the channel detail view shows a demo banner and a clear action that
+removes only the `Signal Lab` demo channel and its demo archive folder.
 
 ## Quickstart: Local Development
 
@@ -229,20 +421,25 @@ Worker passes are intentionally bounded:
 - Per-channel policy can pause worker claims.
 - Candidate creation can continue even when workers are paused.
 
-## First Demo Flow
+## 5-Minute Demo Flow
 
-1. Open Dashboard.
-2. Go to Channels.
-3. Paste a channel URL or handle.
-4. Probe and register.
-5. Click Sync to detect source videos.
-6. Review the channel detail tabs.
-7. Open Downloads.
-8. Queue missing videos.
-9. Run a live worker pass only if `CVN_DOWNLOAD_WORKER_ENABLED=true`.
-10. Open Library and confirm media/index coverage changed.
-11. Open Queue to review progress and worker audit.
-12. Open Insights to inspect storage pressure and sidecar drift.
+1. Start with Docker Compose or the local development commands above.
+2. Open Dashboard and confirm the readiness cards, live event pill, and first-run runway.
+3. If the workspace is empty, click the safe demo action to load `Signal Lab` without external calls.
+4. For a live source, go to Channels, paste a channel URL or handle, then probe before registering.
+5. Click Sync to detect source videos and open the channel detail tabs.
+6. Open Downloads and review “already archived” versus “missing” before queueing.
+7. Queue only missing videos and inspect the generated `yt-dlp` command preview.
+8. Run a live worker pass only if `CVN_DOWNLOAD_WORKER_ENABLED=true`.
+9. Open Queue to watch progress, failures, retries, and worker audit detail.
+10. Open Library and confirm completed media/index coverage changed.
+11. Open Insights to inspect storage pressure, drift, and orphan sidecars.
+12. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, and the support export surfaces.
+
+Dashboard support export buttons request a server-generated redacted diagnostic
+bundle first, then fall back to the browser snapshot if the server endpoint is
+not available. The server bundle removes operator tokens, absolute paths,
+source URLs, channel/video titles, and generated download commands.
 
 The `archive.txt` path supports the classic workflow:
 
@@ -336,14 +533,38 @@ SQLite DB, and temporary NAS fixture, then verifies registration, queue actions,
 library views, runtime/tick surfaces, storage scan panels, worker controls, and
 rescan flows on desktop and mobile.
 
+Public-alpha release gate:
+
+```bash
+scripts/public-alpha-check.sh
+```
+
+This runs backend lint/tests, locale key consistency, frontend build, Chromium
+browser smoke, and `git diff --check`. Set
+`CVN_PUBLIC_ALPHA_SKIP_BROWSER=true` when you only need the fast non-browser
+checks.
+
+Public screenshot refresh:
+
+```bash
+cd frontend
+CVN_CAPTURE_PUBLIC_SCREENSHOTS=true npx playwright test e2e/public-screenshots.spec.ts --project=chromium
+```
+
 ## Documentation
 
 - [Product Brief](docs/product-brief.md)
 - [Architecture](docs/architecture.md)
 - [Design Direction](docs/design-direction.md)
+- [Public Alpha Roadmap](docs/roadmap.md)
+- [Changelog](CHANGELOG.md)
+- [Public Alpha Demo Runbook](docs/public-alpha-demo.md)
+- [Deployment Security](docs/deployment-security.md)
 - [Archive Priorities](docs/archive-priorities.md)
 - [Storage Recovery](docs/storage-recovery.md)
 - [Use Boundaries](docs/use-boundaries.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
 
 ## Public Release Checklist
 
@@ -352,11 +573,12 @@ prototype.
 
 Before a public alpha release:
 
+- Run `scripts/public-alpha-check.sh`.
 - Validate Docker Compose on macOS, Linux, and one NAS-like host.
 - Publish versioned container images.
-- Add screenshot assets for Dashboard, Channels, Queue, Library, Insights, and Settings.
-- Add a 5-minute demo script with a small safe fixture channel.
-- Harden first-run empty states and runtime error copy.
+- Keep README screenshot assets current from the Playwright seeded fixture.
+- Record/share a short demo video or GIF from the public alpha runbook.
+- Keep the safe first-run demo and runtime error copy polished.
 - Run full backend, frontend build, and browser smoke tests.
 - Tag `v0.1.0-alpha`.
 

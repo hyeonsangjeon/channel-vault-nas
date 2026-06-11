@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a feature or workflow improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What are you trying to do with your NAS archive?
+      placeholder: I want to review failed 1080p jobs across channels...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or UI you want.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Dashboard
+        - Channels
+        - Queue
+        - Library
+        - Insights
+        - Settings/runtime
+        - Backend/API
+        - Docker/Compose
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workaround or alternative design have you tried?
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Use boundary
+      options:
+        - label: This request is for creator-owned media, authorized channel backup, Google Takeout, or existing local NAS media.
+          required: true

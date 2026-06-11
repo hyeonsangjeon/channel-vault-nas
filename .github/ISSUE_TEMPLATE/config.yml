@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Use boundaries
+    url: https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/use-boundaries.md
+    about: Read the archive-use boundaries before requesting downloader behavior.
+  - name: Public alpha demo runbook
+    url: https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/public-alpha-demo.md
+    about: Follow the safe demo and release-candidate check path.
