@@ -35,6 +35,12 @@ The project is in active alpha. Dates use Korea Standard Time.
 - GitHub Container Registry image publish workflow (`Release images`, triggered
   on `v*` tags) plus a pull-based Docker Compose install mode via the
   `CVN_API_IMAGE` / `CVN_WEB_IMAGE` overrides.
+- NAS deployment-confidence docs and examples: Synology/QNAP install guide
+  (`docs/nas-install.md`), systemd/supervisor service examples (`deploy/`), and a
+  SQLite + sidecar backup/restore runbook (`docs/backup-restore.md`).
+- Restart-adapter validation tests (`backend/tests/test_restart_adapter.py`)
+  covering docker-compose/systemd/supervisor/Synology/QNAP/hook/disabled command
+  generation and execute-gating.
 
 ### Changed
 
@@ -59,6 +65,9 @@ The project is in active alpha. Dates use Korea Standard Time.
 - The worker stop action now commits the cancelled job state before terminating
   the download subprocess, removing a race that could finalize a stopped job as
   `failed` on slower hosts.
+- Clipboard copy actions no longer hang if the async clipboard API stalls: the
+  write is bounded by a timeout and falls back to a synchronous copy, and the
+  E2E suite grants clipboard permissions for deterministic runs.
 
 ## 0.1.0-alpha
 
