@@ -2710,18 +2710,29 @@ function App() {
       }
     };
 
-    try {
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(value);
-        } catch {
-          copyWithField();
-        }
-      } else {
-        copyWithField();
+    const writeViaClipboardApi = async () => {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("clipboard api unavailable");
       }
+      // Some headless/embedded browsers leave writeText pending forever; bound it
+      // so the UI never gets stuck and we can fall back to a synchronous copy.
+      let timer: number | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error("clipboard timeout")), 1200);
+      });
+      try {
+        await Promise.race([navigator.clipboard.writeText(value), timeout]);
+      } finally {
+        if (timer !== undefined) {
+          window.clearTimeout(timer);
+        }
+      }
+    };
+
+    try {
+      await writeViaClipboardApi();
     } catch {
-      throw new Error("Clipboard copy failed");
+      copyWithField();
     }
   }
 
