@@ -1,6 +1,9 @@
 """Archive domain ORM models."""
 
+from __future__ import annotations
+
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,7 +47,35 @@ class Channel(Base):
         onupdate=datetime.utcnow,
     )
 
-    videos: Mapped[list["Video"]] = relationship(back_populates="channel")
+    policy: Mapped[ChannelPolicy | None] = relationship(back_populates="channel", uselist=False)
+    videos: Mapped[list[Video]] = relationship(back_populates="channel")
+    sync_jobs: Mapped[list[SyncJob]] = relationship(back_populates="channel")
+    worker_runs: Mapped[list[DownloadWorkerRun]] = relationship(back_populates="channel")
+
+
+class ChannelPolicy(Base):
+    """Per-channel archive policy captured separately from registration."""
+
+    __tablename__ = "channel_policies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"), unique=True)
+    auto_download: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_quality: Mapped[str] = mapped_column(String(40), default="1080p")
+    audio_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    subtitles_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    subtitle_languages: Mapped[list[str] | None] = mapped_column(JSON)
+    retention_policy: Mapped[str] = mapped_column(String(80), default="keep")
+    worker_paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    worker_pause_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    channel: Mapped[Channel] = relationship(back_populates="policy")
 
 
 class Video(Base):
@@ -84,7 +115,204 @@ class Video(Base):
     )
 
     channel: Mapped[Channel] = relationship(back_populates="videos")
-    media_files: Mapped[list["MediaFile"]] = relationship(back_populates="video")
+    media_files: Mapped[list[MediaFile]] = relationship(back_populates="video")
+    download_jobs: Mapped[list[DownloadJob]] = relationship(back_populates="video")
+
+
+class SyncJob(Base):
+    """A channel metadata refresh run."""
+
+    __tablename__ = "sync_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"), index=True)
+    trigger: Mapped[str] = mapped_column(String(32), default="manual", index=True)
+    status: Mapped[str] = mapped_column(String(32), default="running", index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    videos_seen: Mapped[int] = mapped_column(Integer, default=0)
+    videos_created: Mapped[int] = mapped_column(Integer, default=0)
+    videos_enriched: Mapped[int] = mapped_column(Integer, default=0)
+    candidates_created: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    channel: Mapped[Channel] = relationship(back_populates="sync_jobs")
+
+
+class DownloadJob(Base):
+    """Download queue entry; initially a candidate before a media worker exists."""
+
+    __tablename__ = "download_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    video_id: Mapped[int] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="candidate", index=True)
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    quality: Mapped[str] = mapped_column(String(40), default="1080p")
+    priority: Mapped[int] = mapped_column(Integer, default=50)
+    preflight_status: Mapped[str] = mapped_column(String(32), default="unchecked")
+    estimated_bytes: Mapped[int | None] = mapped_column(Integer)
+    preflight_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    video: Mapped[Video] = relationship(back_populates="download_jobs")
+
+
+class DownloadWorkerRun(Base):
+    """Audit row for one manual worker pass."""
+
+    __tablename__ = "download_worker_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel_id: Mapped[int | None] = mapped_column(ForeignKey("channels.id", ondelete="SET NULL"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="running", index=True)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
+    started_count: Mapped[int] = mapped_column(Integer, default=0)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    planned_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    started_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    completed_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    failed_job_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    skipped_reason: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    channel: Mapped[Channel | None] = relationship(back_populates="worker_runs")
+
+
+class MetadataSyncTick(Base):
+    """Persistent telemetry for one metadata scheduler pass."""
+
+    __tablename__ = "metadata_sync_ticks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trigger: Mapped[str] = mapped_column(String(32), default="scheduler")
+    status: Mapped[str] = mapped_column(String(32), default="running", index=True)
+    scheduler_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=900)
+    limit: Mapped[int] = mapped_column(Integer, default=2)
+    due_channel_count: Mapped[int] = mapped_column(Integer, default=0)
+    synced_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    videos_seen_count: Mapped[int] = mapped_column(Integer, default=0)
+    videos_created_count: Mapped[int] = mapped_column(Integer, default=0)
+    videos_enriched_count: Mapped[int] = mapped_column(Integer, default=0)
+    candidates_created_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_reason: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    next_tick_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class DownloadSchedulerTick(Base):
+    """Persistent telemetry for one scheduled worker tick."""
+
+    __tablename__ = "download_scheduler_ticks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trigger: Mapped[str] = mapped_column(String(32), default="scheduler")
+    status: Mapped[str] = mapped_column(String(32), default="running", index=True)
+    scheduler_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    worker_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    limit: Mapped[int] = mapped_column(Integer, default=1)
+    started_count: Mapped[int] = mapped_column(Integer, default=0)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_reason: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    next_tick_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class ArchiveEventLog(Base):
+    """Persistent copy of realtime archive events for operator audit drawers."""
+
+    __tablename__ = "archive_event_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    type: Mapped[str] = mapped_column(String(80), index=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class StoragePressureSnapshot(Base):
+    """Point-in-time NAS archive storage pressure snapshot."""
+
+    __tablename__ = "storage_pressure_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    root: Mapped[str] = mapped_column(Text)
+    archive_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    used_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    free_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    total_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    pressure_percent: Mapped[float] = mapped_column(Float, default=0.0)
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    dir_count: Mapped[int] = mapped_column(Integer, default=0)
+    channel_count: Mapped[int] = mapped_column(Integer, default=0)
+    orphan_sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
+    unindexed_media_count: Mapped[int] = mapped_column(Integer, default=0)
+    indexed_missing_count: Mapped[int] = mapped_column(Integer, default=0)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+
+class StorageChannelPressureSnapshot(Base):
+    """Point-in-time per-channel NAS footprint snapshot."""
+
+    __tablename__ = "storage_channel_pressure_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("storage_pressure_snapshots.id", ondelete="CASCADE"), index=True)
+    root: Mapped[str] = mapped_column(Text)
+    channel_relative_path: Mapped[str] = mapped_column(Text, index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    bytes: Mapped[int] = mapped_column(Integer, default=0)
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    media_count: Mapped[int] = mapped_column(Integer, default=0)
+    sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
+    orphan_sidecar_count: Mapped[int] = mapped_column(Integer, default=0)
+    video_folder_count: Mapped[int] = mapped_column(Integer, default=0)
+    pressure_score: Mapped[int] = mapped_column(Integer, default=0)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+
+class LibraryView(Base):
+    """User-saved reusable library filter view."""
+
+    __tablename__ = "library_views"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), unique=True)
+    query: Mapped[str] = mapped_column(Text, default="")
+    integrity_filter: Mapped[str] = mapped_column(String(40), default="all")
+    sidecar_filter: Mapped[str] = mapped_column(String(40), default="all")
+    codec_filter: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
 
 class MediaFile(Base):

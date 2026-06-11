@@ -1,0 +1,58 @@
+services:
+  api:
+    build:
+      context: ./backend
+    image: ${CVN_API_IMAGE:-channel-vault-nas-api:local}
+    restart: unless-stopped
+    ports:
+      - "${CVN_API_PORT:-8000}:8000"
+    environment:
+      CVN_APP_NAME: "Channel Vault NAS"
+      CVN_DATABASE_URL: "sqlite+aiosqlite:///./metadata/app.db"
+      CVN_METADATA_DIR: "./metadata"
+      CVN_DOWNLOAD_DIR: "./downfolder"
+      CVN_RUNTIME_ENV_FILE: "/app/runtime/.env.runtime"
+      CVN_DB_BACKUP_ON_STARTUP: "${CVN_DB_BACKUP_ON_STARTUP:-true}"
+      CVN_DB_MIGRATE_ON_STARTUP: "${CVN_DB_MIGRATE_ON_STARTUP:-true}"
+      CVN_AUTH_TOKEN: "${CVN_AUTH_TOKEN:-}"
+      CVN_DOWNLOAD_WORKER_ENABLED: "${CVN_DOWNLOAD_WORKER_ENABLED:-false}"
+      CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED: "${CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED:-false}"
+      CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS: "${CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS:-300}"
+      CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT: "${CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT:-1}"
+      CVN_METADATA_SYNC_SCHEDULER_ENABLED: "${CVN_METADATA_SYNC_SCHEDULER_ENABLED:-false}"
+      CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS: "${CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS:-900}"
+      CVN_METADATA_SYNC_SCHEDULER_LIMIT: "${CVN_METADATA_SYNC_SCHEDULER_LIMIT:-2}"
+      CVN_YTDLP_BINARY: "${CVN_YTDLP_BINARY:-yt-dlp}"
+      CVN_FFPROBE_BINARY: "${CVN_FFPROBE_BINARY:-ffprobe}"
+      CVN_RESTART_ADAPTER: "${CVN_RESTART_ADAPTER:-docker-compose}"
+      CVN_RESTART_SERVICE_NAME: "${CVN_RESTART_SERVICE_NAME:-api}"
+      CVN_RESTART_ADAPTER_EXECUTE: "${CVN_RESTART_ADAPTER_EXECUTE:-false}"
+    volumes:
+      - ${CVN_METADATA_HOST_DIR:-./metadata}:/app/metadata
+      - ${CVN_DOWNLOAD_HOST_DIR:-./downfolder}:/app/downfolder
+      - ${CVN_RUNTIME_HOST_DIR:-./runtime}:/app/runtime
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ""
+    image: ${CVN_WEB_IMAGE:-channel-vault-nas-web:local}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${CVN_WEB_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

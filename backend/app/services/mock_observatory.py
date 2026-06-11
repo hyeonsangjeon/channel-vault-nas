@@ -36,7 +36,7 @@ def build_dashboard_snapshot() -> DashboardSnapshot:
             ArchiveMetric(label="Storage Used", value="1.82 TB", detail="74% of archive volume", tone="warn"),
         ],
         channels=[
-            ChannelNode(id="c1", title="Deep Lab", health=98, storage_gb=410, new_videos=3, failed_jobs=0, group="science"),
+            ChannelNode(id="c1", title="wingnut987S", health=100, storage_gb=0, new_videos=17, failed_jobs=0, group="aws"),
             ChannelNode(id="c2", title="Signal Kitchen", health=93, storage_gb=260, new_videos=4, failed_jobs=1, group="craft"),
             ChannelNode(id="c3", title="Market Notes", health=86, storage_gb=195, new_videos=2, failed_jobs=1, group="analysis"),
             ChannelNode(id="c4", title="Archive Radio", health=97, storage_gb=155, new_videos=1, failed_jobs=0, group="audio"),

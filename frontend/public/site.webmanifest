@@ -1,0 +1,24 @@
+{
+  "name": "Channel Vault NAS",
+  "short_name": "Channel Vault",
+  "description": "A private NAS operator console for channel sync, guarded downloads, archive.txt imports, and local media recovery.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/social-preview.svg",
+      "sizes": "1200x630",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

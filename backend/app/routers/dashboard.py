@@ -1,14 +1,19 @@
-"""Mock dashboard endpoint for the first Archive Observatory slice."""
+"""Dashboard endpoint for the Archive Observatory."""
 
-from fastapi import APIRouter
+from typing import Annotated
 
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
 from app.schemas.dashboard import DashboardSnapshot
-from app.services.mock_observatory import build_dashboard_snapshot
+from app.services.dashboard import build_dashboard_snapshot
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("", response_model=DashboardSnapshot)
-async def get_dashboard() -> DashboardSnapshot:
-    """Return a mock archive observatory snapshot."""
-    return build_dashboard_snapshot()
+async def get_dashboard(db: DbSession) -> DashboardSnapshot:
+    """Return a DB-backed archive observatory snapshot."""
+    return await build_dashboard_snapshot(db)

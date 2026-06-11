@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "e2e:smoke": "playwright test",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
@@ -17,7 +18,9 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/d3": "^7.4.3",
+    "@types/node": "^25.9.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "typescript": "^5.9.3",
