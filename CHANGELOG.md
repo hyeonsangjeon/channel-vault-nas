@@ -65,6 +65,9 @@ The project is in active alpha. Dates use Korea Standard Time.
 - The worker stop action now commits the cancelled job state before terminating
   the download subprocess, removing a race that could finalize a stopped job as
   `failed` on slower hosts.
+- Clipboard copy actions no longer hang if the async clipboard API stalls: the
+  write is bounded by a timeout and falls back to a synchronous copy, and the
+  E2E suite grants clipboard permissions for deterministic runs.
 
 ## 0.1.0-alpha
 
