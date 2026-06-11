@@ -1,38 +1,66 @@
 # Changelog
 
-All notable public-facing changes to Channel Vault NAS will be documented here.
+All notable changes to Channel Vault NAS will be tracked here.
 
-This file is for shareable product and engineering history. Local task notes,
-scratch specs, session exports, and private working logs stay out of git.
-
-Principle: product specs are shared; working traces are private.
+The project is in active alpha. Dates use Korea Standard Time.
 
 ## Unreleased
 
 ### Added
 
-- Added initial project README with product positioning, MVP scope, release
-  direction, and `youtube-dl-nas` reference baseline.
-- Added `docs/product-brief.md` for the Channel Vault NAS product concept.
-- Added `docs/architecture.md` with the initial FastAPI, React, SQLite,
-  Alembic, JWT, worker, WebSocket, yt-dlp, media storage, and Docker direction.
-- Added `docs/design-direction.md` to define the high-polish archive
-  observatory UI direction, including D3/Recharts/Framer Motion visualization
-  ideas.
-- Added initial FastAPI backend scaffold with health and mock dashboard
-  endpoints.
-- Added initial React/Vite frontend scaffold with a dark Archive Observatory
-  dashboard, mock metrics, queue flow, storage map, and D3 channel
-  constellation.
-- Added lightweight frontend i18n with separate locale JSON files for English,
-  Korean, Japanese, Chinese, and Hindi.
-- Added GitHub Copilot custom agent profiles under `.github/agents/`.
-- Added shared agent operating mode with `Core`, `Explore`, and `Vision` lanes.
-- Added ignore rules for runtime data and private local planning artifacts.
+- NAS-first archive cockpit with Dashboard, Channels, Queue, Library, Insights,
+  and Settings workspaces.
+- Channel registration, source probing, metadata sync, scheduler ticks, and
+  policy-based missing-video candidate generation.
+- Download queue with guarded real worker passes, preflight detail, retries,
+  cancellation, and worker audit history.
+- `archive.txt` import workflow that makes already-downloaded videos explicit
+  and stages only missing records/candidates.
+- Library indexing for media files, sidecars, thumbnails, subtitles, saved
+  views, codec/profile metadata, and storage coverage.
+- Storage scanner for real archive folders, storage pressure, drift, orphan
+  sidecars, extension totals, and recovery-oriented folder inspection.
+- Runtime console for worker/scheduler flags, managed `.env.runtime`, restart
+  adapter guidance, scheduler tick logs, and runtime audit events.
+- Optional local/NAS operator token via `CVN_AUTH_TOKEN`, including frontend
+  access gate and protected WebSocket events.
+- Safe first-run demo workspace that seeds a deterministic `Signal Lab`
+  archive story without YouTube calls or downloads.
+- Server-generated redacted support bundle for public issue reporting.
+- Public alpha release gate script, CI workflow, issue templates, contributor
+  guide, security policy, public demo runbook, and generated README screenshots.
+- In-app Public access guard in the runtime Env guide that generates a strong
+  operator token locally, copies the token / `.env.runtime` line / 401/200 smoke
+  test, and keeps the token in the browser only.
+- GitHub Container Registry image publish workflow (`Release images`, triggered
+  on `v*` tags) plus a pull-based Docker Compose install mode via the
+  `CVN_API_IMAGE` / `CVN_WEB_IMAGE` overrides.
 
-### Notes
+### Changed
 
-- `youtube-dl-nas` v1 remains separate and keeps its existing Docker image
-  strategy.
-- Channel Vault NAS is positioned as a channel archive console, not a direct
-  URL download queue replacement.
+- Split the frontend into release-friendly chunks for React, motion, D3, icons,
+  lazy-loaded locale files, and app code.
+- Reframed Docker Compose quickstart around safe LAN defaults, optional token
+  protection, and reverse-proxy guidance.
+- Updated public screenshots and app metadata/manifest for a stronger first
+  impression on GitHub and installable browser surfaces.
+
+### Security
+
+- Documented public-alpha exposure boundaries and deployment security examples.
+- Redacted support exports now remove tokens, paths, source URLs, channel/video
+  titles, generated download commands, and readiness target paths.
+
+### Fixed
+
+- The optional access-gate notice now re-translates after the lazy locale chunk
+  loads, so a non-English console no longer freezes on the English fallback
+  string when the API returns 401 during initial load.
+- The worker stop action now commits the cancelled job state before terminating
+  the download subprocess, removing a race that could finalize a stopped job as
+  `failed` on slower hosts.
+
+## 0.1.0-alpha
+
+Planned first public alpha tag. See [Public Alpha Roadmap](docs/roadmap.md) for
+the release gate and scope.

@@ -1,0 +1,860 @@
+"""Runtime settings snapshots and managed env overrides for operator UI."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import re
+import shlex
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from shutil import which
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import BACKEND_ROOT, settings
+from app.models.archive import Channel, DownloadSchedulerTick
+from app.schemas.settings import (
+    BinaryHealth,
+    MetadataSyncDueChannel,
+    RuntimeEnvOverride,
+    RuntimeRestartAdapter,
+    RuntimeRestartRequest,
+    RuntimeRestartResult,
+    RuntimeSettingsApplyResult,
+    RuntimeSettingsRead,
+    RuntimeSettingsUpdate,
+    SchedulerTickPruneResult,
+    SchedulerTickRead,
+)
+from app.services.download_scheduler import get_download_worker_scheduler_status
+from app.services.event_bus import event_bus
+from app.services.metadata_scheduler import (
+    get_metadata_sync_scheduler_status,
+    list_metadata_sync_ticks,
+)
+
+ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+RUNTIME_FIELD_TO_ENV_KEY = {
+    "download_worker_enabled": "CVN_DOWNLOAD_WORKER_ENABLED",
+    "download_worker_scheduler_enabled": "CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED",
+    "download_worker_scheduler_interval_seconds": "CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS",
+    "download_worker_scheduler_limit": "CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT",
+    "metadata_sync_scheduler_enabled": "CVN_METADATA_SYNC_SCHEDULER_ENABLED",
+    "metadata_sync_scheduler_interval_seconds": "CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS",
+    "metadata_sync_scheduler_limit": "CVN_METADATA_SYNC_SCHEDULER_LIMIT",
+    "ytdlp_binary": "CVN_YTDLP_BINARY",
+    "ffprobe_binary": "CVN_FFPROBE_BINARY",
+}
+
+
+async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
+    """Return non-secret runtime flags, pending env overrides, and scheduler ticks."""
+    scheduler_ticks = await list_scheduler_ticks(db=db, limit=8)
+    metadata_sync_ticks = await list_metadata_sync_ticks(db=db, limit=6)
+    scheduler_status = get_download_worker_scheduler_status()
+    metadata_scheduler_status = get_metadata_sync_scheduler_status()
+    latest_tick = scheduler_ticks[0] if scheduler_ticks else None
+    latest_metadata_tick = metadata_sync_ticks[0] if metadata_sync_ticks else None
+    if scheduler_status.last_completed_at is None and latest_tick is not None:
+        scheduler_status = scheduler_status.model_copy(
+            update={
+                "last_started_at": latest_tick.started_at,
+                "last_completed_at": latest_tick.completed_at,
+                "last_error": latest_tick.error_message,
+                "last_result_status": latest_tick.status,
+                "next_tick_at": scheduler_status.next_tick_at or latest_tick.next_tick_at,
+            }
+        )
+    if metadata_scheduler_status.last_completed_at is None and latest_metadata_tick is not None:
+        metadata_scheduler_status = metadata_scheduler_status.model_copy(
+            update={
+                "last_started_at": latest_metadata_tick.started_at,
+                "last_completed_at": latest_metadata_tick.completed_at,
+                "last_error": latest_metadata_tick.error_message,
+                "last_result_status": latest_metadata_tick.status,
+                "next_tick_at": metadata_scheduler_status.next_tick_at or latest_metadata_tick.next_tick_at,
+            }
+        )
+    due_channel_count, next_due_at, due_channels = await _metadata_scheduler_due_summary(db)
+    metadata_scheduler_status = metadata_scheduler_status.model_copy(
+        update={
+            "due_channel_count": due_channel_count,
+            "next_due_at": next_due_at,
+            "due_channels": due_channels,
+        }
+    )
+
+    pending_overrides = _pending_overrides()
+    return RuntimeSettingsRead(
+        download_worker_enabled=settings.download_worker_enabled,
+        download_worker_scheduler_enabled=settings.download_worker_scheduler_enabled,
+        download_worker_scheduler_interval_seconds=settings.download_worker_scheduler_interval_seconds,
+        download_worker_scheduler_limit=settings.download_worker_scheduler_limit,
+        metadata_sync_scheduler_enabled=settings.metadata_sync_scheduler_enabled,
+        metadata_sync_scheduler_interval_seconds=settings.metadata_sync_scheduler_interval_seconds,
+        metadata_sync_scheduler_limit=settings.metadata_sync_scheduler_limit,
+        download_dir=settings.download_dir,
+        metadata_dir=settings.metadata_dir,
+        managed_env_file=str(_runtime_env_path()),
+        pending_restart=any(item.pending_restart for item in pending_overrides),
+        pending_overrides=pending_overrides,
+        restart_command=_restart_command(),
+        restart_adapter=get_runtime_restart_adapter(),
+        scheduler_status=scheduler_status,
+        metadata_scheduler_status=metadata_scheduler_status,
+        scheduler_ticks=scheduler_ticks,
+        metadata_sync_ticks=metadata_sync_ticks,
+        binaries=[
+            _binary_health(name="yt-dlp", command=settings.ytdlp_binary),
+            _binary_health(name="ffprobe", command=settings.ffprobe_binary),
+        ],
+    )
+
+
+def get_runtime_restart_adapter() -> RuntimeRestartAdapter:
+    """Return the best restart adapter for the current deployment."""
+    configured_adapter = _normalize_restart_adapter(settings.restart_adapter)
+    hook_command = settings.restart_hook_command.strip()
+    service_name = settings.restart_service_name.strip() or None
+
+    if configured_adapter == "disabled":
+        return RuntimeRestartAdapter(
+            adapter="disabled",
+            environment="manual",
+            label="Restart disabled",
+            command=_restart_command(),
+            executable=False,
+            manual_required=True,
+            reason="runtime restart adapter is disabled",
+            command_available=True,
+            setup_hints=["set CVN_RESTART_ADAPTER=auto to re-enable deployment detection"],
+            env_lines=["CVN_RESTART_ADAPTER=disabled"],
+        )
+
+    if hook_command:
+        return RuntimeRestartAdapter(
+            adapter="supervised-hook",
+            environment=_runtime_environment(),
+            label="Supervised restart hook",
+            command=hook_command,
+            executable=True,
+            manual_required=False,
+            reason="CVN_RESTART_HOOK_COMMAND is configured",
+            command_available=True,
+            setup_hints=["hook commands run as the backend process user with CVN_RESTART_REASON in the environment"],
+            env_lines=[f"CVN_RESTART_HOOK_COMMAND={hook_command}"],
+            service_name=service_name,
+        )
+
+    if configured_adapter == "supervisor" or (configured_adapter == "auto" and os.environ.get("SUPERVISOR_ENABLED")):
+        command = _supervisor_restart_command(service_name=service_name)
+        command_available = _command_available("supervisorctl")
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="supervisor",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="supervisorctl",
+        )
+        return RuntimeRestartAdapter(
+            adapter="supervisor",
+            environment="supervised",
+            label="Supervisor restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME and CVN_RESTART_ADAPTER_EXECUTE=true to run supervisorctl"
+                if service_name is None or not settings.restart_adapter_execute
+                else "supervisorctl is not available to this process"
+                if not command_available
+                else "supervisorctl restart is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="supervisor", service_name=service_name),
+            service_name=service_name,
+        )
+
+    compose_file = _detect_compose_file()
+    if configured_adapter == "docker_compose" or (configured_adapter == "auto" and compose_file is not None):
+        command = _docker_compose_restart_command(compose_file=compose_file, service_name=service_name)
+        command_available = _command_available("docker")
+        executable = settings.restart_adapter_execute and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="docker-compose",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="docker",
+            service_optional=True,
+        )
+        return RuntimeRestartAdapter(
+            adapter="docker-compose",
+            environment="container" if _running_in_container() else "docker-compose",
+            label="Docker Compose restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "docker CLI is not available to this process; copy the command or configure a supervised host hook"
+                if not command_available
+                else "docker-compose adapter is copy-only until CVN_RESTART_ADAPTER_EXECUTE=true"
+                if not settings.restart_adapter_execute
+                else "docker compose restart command is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="docker-compose", service_name=service_name),
+            service_name=service_name,
+            compose_file=str(compose_file) if compose_file is not None else None,
+        )
+
+    if configured_adapter == "systemd":
+        command = _systemd_restart_command(service_name=service_name)
+        command_available = _command_available("systemctl")
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="systemd",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="systemctl",
+        )
+        return RuntimeRestartAdapter(
+            adapter="systemd",
+            environment="nas-service",
+            label="System service restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME and CVN_RESTART_ADAPTER_EXECUTE=true to run systemctl"
+                if service_name is None or not settings.restart_adapter_execute
+                else "systemctl is not available to this process"
+                if not command_available
+                else "system service restart is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="systemd", service_name=service_name),
+            service_name=service_name,
+        )
+
+    if configured_adapter in {"synology", "synology_package", "synopkg"} or (
+        configured_adapter == "auto" and _looks_like_synology_nas()
+    ):
+        command = _synology_package_restart_command(service_name=service_name)
+        command_available = _command_available("synopkg")
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="synology-package",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name="synopkg",
+        )
+        return RuntimeRestartAdapter(
+            adapter="synology-package",
+            environment="synology-nas",
+            label="Synology package restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME to the Synology package name and CVN_RESTART_ADAPTER_EXECUTE=true"
+                if service_name is None or not settings.restart_adapter_execute
+                else "synopkg is not available to this process"
+                if not command_available
+                else "Synology package restart is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="synology-package", service_name=service_name),
+            service_name=service_name,
+        )
+
+    if configured_adapter in {"qnap", "qnap_package", "qnap_init", "qpkg"} or (
+        configured_adapter == "auto" and _looks_like_qnap_nas()
+    ):
+        command = _qnap_package_restart_command(service_name=service_name)
+        command_available = _qnap_package_command_available(service_name=service_name)
+        executable = settings.restart_adapter_execute and service_name is not None and command_available
+        setup_hints = _restart_setup_hints(
+            adapter="qnap-package",
+            execute_enabled=settings.restart_adapter_execute,
+            service_name=service_name,
+            command_available=command_available,
+            command_name=_qnap_package_command_name(service_name=service_name),
+        )
+        return RuntimeRestartAdapter(
+            adapter="qnap-package",
+            environment="qnap-nas",
+            label="QNAP package restart",
+            command=command,
+            executable=executable,
+            manual_required=not executable,
+            reason=(
+                "set CVN_RESTART_SERVICE_NAME to the QNAP package script name and CVN_RESTART_ADAPTER_EXECUTE=true"
+                if service_name is None or not settings.restart_adapter_execute
+                else "QNAP package restart script is not available to this process"
+                if not command_available
+                else "QNAP package restart is executable by configuration"
+            ),
+            command_available=command_available,
+            setup_hints=setup_hints,
+            env_lines=_restart_env_lines(adapter="qnap-package", service_name=service_name),
+            service_name=service_name,
+        )
+
+    if configured_adapter == "local" or configured_adapter == "local_dev":
+        return RuntimeRestartAdapter(
+            adapter="local-dev",
+            environment="local-dev",
+            label="Local dev restart",
+            command=_restart_command(),
+            executable=settings.restart_adapter_execute,
+            manual_required=not settings.restart_adapter_execute,
+            reason=(
+                "local dev restart stays manual unless CVN_RESTART_ADAPTER_EXECUTE=true"
+                if not settings.restart_adapter_execute
+                else "local restart command is executable by configuration"
+            ),
+            command_available=True,
+            setup_hints=(
+                ["set CVN_RESTART_ADAPTER_EXECUTE=true only if this shell command is safe for your dev session"]
+                if not settings.restart_adapter_execute
+                else []
+            ),
+            env_lines=["CVN_RESTART_ADAPTER=local-dev", "CVN_RESTART_ADAPTER_EXECUTE=true"],
+        )
+
+    return RuntimeRestartAdapter(
+        adapter="manual",
+        environment=_runtime_environment(),
+        label="Manual restart",
+        command=_restart_command(),
+        executable=False,
+        manual_required=True,
+        reason="no restart hook or deployment adapter was detected",
+        command_available=True,
+        setup_hints=[
+            "set CVN_RESTART_HOOK_COMMAND to a supervised restart script",
+            "or set CVN_RESTART_ADAPTER=docker-compose|systemd|supervisor|synology-package|qnap-package with CVN_RESTART_SERVICE_NAME",
+        ],
+        env_lines=[
+            "CVN_RESTART_HOOK_COMMAND=/path/to/restart-channel-vault.sh",
+            "CVN_RESTART_ADAPTER_EXECUTE=true",
+        ],
+    )
+
+
+async def request_runtime_restart(payload: RuntimeRestartRequest) -> RuntimeRestartResult:
+    """Run a configured restart adapter, or return manual guidance."""
+    adapter = get_runtime_restart_adapter()
+    reason = payload.reason or "runtime settings changed"
+    if not adapter.executable:
+        message = f"Manual restart required: {adapter.reason}"
+        await _publish_restart_audit(
+            "runtime.restart.manual_required",
+            adapter=adapter,
+            reason=reason,
+            message=message,
+        )
+        return RuntimeRestartResult(
+            requested=False,
+            adapter=adapter,
+            message=message,
+        )
+
+    await _publish_restart_audit(
+        "runtime.restart.requested",
+        adapter=adapter,
+        reason=reason,
+        message="Restart command accepted by deployment adapter.",
+    )
+    env = os.environ.copy()
+    env["CVN_RESTART_REASON"] = reason
+    process = await asyncio.create_subprocess_shell(
+        adapter.command,
+        cwd=str(BACKEND_ROOT.parent),
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=max(1, settings.restart_command_timeout_seconds),
+        )
+    except TimeoutError:
+        await _publish_restart_audit(
+            "runtime.restart.dispatched",
+            adapter=adapter,
+            reason=reason,
+            message="Restart command was dispatched and is still running.",
+        )
+        return RuntimeRestartResult(
+            requested=True,
+            adapter=adapter,
+            message="Restart command was dispatched and is still running.",
+        )
+
+    message = "Restart command completed." if process.returncode == 0 else "Restart command failed."
+    await _publish_restart_audit(
+        "runtime.restart.completed" if process.returncode == 0 else "runtime.restart.failed",
+        adapter=adapter,
+        reason=reason,
+        message=message,
+        exit_code=process.returncode,
+        stdout=_trim_command_output(stdout.decode(errors="replace")),
+        stderr=_trim_command_output(stderr.decode(errors="replace")),
+    )
+    return RuntimeRestartResult(
+        requested=process.returncode == 0,
+        adapter=adapter,
+        message=message,
+        exit_code=process.returncode,
+        stdout=_trim_command_output(stdout.decode(errors="replace")),
+        stderr=_trim_command_output(stderr.decode(errors="replace")),
+    )
+
+
+async def _metadata_scheduler_due_summary(
+    db: AsyncSession,
+) -> tuple[int, datetime | None, list[MetadataSyncDueChannel]]:
+    """Return due-channel count, next channel-level due time, and visible due rows."""
+    now = datetime.now(UTC)
+    rows = (await db.execute(select(Channel).where(Channel.status == "active"))).scalars().all()
+    due_count = 0
+    next_due_at: datetime | None = None
+    due_channels: list[MetadataSyncDueChannel] = []
+    for channel in rows:
+        due_at = _channel_next_sync_due_at(channel, now)
+        is_due = due_at <= now
+        if is_due:
+            due_count += 1
+            due_channels.append(
+                MetadataSyncDueChannel(
+                    id=channel.id,
+                    title=channel.title,
+                    handle=channel.handle,
+                    sync_interval_minutes=channel.sync_interval_minutes,
+                    last_synced_at=channel.last_synced_at,
+                    next_due_at=due_at,
+                    is_due=is_due,
+                )
+            )
+        else:
+            due_channels.append(
+                MetadataSyncDueChannel(
+                    id=channel.id,
+                    title=channel.title,
+                    handle=channel.handle,
+                    sync_interval_minutes=channel.sync_interval_minutes,
+                    last_synced_at=channel.last_synced_at,
+                    next_due_at=due_at,
+                    is_due=is_due,
+                )
+            )
+        if next_due_at is None or due_at < next_due_at:
+            next_due_at = due_at
+    due_channels.sort(key=lambda channel: channel.next_due_at)
+    return due_count, next_due_at, due_channels[:5]
+
+
+def _channel_next_sync_due_at(channel: Channel, now: datetime) -> datetime:
+    if channel.last_synced_at is None:
+        return now
+    base = channel.last_synced_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=UTC)
+    return base + timedelta(minutes=max(1, channel.sync_interval_minutes))
+
+
+async def apply_runtime_settings(
+    *,
+    db: AsyncSession,
+    payload: RuntimeSettingsUpdate,
+) -> RuntimeSettingsApplyResult:
+    """Persist selected runtime settings to the managed env file for restart."""
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+    env_updates = {
+        RUNTIME_FIELD_TO_ENV_KEY[field_name]: _stringify_env_value(value)
+        for field_name, value in updates.items()
+        if field_name in RUNTIME_FIELD_TO_ENV_KEY
+    }
+    changed_keys = _write_managed_env(env_updates) if env_updates else []
+    runtime = await get_runtime_settings(db=db)
+    return RuntimeSettingsApplyResult(
+        applied=bool(changed_keys),
+        restart_required=runtime.pending_restart,
+        changed_keys=changed_keys,
+        managed_env_file=runtime.managed_env_file,
+        restart_command=runtime.restart_command,
+        runtime=runtime,
+    )
+
+
+async def list_scheduler_ticks(
+    *,
+    db: AsyncSession,
+    limit: int = 12,
+    status: str | None = None,
+    min_duration_seconds: int | None = None,
+    interval_seconds: int | None = None,
+    worker_limit: int | None = None,
+) -> list[SchedulerTickRead]:
+    """Return newest persistent scheduler tick telemetry rows."""
+    effective_limit = max(1, min(limit, 100))
+    fetch_limit = min(500, effective_limit * 5) if min_duration_seconds is not None else effective_limit
+    query = select(DownloadSchedulerTick)
+    if status:
+        query = query.where(DownloadSchedulerTick.status == status)
+    if interval_seconds is not None:
+        query = query.where(DownloadSchedulerTick.interval_seconds == interval_seconds)
+    if worker_limit is not None:
+        query = query.where(DownloadSchedulerTick.limit == worker_limit)
+    rows = (
+        await db.execute(
+            query.order_by(DownloadSchedulerTick.created_at.desc(), DownloadSchedulerTick.id.desc()).limit(fetch_limit)
+        )
+    ).scalars()
+    ticks = [_to_scheduler_tick_read(row) for row in rows]
+    if min_duration_seconds is not None:
+        ticks = [
+            tick
+            for tick in ticks
+            if tick.duration_seconds is not None and tick.duration_seconds >= min_duration_seconds
+        ]
+    return ticks[:effective_limit]
+
+
+async def prune_scheduler_ticks(*, db: AsyncSession, keep_latest: int = 200) -> SchedulerTickPruneResult:
+    """Trim download worker scheduler tick telemetry while keeping the newest rows."""
+    bounded_keep = max(1, min(keep_latest, 50_000))
+    keep_ids = select(DownloadSchedulerTick.id).order_by(
+        DownloadSchedulerTick.created_at.desc(),
+        DownloadSchedulerTick.id.desc(),
+    ).limit(bounded_keep)
+    result = await db.execute(delete(DownloadSchedulerTick).where(DownloadSchedulerTick.id.not_in(keep_ids)))
+    await db.commit()
+    return SchedulerTickPruneResult(
+        kind="download_worker_scheduler_ticks",
+        deleted=result.rowcount or 0,
+        keep_latest=bounded_keep,
+    )
+
+
+def _binary_health(*, name: str, command: str) -> BinaryHealth:
+    resolved = which(command)
+    return BinaryHealth(
+        name=name,
+        command=command,
+        available=resolved is not None,
+        resolved_path=resolved,
+    )
+
+
+def _runtime_env_path() -> Path:
+    return Path(settings.runtime_env_file).expanduser().resolve()
+
+
+def _normalize_restart_adapter(value: str) -> str:
+    cleaned = value.strip().lower().replace("-", "_") or "auto"
+    return cleaned
+
+
+def _command_available(command_name: str) -> bool:
+    return which(command_name) is not None
+
+
+def _restart_setup_hints(
+    *,
+    adapter: str,
+    execute_enabled: bool,
+    service_name: str | None,
+    command_available: bool,
+    command_name: str,
+    service_optional: bool = False,
+) -> list[str]:
+    hints: list[str] = []
+    if not command_available:
+        hints.append(f"{command_name} is not available to the backend process")
+    if not service_optional and service_name is None:
+        hints.append("set CVN_RESTART_SERVICE_NAME to the service name managed by this adapter")
+    if not execute_enabled:
+        hints.append("set CVN_RESTART_ADAPTER_EXECUTE=true after validating the command")
+    if adapter == "docker-compose" and service_name is None:
+        hints.append("set CVN_RESTART_SERVICE_NAME to restart one compose service instead of the whole project")
+    return hints
+
+
+def _restart_env_lines(*, adapter: str, service_name: str | None = None) -> list[str]:
+    lines = [f"CVN_RESTART_ADAPTER={adapter}"]
+    if service_name:
+        lines.append(f"CVN_RESTART_SERVICE_NAME={service_name}")
+    lines.append("CVN_RESTART_ADAPTER_EXECUTE=true")
+    return lines
+
+
+async def _publish_restart_audit(
+    event_type: str,
+    *,
+    adapter: RuntimeRestartAdapter,
+    reason: str,
+    message: str,
+    exit_code: int | None = None,
+    stdout: str | None = None,
+    stderr: str | None = None,
+) -> None:
+    data: dict[str, object] = {
+        "adapter": adapter.adapter,
+        "environment": adapter.environment,
+        "service_name": adapter.service_name,
+        "compose_file": adapter.compose_file,
+        "command": adapter.command,
+        "command_available": adapter.command_available,
+        "executable": adapter.executable,
+        "manual_required": adapter.manual_required,
+        "reason": reason,
+        "message": message,
+    }
+    if exit_code is not None:
+        data["exit_code"] = exit_code
+    if stdout:
+        data["stdout"] = stdout
+    if stderr:
+        data["stderr"] = stderr
+    await event_bus.publish(event_type, data)
+    await event_bus.flush_persistence(timeout=0.75)
+
+
+def _restart_command() -> str:
+    return "cd backend && uvicorn app.main:app --reload"
+
+
+def _detect_compose_file() -> Path | None:
+    root = BACKEND_ROOT.parent
+    for name in ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"):
+        candidate = root / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _docker_compose_restart_command(*, compose_file: Path | None, service_name: str | None) -> str:
+    parts = ["docker", "compose"]
+    if compose_file is not None:
+        parts.extend(["-f", str(compose_file)])
+    parts.append("restart")
+    if service_name:
+        parts.append(service_name)
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+def _systemd_restart_command(*, service_name: str | None) -> str:
+    service = service_name or "channel-vault-nas"
+    return " ".join(shlex.quote(part) for part in ("systemctl", "restart", service))
+
+
+def _supervisor_restart_command(*, service_name: str | None) -> str:
+    service = service_name or "channel-vault-nas"
+    return " ".join(shlex.quote(part) for part in ("supervisorctl", "restart", service))
+
+
+def _synology_package_restart_command(*, service_name: str | None) -> str:
+    package_name = service_name or "channel-vault-nas"
+    return " ".join(shlex.quote(part) for part in ("synopkg", "restart", package_name))
+
+
+def _qnap_package_restart_command(*, service_name: str | None) -> str:
+    script = _qnap_package_command_name(service_name=service_name)
+    return " ".join(shlex.quote(part) for part in (script, "restart"))
+
+
+def _qnap_package_command_name(*, service_name: str | None) -> str:
+    package_name = service_name or "channel-vault-nas"
+    return f"/etc/init.d/{package_name}.sh"
+
+
+def _qnap_package_command_available(*, service_name: str | None) -> bool:
+    if service_name is None:
+        return False
+    script = Path(_qnap_package_command_name(service_name=service_name))
+    return script.exists() and os.access(script, os.X_OK)
+
+
+def _looks_like_synology_nas() -> bool:
+    return Path("/etc/synoinfo.conf").exists() or _command_available("synopkg")
+
+
+def _looks_like_qnap_nas() -> bool:
+    return Path("/etc/config/qpkg.conf").exists()
+
+
+def _running_in_container() -> bool:
+    return Path("/.dockerenv").exists() or os.environ.get("container") is not None
+
+
+def _runtime_environment() -> str:
+    if _running_in_container():
+        return "container"
+    if os.environ.get("INVOCATION_ID") or os.environ.get("SYSTEMD_EXEC_PID"):
+        return "systemd"
+    if os.environ.get("SUPERVISOR_ENABLED"):
+        return "supervised"
+    return "local-dev"
+
+
+def _trim_command_output(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) <= 1200:
+        return cleaned
+    return cleaned[:1200] + "\n..."
+
+
+def _current_env_values() -> dict[str, str]:
+    return {
+        "CVN_DOWNLOAD_WORKER_ENABLED": _stringify_env_value(settings.download_worker_enabled),
+        "CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED": _stringify_env_value(settings.download_worker_scheduler_enabled),
+        "CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS": _stringify_env_value(
+            settings.download_worker_scheduler_interval_seconds
+        ),
+        "CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT": _stringify_env_value(settings.download_worker_scheduler_limit),
+        "CVN_METADATA_SYNC_SCHEDULER_ENABLED": _stringify_env_value(settings.metadata_sync_scheduler_enabled),
+        "CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS": _stringify_env_value(
+            settings.metadata_sync_scheduler_interval_seconds
+        ),
+        "CVN_METADATA_SYNC_SCHEDULER_LIMIT": _stringify_env_value(settings.metadata_sync_scheduler_limit),
+        "CVN_YTDLP_BINARY": settings.ytdlp_binary,
+        "CVN_FFPROBE_BINARY": settings.ffprobe_binary,
+    }
+
+
+def _pending_overrides() -> list[RuntimeEnvOverride]:
+    managed = _read_managed_env()
+    active = _current_env_values()
+    rows = []
+    for key in RUNTIME_FIELD_TO_ENV_KEY.values():
+        if key not in managed:
+            continue
+        rows.append(
+            RuntimeEnvOverride(
+                key=key,
+                value=managed[key],
+                active_value=active.get(key),
+                pending_restart=managed[key] != active.get(key),
+            )
+        )
+    return rows
+
+
+def _read_managed_env() -> dict[str, str]:
+    path = _runtime_env_path()
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = ENV_LINE_RE.match(line)
+        if not match:
+            continue
+        key = match.group(1)
+        if key not in RUNTIME_FIELD_TO_ENV_KEY.values():
+            continue
+        _prefix, raw_value = line.split("=", 1)
+        values[key] = _parse_env_value(raw_value.strip())
+    return values
+
+
+def _write_managed_env(env_updates: dict[str, str]) -> list[str]:
+    path = _runtime_env_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else _initial_env_lines()
+    changed: list[str] = []
+    seen: set[str] = set()
+    next_lines: list[str] = []
+
+    for line in lines:
+        match = ENV_LINE_RE.match(line)
+        key = match.group(1) if match else None
+        if key in env_updates:
+            seen.add(key)
+            next_line = f"{key}={_quote_env_value(env_updates[key])}"
+            if line != next_line:
+                changed.append(key)
+            next_lines.append(next_line)
+        else:
+            next_lines.append(line)
+
+    missing = [key for key in env_updates if key not in seen]
+    if missing and next_lines and next_lines[-1].strip():
+        next_lines.append("")
+    for key in missing:
+        changed.append(key)
+        next_lines.append(f"{key}={_quote_env_value(env_updates[key])}")
+
+    path.write_text("\n".join(next_lines).rstrip() + "\n", encoding="utf-8")
+    return sorted(set(changed), key=list(env_updates).index)
+
+
+def _initial_env_lines() -> list[str]:
+    return [
+        "# Managed by Channel Vault NAS runtime settings.",
+        "# Restart the backend process after changing these values.",
+        "",
+    ]
+
+
+def _stringify_env_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _quote_env_value(value: str) -> str:
+    if not value or any(char.isspace() for char in value) or any(char in value for char in ['"', "'", "#", "$"]):
+        return json.dumps(value)
+    return value
+
+
+def _parse_env_value(raw_value: str) -> str:
+    if raw_value.startswith(("'", '"')):
+        try:
+            parsed = json.loads(raw_value)
+            if isinstance(parsed, str):
+                return parsed
+        except json.JSONDecodeError:
+            return raw_value.strip("'\"")
+    return raw_value
+
+
+def _to_scheduler_tick_read(row: DownloadSchedulerTick) -> SchedulerTickRead:
+    duration_seconds = None
+    if row.completed_at is not None:
+        duration_seconds = max(0, round((row.completed_at - row.started_at).total_seconds()))
+    return SchedulerTickRead(
+        id=row.id,
+        trigger=row.trigger,
+        status=row.status,
+        scheduler_enabled=row.scheduler_enabled,
+        worker_enabled=row.worker_enabled,
+        interval_seconds=row.interval_seconds,
+        limit=row.limit,
+        started_count=row.started_count,
+        completed_count=row.completed_count,
+        failed_count=row.failed_count,
+        skipped_reason=row.skipped_reason,
+        error_message=row.error_message,
+        duration_seconds=duration_seconds,
+        next_tick_at=row.next_tick_at,
+        started_at=row.started_at,
+        completed_at=row.completed_at,
+        created_at=row.created_at,
+    )

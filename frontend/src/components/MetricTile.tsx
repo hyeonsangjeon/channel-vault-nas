@@ -26,11 +26,11 @@ export function MetricTile({ metric, index }: { metric: ArchiveMetric; index: nu
       transition={{ delay: index * 0.04, duration: 0.35 }}
     >
       <div className="metric-topline">
-        <span>{t(metric.labelKey)}</span>
+        <span>{metric.label ?? (metric.labelKey ? t(metric.labelKey) : "")}</span>
         <Icon size={18} />
       </div>
       <strong>{metric.valueKey ? t(metric.valueKey) : metric.value}</strong>
-      <p>{t(metric.detailKey)}</p>
+      <p>{metric.detail ?? (metric.detailKey ? t(metric.detailKey) : "")}</p>
     </motion.article>
   );
 }
