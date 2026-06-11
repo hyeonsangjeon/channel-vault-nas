@@ -14,6 +14,8 @@ import {
   Clock3,
   Database,
   Download,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileArchive,
   FileCheck2,
@@ -24,6 +26,7 @@ import {
   Gauge,
   HardDrive,
   History,
+  KeyRound,
   Languages,
   Link2,
   ListFilter,
@@ -49,6 +52,7 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import {
   applyLibraryRescan,
+  ApiAuthError,
   apiUrl,
   bulkUpdateDownloadJobs,
   captureStoragePressureSnapshot,
@@ -71,6 +75,7 @@ import {
   getLibraryFiles,
   getLibraryViews,
   getMetadataSyncTicks,
+  getMountDoctor,
   getOperationsReadiness,
   getQueuePreflight,
   getRecentEvents,
@@ -80,6 +85,7 @@ import {
   getStorageOrphanQuarantine,
   getStoragePressureTrend,
   getStorageScan,
+  getSupportBundle,
   getSyncJobs,
   probeChannel,
   pruneMissingStorageIndex,
@@ -97,13 +103,18 @@ import {
   runDownloadWorkerOnce,
   runMetadataSyncSchedulerOnce,
   saveLibraryView,
+  seedDemoWorkspace,
   stageArchiveTxt,
   stopDownloadJob,
   syncChannel,
   updateChannel,
   updateChannelPolicy,
   updateRuntimeSettings,
-  WS_EVENTS_URL,
+  clearApiAuthToken,
+  getApiAuthToken,
+  setApiAuthToken,
+  wsEventsUrl,
+  clearDemoWorkspace,
   type ArchiveEvent,
   type ArchiveEventFilters,
   type ArchiveTxtPreviewResult,
@@ -121,6 +132,8 @@ import {
   type ChannelSyncResult,
   type ChannelVideo,
   type DashboardSnapshot,
+  type DemoWorkspaceClearResult,
+  type DemoWorkspaceResult,
   type DownloadJob,
   type DownloadWorkerPlan,
   type DownloadWorkerRunAudit,
@@ -136,6 +149,8 @@ import {
   type RuntimeSettingsUpdate,
   type MetadataSyncTickFilters,
   type MetadataSyncTick,
+  type MountDoctor,
+  type MountDoctorPath,
   type SchedulerTick,
   type SchedulerTickFilters,
   type StorageChannelPressureTrend,
@@ -159,11 +174,6 @@ import {
   fidelityChecks,
   folderPreview,
   importOptions,
-  mockActivity,
-  mockChannels,
-  mockLinks,
-  mockMetrics,
-  mockQueue,
   uploadRhythm,
   type ArchiveMetric,
   type FolderPreviewItem,
@@ -174,6 +184,7 @@ import {
 import { languages, useI18n, type Language, type TranslationKey } from "./i18n";
 
 const qualityOptions = ["720p", "1080p", "best"];
+const DEMO_WORKSPACE_EXTERNAL_ID = "UC_CVN_DEMO_SIGNAL";
 type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
 type NavId = "dashboard" | "channels" | "library" | "queue" | "insights" | "settings";
 
@@ -194,6 +205,7 @@ type SchedulerDurationFilter = "all" | "slow";
 type AuditExportFormat = "ndjson" | "csv";
 type RetentionStatus = "idle" | "pruning" | "pruned" | "error";
 type StorageDriftActionStatus = "idle" | "running" | "done" | "error";
+type CopyStatus = "idle" | "copied" | "error";
 type QueueStatusFilter = "launchable" | "all" | "candidate" | "queued" | "running" | "failed" | "cancelled";
 type QueuePreflightFilter = "all" | "ready" | "review" | "unchecked";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
@@ -215,6 +227,23 @@ type NavStatusBadge = {
   value: string;
   tone: NavStatusTone;
   label: string;
+};
+type VolumeMountPreset = {
+  id: string;
+  labelKey: TranslationKey;
+  detailKey: TranslationKey;
+  envKey: string;
+  hostPath: string;
+  containerPath: string;
+  tone: "good" | "warn" | "idle";
+};
+type ExposureProxyPreset = {
+  id: string;
+  labelKey: TranslationKey;
+  detailKey: TranslationKey;
+  badgeKey: TranslationKey;
+  target: string;
+  snippet: string;
 };
 type DownloadTelemetry = {
   jobId: number;
@@ -425,8 +454,15 @@ function App() {
   const [eventDetailCopyStatus, setEventDetailCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [eventDetailCurlStatus, setEventDetailCurlStatus] = useState<"idle" | "copied" | "error">("idle");
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
+  const [authTokenDraft, setAuthTokenDraft] = useState(() => getApiAuthToken());
+  const [authMessageKey, setAuthMessageKey] = useState<TranslationKey | "">("");
   const [operationsReadiness, setOperationsReadiness] = useState<OperationsReadiness | null>(null);
   const [operationsStatus, setOperationsStatus] = useState<"idle" | "refreshing" | "done" | "error">("idle");
+  const [mountDoctor, setMountDoctor] = useState<MountDoctor | null>(null);
+  const [mountDoctorStatus, setMountDoctorStatus] = useState<"idle" | "refreshing" | "done" | "error">("idle");
+  const [demoSeedStatus, setDemoSeedStatus] = useState<"idle" | "loading" | "done" | "skipped" | "error">("idle");
+  const [demoClearStatus, setDemoClearStatus] = useState<"idle" | "loading" | "done" | "skipped" | "error">("idle");
   const [topbarRefreshStatus, setTopbarRefreshStatus] = useState<"idle" | "refreshing" | "done" | "error">("idle");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
@@ -527,10 +563,16 @@ function App() {
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(initialRoute?.runtimeGuide ?? false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [runtimeVolumeCopyStatus, setRuntimeVolumeCopyStatus] = useState<CopyStatus>("idle");
+  const [runtimeProxyCopyStatus, setRuntimeProxyCopyStatus] = useState<{
+    id: string;
+    status: CopyStatus;
+  } | null>(null);
   const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [supportBundleCopyStatus, setSupportBundleCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [supportBundleSource, setSupportBundleSource] = useState<"idle" | "server" | "fallback">("idle");
   const [schedulerTickRetentionStatus, setSchedulerTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [metadataTickRetentionStatus, setMetadataTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [runtimeRestartStatus, setRuntimeRestartStatus] = useState<"idle" | "requesting" | "requested" | "manual" | "error">("idle");
@@ -542,6 +584,13 @@ function App() {
     status: "copied" | "error";
   } | null>(null);
   const [runtimeComposeSmokeCopyStatus, setRuntimeComposeSmokeCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [accessTokenValue, setAccessTokenValue] = useState("");
+  const [accessTokenRevealed, setAccessTokenRevealed] = useState(false);
+  const [accessTokenRotate, setAccessTokenRotate] = useState(false);
+  const [accessTokenCopyStatus, setAccessTokenCopyStatus] = useState<{
+    id: "token" | "env" | "smoke";
+    status: CopyStatus;
+  } | null>(null);
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
   const [runtimeApplyMessage, setRuntimeApplyMessage] = useState("");
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft>(() => defaultRuntimeDraft());
@@ -554,6 +603,7 @@ function App() {
   const registeredChannelIdRef = useRef<number | null>(null);
   const applyingRouteHashRef = useRef(false);
   const librarySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const accessGuardRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -583,6 +633,7 @@ function App() {
   const activeTitle = channelDetail?.title ?? activeProbe?.title ?? "wingnut987S";
   const activeHandle = channelDetail?.handle ?? activeProbe?.handle ?? "@wingnut987s4";
   const activeExternalId = channelDetail?.external_id ?? activeProbe?.external_id ?? "UCmLADXQtWVuzOnOK5TNrWaw";
+  const isDemoWorkspace = channelDetail?.external_id === DEMO_WORKSPACE_EXTERNAL_ID;
   const activeInitials = getInitials(activeTitle);
   const activeCounts = channelDetail ?? registration?.channel;
   const activeArchivedCount = library?.archived ?? activeCounts?.archived_count ?? 0;
@@ -622,19 +673,24 @@ function App() {
           group: channel.group,
         }));
       }
-      return mockChannels.map((channel) =>
-        channel.id === "c1"
-          ? {
-              ...channel,
-              title: activeTitle,
-              health: registration ? 100 : activeProbe ? 82 : channel.health,
-              storageGb: activeProbe ? Math.max(1, Math.round(activeProbe.storage_forecast.estimated_bytes / 1024 ** 3)) : channel.storageGb,
-              newVideos: activeProbe?.video_count ?? channel.newVideos,
-            }
-          : channel,
-      );
+
+      if (registeredChannelId || registration || activeProbe) {
+        return [
+          {
+            id: registeredChannelId ? String(registeredChannelId) : "preview-source",
+            title: activeTitle,
+            health: registration ? 100 : activeProbe ? 82 : 72,
+            storageGb: activeProbe ? Math.max(1, Math.round(activeProbe.storage_forecast.estimated_bytes / 1024 ** 3)) : 0,
+            newVideos: activeProbe?.video_count ?? activeMissingCount,
+            failedJobs: 0,
+            group: "local",
+          },
+        ];
+      }
+
+      return [];
     },
-    [activeProbe, activeTitle, dashboard, registration],
+    [activeMissingCount, activeProbe, activeTitle, dashboard, registeredChannelId, registration],
   );
   const channelSwitcherOptions = useMemo(() => {
     const channels = new Map<number, { id: number; title: string; detail: string }>();
@@ -725,7 +781,7 @@ function App() {
     };
   }, []);
   const activeLinks = useMemo(() => {
-    if (!dashboard?.channels.length) return mockLinks;
+    if (!dashboard?.channels.length) return [];
     const ids = new Set(dashboard.channels.map((channel) => channel.id));
     return dashboard.links
       .filter((link) => ids.has(link.source) && ids.has(link.target))
@@ -899,11 +955,11 @@ function App() {
   const syncIntervalNumber = Number(syncIntervalDraft);
   const syncIntervalValid = Number.isInteger(syncIntervalNumber) && syncIntervalNumber >= 5 && syncIntervalNumber <= 10_080;
   const activeQueue = useMemo(
-    () => (registeredChannelId ? buildQueueLanes(downloadJobs, workflowStatus === "syncing") : mockQueue),
+    () => (registeredChannelId ? buildQueueLanes(downloadJobs, workflowStatus === "syncing") : []),
     [downloadJobs, registeredChannelId, workflowStatus],
   );
   const activeMetrics = useMemo<ArchiveMetric[]>(() => {
-    if (!dashboard) return mockMetrics;
+    if (!dashboard) return [];
     return dashboard.metrics.map((metric) => ({
       label: metric.label,
       value: metric.value,
@@ -914,20 +970,13 @@ function App() {
   const activeActivity = useMemo(() => dashboard?.activity ?? [], [dashboard]);
   const renderedActivity = useMemo(
     () =>
-      activeActivity.length
-        ? activeActivity.map((item) => ({
+      activeActivity.map((item) => ({
             title: item.title,
             channel: item.channel,
             status: item.status,
             time: item.time,
-          }))
-        : mockActivity.map((item) => ({
-            title: t(item.titleKey),
-            channel: item.channel,
-            status: item.status,
-            time: t(item.timeKey),
           })),
-    [activeActivity, t],
+    [activeActivity],
   );
   const policySubtitleLabel = channelPolicy?.subtitle_languages.length
     ? channelPolicy.subtitle_languages.join(", ")
@@ -983,23 +1032,29 @@ function App() {
   const liveDownloadBlocked =
     !workerPlan?.enabled || Boolean(workerPlan?.locked_reason) || liveRunLimit === 0 || liveDownloadStatus === "running";
   const actionableQueueJobs = useMemo(() => downloadJobs.filter(isSelectableQueueJob), [downloadJobs]);
+  const preflightPlanStatusByJobId = useMemo(() => {
+    const statuses = new Map<number, string>();
+    preflightPlan?.ready_job_ids.forEach((id) => statuses.set(id, "ready"));
+    preflightPlan?.review_job_ids.forEach((id) => statuses.set(id, "review"));
+    return statuses;
+  }, [preflightPlan]);
   const queueRadar = useMemo(
     () => ({
       total: downloadJobs.length,
-      review: downloadJobs.filter((job) => job.preflight_status === "review").length,
+      review: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length,
       retry: downloadJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length,
       running: downloadJobs.filter((job) => job.status === "running").length,
     }),
-    [downloadJobs],
+    [downloadJobs, preflightPlanStatusByJobId],
   );
   const preflightFilterCounts = useMemo(
     () => ({
       all: downloadJobs.length,
-      ready: downloadJobs.filter((job) => job.preflight_status === "ready").length,
-      review: downloadJobs.filter((job) => job.preflight_status === "review").length,
-      unchecked: downloadJobs.filter((job) => job.preflight_status === "unchecked").length,
+      ready: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "ready").length,
+      review: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length,
+      unchecked: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "unchecked").length,
     }),
-    [downloadJobs],
+    [downloadJobs, preflightPlanStatusByJobId],
   );
   const runningJobs = useMemo(() => downloadJobs.filter((job) => job.status === "running"), [downloadJobs]);
   const runningWorkerJobs = useMemo(
@@ -1101,7 +1156,7 @@ function App() {
     const preflightFiltered =
       queuePreflightFilter === "all"
         ? statusFiltered
-        : statusFiltered.filter((job) => job.preflight_status === queuePreflightFilter);
+        : statusFiltered.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === queuePreflightFilter);
     if (!query) return preflightFiltered;
     return preflightFiltered.filter((job) =>
       [job.video_title, job.video_external_id, job.channel_title, job.quality, job.status]
@@ -1109,7 +1164,7 @@ function App() {
         .toLowerCase()
         .includes(query),
     );
-  }, [actionableQueueJobs, downloadJobs, queuePreflightFilter, queueSearch, queueStatusFilter]);
+  }, [actionableQueueJobs, downloadJobs, preflightPlanStatusByJobId, queuePreflightFilter, queueSearch, queueStatusFilter]);
   const visibleActionableJobs = useMemo(() => filteredLaunchJobs.filter(isSelectableQueueJob), [filteredLaunchJobs]);
   const selectedJobs = useMemo(
     () => actionableQueueJobs.filter((job) => selectedJobIds.includes(job.id)),
@@ -1118,7 +1173,7 @@ function App() {
   const selectedRetryableCount = selectedJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length;
   const selectedCandidateCount = selectedJobs.filter((job) => job.status === "candidate").length;
   const selectedQueuedCount = selectedJobs.filter((job) => job.status === "queued").length;
-  const selectedReviewCount = selectedJobs.filter((job) => job.preflight_status === "review").length;
+  const selectedReviewCount = selectedJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length;
   const selectedBytesLabel = useMemo(
     () => formatBytes(selectedJobs.reduce((sum, job) => sum + (job.estimated_bytes ?? 0), 0)),
     [selectedJobs],
@@ -1431,6 +1486,10 @@ function App() {
   const composeSmokeCommand = useMemo(() => buildComposeSmokeCommand(false), []);
   const composeSmokeFastCommand = useMemo(() => buildComposeSmokeCommand(true), []);
   const runtimeRestartPresets = useMemo(() => restartAdapterPresets(), []);
+  const runtimeVolumePresets = useMemo(() => volumeMountPresets(), []);
+  const runtimeVolumeEnvManifest = useMemo(() => buildVolumeMountEnvManifest(runtimeVolumePresets), [runtimeVolumePresets]);
+  const runtimeVolumeMkdirCommand = useMemo(() => buildVolumeMountMkdirCommand(runtimeVolumePresets), [runtimeVolumePresets]);
+  const runtimeExposureProxyPresets = useMemo(() => exposureProxyPresets(), []);
   const schedulerTickSummary = useMemo(
     () => summarizeSchedulerTicks(schedulerTickRows.length ? schedulerTickRows : runtimeSettings?.scheduler_ticks ?? []),
     [runtimeSettings?.scheduler_ticks, schedulerTickRows],
@@ -1535,17 +1594,46 @@ function App() {
     };
   }, []);
 
+  function handleAuthFailure(error: unknown) {
+    const authError = error instanceof ApiAuthError || (error instanceof Error && error.name === "ApiAuthError");
+    if (!authError) return false;
+    setAuthRequired(true);
+    setAuthMessageKey("auth.gate.required");
+    setEventStreamStatus("closed");
+    return true;
+  }
+
+  function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const token = authTokenDraft.trim();
+    if (!token) {
+      setAuthMessageKey("auth.gate.empty");
+      return;
+    }
+    setApiAuthToken(token);
+    setAuthRequired(false);
+    setAuthMessageKey("auth.gate.saved");
+    window.location.reload();
+  }
+
+  function handleAuthClear() {
+    clearApiAuthToken();
+    setAuthTokenDraft("");
+    setAuthMessageKey("auth.gate.cleared");
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function loadDashboard() {
       try {
-        const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot] = await Promise.all([
+        const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
           getDashboard(),
           getRecentEvents(100),
           getRuntimeSettings(),
           getStorageScan(),
           getStoragePressureTrend(),
           getOperationsReadiness(),
+          getMountDoctor(),
         ]);
         const [globalJobs, globalWorkerSnapshot, globalWorkerRunSnapshot] = await Promise.all([
           getDownloadJobs(undefined, { limit: 200 }),
@@ -1559,17 +1647,19 @@ function App() {
         setStorageScan(storageSnapshot);
         setStoragePressureTrend(pressureTrend);
         setOperationsReadiness(readinessSnapshot);
+        setMountDoctor(mountDoctorSnapshot);
         setGlobalDownloadJobs(globalJobs);
         setQueueConsoleWorkerPlan(globalWorkerSnapshot);
         setQueueConsoleWorkerRuns(globalWorkerRunSnapshot);
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        if (handleAuthFailure(error)) return;
         setDashboard(null);
       }
     }
     loadDashboard();
 
-    const socket = new WebSocket(WS_EVENTS_URL);
+    const socket = new WebSocket(wsEventsUrl());
     setEventStreamStatus("connecting");
     socket.onopen = () => {
       setEventStreamStatus("live");
@@ -1603,7 +1693,11 @@ function App() {
     socket.onerror = () => {
       setEventStreamStatus("error");
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      if (!cancelled && event.code === 1008) {
+        setAuthRequired(true);
+        setAuthMessageKey("auth.gate.required");
+      }
       if (!cancelled) setEventStreamStatus("closed");
     };
 
@@ -2664,6 +2758,58 @@ function App() {
     }
   }
 
+  async function handleCopyVolumeMountEnv() {
+    try {
+      await copyTextToClipboard(`${runtimeVolumeMkdirCommand}\n\n${runtimeVolumeEnvManifest}`);
+      setRuntimeVolumeCopyStatus("copied");
+      window.setTimeout(() => setRuntimeVolumeCopyStatus("idle"), 1800);
+    } catch {
+      setRuntimeVolumeCopyStatus("error");
+      window.setTimeout(() => setRuntimeVolumeCopyStatus("idle"), 2200);
+    }
+  }
+
+  async function handleCopyExposureProxyPreset(preset: ExposureProxyPreset) {
+    try {
+      await copyTextToClipboard(preset.snippet);
+      setRuntimeProxyCopyStatus({ id: preset.id, status: "copied" });
+      window.setTimeout(() => setRuntimeProxyCopyStatus(null), 1800);
+    } catch {
+      setRuntimeProxyCopyStatus({ id: preset.id, status: "error" });
+      window.setTimeout(() => setRuntimeProxyCopyStatus(null), 2200);
+    }
+  }
+
+  function handleGenerateAccessToken() {
+    setAccessTokenValue(generateAccessToken());
+    setAccessTokenRevealed(false);
+    setAccessTokenCopyStatus(null);
+  }
+
+  function handleJumpToAccessGuard() {
+    accessGuardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function handleCopyAccessToken(kind: "token" | "env" | "smoke") {
+    const value =
+      kind === "token"
+        ? accessTokenValue
+        : kind === "env"
+          ? accessTokenValue
+            ? `CVN_AUTH_TOKEN=${accessTokenValue}`
+            : ""
+          : ACCESS_TOKEN_SMOKE_COMMAND;
+    if (!value) return;
+    try {
+      await copyTextToClipboard(value);
+      setAccessTokenCopyStatus({ id: kind, status: "copied" });
+      window.setTimeout(() => setAccessTokenCopyStatus(null), 1800);
+    } catch {
+      setAccessTokenCopyStatus({ id: kind, status: "error" });
+      window.setTimeout(() => setAccessTokenCopyStatus(null), 2200);
+    }
+  }
+
   async function handleCopyLaunchCommands() {
     try {
       await copyTextToClipboard(launchCommandManifest);
@@ -2819,9 +2965,23 @@ function App() {
     };
   }
 
+  async function loadSupportBundle() {
+    try {
+      const bundle = await getSupportBundle();
+      setSupportBundleSource("server");
+      return bundle;
+    } catch (error) {
+      if (handleAuthFailure(error)) {
+        throw error;
+      }
+      setSupportBundleSource("fallback");
+      return buildSupportBundle();
+    }
+  }
+
   async function handleCopySupportBundle() {
     try {
-      await copyTextToClipboard(JSON.stringify(buildSupportBundle(), null, 2));
+      await copyTextToClipboard(JSON.stringify(await loadSupportBundle(), null, 2));
       setSupportBundleCopyStatus("copied");
       window.setTimeout(() => setSupportBundleCopyStatus("idle"), 1800);
     } catch {
@@ -2830,13 +2990,18 @@ function App() {
     }
   }
 
-  function handleDownloadSupportBundle() {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    downloadTextFile(
-      `channel-vault-support-${timestamp}.json`,
-      JSON.stringify(buildSupportBundle(), null, 2),
-      "application/json;charset=utf-8",
-    );
+  async function handleDownloadSupportBundle() {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      downloadTextFile(
+        `channel-vault-support-${timestamp}.json`,
+        JSON.stringify(await loadSupportBundle(), null, 2),
+        "application/json;charset=utf-8",
+      );
+    } catch {
+      setSupportBundleCopyStatus("error");
+      window.setTimeout(() => setSupportBundleCopyStatus("idle"), 2200);
+    }
   }
 
   async function handleCopyDownloadRunSummary() {
@@ -3932,8 +4097,23 @@ function App() {
   }
 
   async function refreshOperationsReadiness() {
-    const readiness = await getOperationsReadiness();
+    const [readiness, mountDoctorSnapshot] = await Promise.all([getOperationsReadiness(), getMountDoctor()]);
     setOperationsReadiness(readiness);
+    setMountDoctor(mountDoctorSnapshot);
+  }
+
+  async function handleRefreshMountDoctor() {
+    setMountDoctorStatus("refreshing");
+    try {
+      const mountDoctorSnapshot = await getMountDoctor();
+      setMountDoctor(mountDoctorSnapshot);
+      setMountDoctorStatus("done");
+      window.setTimeout(() => setMountDoctorStatus("idle"), 1400);
+    } catch (error) {
+      if (handleAuthFailure(error)) return;
+      setMountDoctorStatus("error");
+      window.setTimeout(() => setMountDoctorStatus("idle"), 1800);
+    }
   }
 
   function pushAppRoute(overrides: Partial<AppRoute>) {
@@ -3999,13 +4179,14 @@ function App() {
     setTopbarRefreshStatus("refreshing");
     setWorkflowMessage("");
     try {
-      const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot] = await Promise.all([
+      const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
         getDashboard(),
         getRecentEvents(100),
         getRuntimeSettings(),
         getStorageScan(),
         getStoragePressureTrend(),
         getOperationsReadiness(),
+        getMountDoctor(),
       ]);
       setDashboard(snapshot);
       setEvents(recentEvents);
@@ -4013,6 +4194,7 @@ function App() {
       setStorageScan(storageSnapshot);
       setStoragePressureTrend(pressureTrend);
       setOperationsReadiness(readinessSnapshot);
+      setMountDoctor(mountDoctorSnapshot);
       await refreshQueueConsoleState();
       if (registeredChannelId) {
         await loadChannelState(registeredChannelId);
@@ -4037,6 +4219,112 @@ function App() {
     } catch {
       setOperationsStatus("error");
       window.setTimeout(() => setOperationsStatus("idle"), 1800);
+    }
+  }
+
+  async function handleSeedDemoWorkspace() {
+    setDemoSeedStatus("loading");
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    setDemoClearStatus("idle");
+    try {
+      const result = await seedDemoWorkspace();
+      if (!result.channel_id) {
+        setDemoSeedStatus("skipped");
+        setWorkflowStatus("idle");
+        setWorkflowMessage(t("firstRun.demo.blocked"));
+        return;
+      }
+      const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
+        getDashboard(),
+        getRecentEvents(100),
+        getRuntimeSettings(),
+        getStorageScan(),
+        getStoragePressureTrend(),
+        getOperationsReadiness(),
+        getMountDoctor(),
+      ]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      setRuntimeSettings(runtimeSnapshot);
+      setStorageScan(storageSnapshot);
+      setStoragePressureTrend(pressureTrend);
+      setOperationsReadiness(readinessSnapshot);
+      setMountDoctor(mountDoctorSnapshot);
+      await refreshQueueConsoleState();
+      setSelectedChannelId(result.channel_id);
+      setRegistration(null);
+      setProbe(null);
+      await loadChannelState(result.channel_id);
+      setActiveNavId("channels");
+      setActiveChannelTab("downloads");
+      pushAppRoute({ nav: "channels", channelTab: "downloads", channelId: result.channel_id });
+      window.setTimeout(() => scrollToAppSection(".channel-detail-panel"), 0);
+      setDemoSeedStatus(result.created ? "done" : "skipped");
+      setWorkflowStatus("idle");
+      setWorkflowMessage(demoSeedMessage(result, t));
+    } catch (error) {
+      if (handleAuthFailure(error)) return;
+      setDemoSeedStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleClearDemoWorkspace() {
+    setDemoClearStatus("loading");
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = await clearDemoWorkspace();
+      const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
+        getDashboard(),
+        getRecentEvents(100),
+        getRuntimeSettings(),
+        getStorageScan(),
+        getStoragePressureTrend(),
+        getOperationsReadiness(),
+        getMountDoctor(),
+      ]);
+      setDashboard(snapshot);
+      setEvents(recentEvents);
+      setRuntimeSettings(runtimeSnapshot);
+      setStorageScan(storageSnapshot);
+      setStoragePressureTrend(pressureTrend);
+      setOperationsReadiness(readinessSnapshot);
+      setMountDoctor(mountDoctorSnapshot);
+      await refreshQueueConsoleState();
+      if (result.cleared) {
+        setSelectedChannelId(null);
+        setRegistration(null);
+        setProbe(null);
+        setChannelDetail(null);
+        setChannelPolicy(null);
+        setChannelVideos([]);
+        setChannelCoverage(null);
+        setChannelMissingVideos([]);
+        setChannelCadence(null);
+        setSyncJobs([]);
+        setDownloadJobs([]);
+        setPreflightPlan(null);
+        setSelectedJobIds([]);
+        setSelectionSeedKey("");
+        setLibrary(null);
+        setWorkerPlan(null);
+        setWorkerRuns([]);
+        setStorageChannelPressureTrend(null);
+        setActiveNavId("dashboard");
+        setActiveChannelTab("overview");
+        writeAppHash({ nav: "dashboard" }, "push");
+      }
+      setDemoClearStatus(result.cleared ? "done" : "skipped");
+      setWorkflowStatus("idle");
+      setWorkflowMessage(demoClearMessage(result, t));
+    } catch (error) {
+      if (handleAuthFailure(error)) return;
+      setDemoClearStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
     }
   }
 
@@ -4087,6 +4375,12 @@ function App() {
         scrollToAppSection(".runtime-console");
         return;
       }
+      setActiveNavId("settings");
+      await handleOpenRuntimeGuide();
+      scrollToAppSection(".runtime-console");
+      return;
+    }
+    if (mission.action_kind === "security") {
       setActiveNavId("settings");
       await handleOpenRuntimeGuide();
       scrollToAppSection(".runtime-console");
@@ -4353,6 +4647,21 @@ function App() {
 
   const activeNavItem = navItems.find((item) => item.id === activeNavId) ?? navItems[0];
   const activeNavTitle = activeNavId === "queue" ? t("queue.console.title") : t(activeNavItem.key);
+  const activeChannelTabTitle = t(channelDetailTabs.find((tab) => tab.id === activeChannelTab)?.labelKey ?? "detail.tabs.overview");
+  const appDocumentTitle = useMemo(() => {
+    const baseTitle = "Channel Vault NAS";
+    if ((activeNavId === "channels" || activeNavId === "library") && registeredChannelId) {
+      const sectionTitle = activeNavId === "library" ? t("nav.library") : activeChannelTabTitle;
+      return `${activeTitle} · ${sectionTitle} · ${baseTitle}`;
+    }
+    return `${activeNavTitle} · ${baseTitle}`;
+  }, [activeChannelTabTitle, activeNavId, activeNavTitle, activeTitle, registeredChannelId, t]);
+  useEffect(() => {
+    document.title = appDocumentTitle;
+    return () => {
+      document.title = "Channel Vault NAS";
+    };
+  }, [appDocumentTitle]);
   const activeNavKicker =
     activeNavId === "queue"
       ? t("queue.console.kicker")
@@ -4538,6 +4847,18 @@ function App() {
   const launchRunwayCompleted = launchRunwaySteps.filter((step) => step.state === "ready").length;
   const launchRunwayProgress = Math.round((launchRunwayCompleted / launchRunwaySteps.length) * 100);
   const launchRunwayCurrent = launchRunwaySteps.find((step) => step.state === "active") ?? launchRunwaySteps.find((step) => step.state === "locked") ?? launchRunwaySteps.at(-1);
+  const securityReadinessReady = operationsReadiness ? !operationsReadiness.missions.some((mission) => mission.id === "enable_access_token") : false;
+  const mountDoctorCriticalCount = mountDoctor?.issues.filter((issue) => issue.severity === "critical").length ?? 0;
+  const mountDoctorWarningCount = mountDoctor?.issues.filter((issue) => issue.severity === "warning").length ?? 0;
+  const mountDoctorIssueDetail = mountDoctor
+    ? mountDoctor.issues.length
+      ? t("mountDoctor.detailIssues")
+          .replace("{critical}", String(mountDoctorCriticalCount))
+          .replace("{warning}", String(mountDoctorWarningCount))
+      : t("mountDoctor.detailHealthy")
+    : t("runtime.checking");
+  const mountDoctorTopIssue = mountDoctor?.issues.find((issue) => issue.severity === "critical") ?? mountDoctor?.issues.find((issue) => issue.severity === "warning") ?? null;
+  const mountDoctorPathRows = mountDoctor?.paths.filter((path) => ["database", "metadata", "download", "runtime"].includes(path.id)) ?? [];
   const releaseReadinessItems: {
     id: string;
     icon: typeof Link2;
@@ -4555,6 +4876,19 @@ function App() {
       detailKey: "release.readiness.source.detail",
       actionKey: "release.readiness.source.action",
       action: () => openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".registration-panel"),
+    },
+    {
+      id: "security",
+      icon: ShieldCheck,
+      ready: securityReadinessReady,
+      titleKey: "release.readiness.security.title",
+      detailKey: "release.readiness.security.detail",
+      actionKey: "release.readiness.security.action",
+      action: () => {
+        setActiveNavId("settings");
+        void handleOpenRuntimeGuide();
+        scrollToAppSection(".runtime-console");
+      },
     },
     {
       id: "sync",
@@ -4606,6 +4940,19 @@ function App() {
     },
   ];
   const releaseReadinessDone = releaseReadinessItems.filter((item) => item.ready).length;
+
+  if (authRequired) {
+    return (
+      <AuthGate
+        authMessage={authMessageKey ? t(authMessageKey) : ""}
+        authTokenDraft={authTokenDraft}
+        onClear={handleAuthClear}
+        onSubmit={handleAuthSubmit}
+        onTokenChange={setAuthTokenDraft}
+        t={t}
+      />
+    );
+  }
 
   return (
     <main className="app-shell">
@@ -4942,6 +5289,9 @@ function App() {
                     {t("firstRun.empty.primary")}
                   </button>
                 </div>
+                {workflowMessage ? (
+                  <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
+                ) : null}
                 <div className="first-source-grid">
                   <article>
                     <Link2 size={17} />
@@ -4979,6 +5329,14 @@ function App() {
                       {t("firstRun.empty.storageAction")}
                     </button>
                   </article>
+                  <article className="demo-seed-card">
+                    <Database size={17} />
+                    <strong>{t("firstRun.demo.title")}</strong>
+                    <span>{t("firstRun.demo.detail")}</span>
+                    <button disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
+                      {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
+                    </button>
+                  </article>
                 </div>
               </section>
             ) : null}
@@ -5013,6 +5371,56 @@ function App() {
                   <button onClick={handleDownloadSupportBundle} type="button">
                     <Download size={13} />
                     {t("support.bundle.download")}
+                  </button>
+                </div>
+              </div>
+              <div className="support-bundle-strip">
+                <ShieldCheck size={15} />
+                <div>
+                  <strong>{t("support.bundle.privacyTitle")}</strong>
+                  <span>{t("support.bundle.privacyDetail")}</span>
+                </div>
+                <small className={`support-bundle-source ${supportBundleSource}`}>
+                  {supportBundleSource === "server"
+                    ? t("support.bundle.server")
+                    : supportBundleSource === "fallback"
+                      ? t("support.bundle.fallback")
+                      : t("support.bundle.ready")}
+                </small>
+              </div>
+              <div className={`mount-doctor-strip ${mountDoctor?.status ?? "checking"}`} aria-label={t("mountDoctor.aria")}>
+                <div className="mount-doctor-score">
+                  <HardDrive size={16} />
+                  <strong>{mountDoctor ? mountDoctor.score : "..."}</strong>
+                  <span>{mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking")}</span>
+                </div>
+                <div className="mount-doctor-copy">
+                  <strong>{t("mountDoctor.title")}</strong>
+                  <span>{mountDoctorTopIssue ? mountDoctorTopIssue.title : mountDoctorIssueDetail}</span>
+                  {mountDoctorTopIssue ? <small>{mountDoctorIssueDetail}</small> : null}
+                </div>
+                <div className="mount-doctor-paths">
+                  {mountDoctorPathRows.map((path) => (
+                    <span className={mountDoctorPathTone(path, mountDoctor?.running_in_container ?? false)} title={path.resolved} key={path.id}>
+                      {mountDoctorPathLabel(path.id, t)}
+                      <em>{mountDoctorPathState(path, t)}</em>
+                    </span>
+                  ))}
+                </div>
+                <div className="mount-doctor-actions">
+                  <button disabled={mountDoctorStatus === "refreshing"} onClick={() => void handleRefreshMountDoctor()} type="button">
+                    <RotateCcw size={13} />
+                    {mountDoctorStatus === "refreshing" ? t("ops.refreshing") : t("ops.refresh")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSelectNav("settings");
+                      window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
+                    }}
+                    type="button"
+                  >
+                    <Settings size={13} />
+                    {t("mountDoctor.action")}
                   </button>
                 </div>
               </div>
@@ -5106,7 +5514,7 @@ function App() {
                     ))}
                   </div>
                   <div className="ops-mission-list">
-                    {operationsReadiness.missions.slice(0, 4).map((mission) => {
+                    {operationsReadiness.missions.slice(0, 5).map((mission) => {
                       const MissionIcon = operationMissionIcon(mission.id);
                       return (
                         <article className={`ops-mission ${mission.severity} ${mission.status}`} key={mission.id}>
@@ -5921,6 +6329,24 @@ function App() {
                 {formatDateLabel(channelDetail?.last_synced_at)}
               </span>
             </div>
+            {workflowMessage && !activeProbe ? (
+              <span className={`workflow-message channel-workflow-message ${workflowStatus}`}>{workflowMessage}</span>
+            ) : null}
+            {isDemoWorkspace ? (
+              <div className="demo-workspace-banner" role="status">
+                <div>
+                  <Database size={17} />
+                  <span>
+                    <strong>{t("demo.workspace.banner.title")}</strong>
+                    <small>{t("demo.workspace.banner.detail")}</small>
+                  </span>
+                </div>
+                <button disabled={demoClearStatus === "loading"} onClick={handleClearDemoWorkspace} type="button">
+                  <Trash2 size={13} />
+                  {demoClearStatus === "loading" ? t("demo.workspace.clear.loading") : t("demo.workspace.clear.action")}
+                </button>
+              </div>
+            ) : null}
             <div className="channel-start-flow" aria-label={t("detail.flow.title")}>
               <article>
                 <span>{t("detail.flow.check")}</span>
@@ -6596,6 +7022,7 @@ function App() {
                   const actionable = isSelectableQueueJob(job);
                   const signals = launchJobSignals(job, t);
                   const telemetry = telemetryByJobId.get(job.id);
+                  const preflightStatus = effectivePreflightStatus(job, preflightPlanStatusByJobId);
                   return (
                     <article className={`launch-job ${job.status} ${selected ? "selected" : ""} ${actionable ? "" : "locked"}`} key={job.id}>
                       <button
@@ -6631,7 +7058,7 @@ function App() {
                         <em className={`queue-status-pill ${telemetry?.status ?? job.status}`}>
                           {telemetry ? downloadTelemetryStatusLabel(telemetry.status, t) : queueJobStatusLabel(job.status, t)}
                         </em>
-                        <em className={`preflight-pill ${job.preflight_status}`}>{preflightLabel(job.preflight_status, t)}</em>
+                        <em className={`preflight-pill ${preflightStatus}`}>{preflightLabel(preflightStatus, t)}</em>
                         <small>{formatBytes(job.estimated_bytes ?? 0)}</small>
                       </div>
                     </article>
@@ -6721,6 +7148,10 @@ function App() {
                       {workerPlan?.enabled ? t("worker.enabled") : t("worker.locked")}
                     </span>
                   </div>
+                  <p className="worker-guardrails">
+                    <ShieldCheck size={13} />
+                    <span>{t("worker.guardrails")}</span>
+                  </p>
                   {latestDownloadTelemetry ? (
                     <div className={`live-progress-strip ${latestDownloadTelemetry.status}`}>
                       <div>
@@ -8567,6 +8998,21 @@ function App() {
               </div>
             ) : null}
 
+            <div
+              className={`runtime-secure-jump ${securityReadinessReady ? "good" : "warn"}`}
+              aria-label={t("runtime.secure.aria")}
+            >
+              {securityReadinessReady ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+              <div>
+                <strong>{securityReadinessReady ? t("runtime.secure.protected") : t("runtime.secure.needsToken")}</strong>
+                <span>{t("runtime.secure.subtitle")}</span>
+              </div>
+              <button className="runtime-copy-button" onClick={() => handleJumpToAccessGuard()} type="button">
+                <KeyRound size={14} />
+                {t("runtime.secure.action")}
+              </button>
+            </div>
+
             <div className={`runtime-restart-banner ${runtimeSettings?.pending_restart ? "warn" : "good"}`}>
               {runtimeSettings?.pending_restart ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />}
               <div>
@@ -8662,6 +9108,215 @@ function App() {
               <div className="runtime-compose-smoke-fast">
                 <span>{t("runtime.composeSmoke.fastLabel")}</span>
                 <code>{composeSmokeFastCommand}</code>
+              </div>
+            </div>
+            <div className="runtime-token-setup" aria-label={t("runtime.token.aria")} ref={accessGuardRef}>
+              <div className="runtime-apply-heading">
+                <KeyRound size={16} />
+                <div>
+                  <strong>{t("runtime.token.title")}</strong>
+                  <span>{t("runtime.token.subtitle")}</span>
+                </div>
+              </div>
+              <div className={`runtime-token-state ${securityReadinessReady ? "good" : "warn"}`}>
+                {securityReadinessReady ? <ShieldCheck size={15} /> : <AlertTriangle size={15} />}
+                <div>
+                  <strong>
+                    {securityReadinessReady ? t("runtime.token.stateProtected") : t("runtime.token.stateNeedsToken")}
+                  </strong>
+                  <span>
+                    {securityReadinessReady
+                      ? t("runtime.token.stateProtectedDetail")
+                      : t("runtime.token.stateNeedsTokenDetail")}
+                  </span>
+                </div>
+              </div>
+              <div className="runtime-token-actions">
+                <button className="runtime-apply-button" onClick={() => handleGenerateAccessToken()} type="button">
+                  <RotateCcw size={14} />
+                  {accessTokenValue ? t("runtime.token.regenerate") : t("runtime.token.generate")}
+                </button>
+                <label className="runtime-token-rotate">
+                  <input
+                    checked={accessTokenRotate}
+                    onChange={(event) => setAccessTokenRotate(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>{t("runtime.token.rotateMode")}</span>
+                </label>
+              </div>
+              {accessTokenValue ? (
+                <div className="runtime-token-result">
+                  <div className="runtime-token-value">
+                    <code>{accessTokenRevealed ? accessTokenValue : maskAccessToken(accessTokenValue)}</code>
+                    <button
+                      aria-label={accessTokenRevealed ? t("runtime.token.hide") : t("runtime.token.reveal")}
+                      className="icon-button"
+                      onClick={() => setAccessTokenRevealed((value) => !value)}
+                      title={accessTokenRevealed ? t("runtime.token.hide") : t("runtime.token.reveal")}
+                      type="button"
+                    >
+                      {accessTokenRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  <div className="runtime-token-copy-row">
+                    <button
+                      aria-label={t("runtime.token.copyToken")}
+                      className="runtime-copy-button"
+                      onClick={() => void handleCopyAccessToken("token")}
+                      type="button"
+                    >
+                      <ClipboardList size={14} />
+                      {accessTokenCopyStatus?.id === "token"
+                        ? accessTokenCopyStatus.status === "copied"
+                          ? t("runtime.token.tokenCopied")
+                          : t("runtime.token.copyError")
+                        : t("runtime.token.copyToken")}
+                    </button>
+                    <button
+                      aria-label={t("runtime.token.copyEnv")}
+                      className="runtime-copy-button"
+                      onClick={() => void handleCopyAccessToken("env")}
+                      type="button"
+                    >
+                      <ClipboardList size={14} />
+                      {accessTokenCopyStatus?.id === "env"
+                        ? accessTokenCopyStatus.status === "copied"
+                          ? t("runtime.token.copied")
+                          : t("runtime.token.copyError")
+                        : t("runtime.token.copyEnv")}
+                    </button>
+                  </div>
+                  <code className="runtime-token-env">CVN_AUTH_TOKEN={accessTokenRevealed ? accessTokenValue : maskAccessToken(accessTokenValue)}</code>
+                  {accessTokenRotate ? <p className="runtime-token-rotate-note">{t("runtime.token.rotateNote")}</p> : null}
+                  <ul className="runtime-token-safety">
+                    <li>{t("runtime.token.safetyManager")}</li>
+                    <li>{t("runtime.token.safetyRestart")}</li>
+                    <li>{t("runtime.token.safetyNoShare")}</li>
+                  </ul>
+                </div>
+              ) : (
+                <p className="runtime-token-hint">{t("runtime.token.hint")}</p>
+              )}
+              <div className="runtime-token-smoke">
+                <span>{t("runtime.token.smokeLabel")}</span>
+                <code>{ACCESS_TOKEN_SMOKE_COMMAND}</code>
+                <button
+                  aria-label={t("runtime.token.copySmoke")}
+                  className="runtime-copy-button"
+                  onClick={() => void handleCopyAccessToken("smoke")}
+                  type="button"
+                >
+                  <ClipboardList size={14} />
+                  {accessTokenCopyStatus?.id === "smoke"
+                    ? accessTokenCopyStatus.status === "copied"
+                      ? t("runtime.token.copied")
+                      : t("runtime.token.copyError")
+                    : t("runtime.token.copySmoke")}
+                </button>
+              </div>
+            </div>
+            <div className="runtime-exposure-cookbook" aria-label={t("runtime.exposure.aria")}>
+              <div className="runtime-apply-heading">
+                <ShieldCheck size={16} />
+                <div>
+                  <strong>{t("runtime.exposure.title")}</strong>
+                  <span>{t("runtime.exposure.subtitle")}</span>
+                </div>
+              </div>
+              <div className={`runtime-exposure-guard ${securityReadinessReady ? "good" : "warn"}`}>
+                {securityReadinessReady ? <ShieldCheck size={15} /> : <AlertTriangle size={15} />}
+                <div>
+                  <strong>{securityReadinessReady ? t("runtime.exposure.guardReady") : t("runtime.exposure.guardWarn")}</strong>
+                  <span>{t("runtime.exposure.guardDetail")}</span>
+                </div>
+                <code>CVN_API_PORT=127.0.0.1:8000</code>
+              </div>
+              <div className="runtime-exposure-grid">
+                {runtimeExposureProxyPresets.map((preset) => {
+                  const copyState = runtimeProxyCopyStatus?.id === preset.id ? runtimeProxyCopyStatus.status : "idle";
+                  return (
+                    <article key={preset.id}>
+                      <div className="runtime-exposure-card-head">
+                        <div>
+                          <strong>{t(preset.labelKey)}</strong>
+                          <span>{t(preset.detailKey)}</span>
+                        </div>
+                        <small>{t(preset.badgeKey)}</small>
+                      </div>
+                      <code>{preset.snippet}</code>
+                      <div className="runtime-exposure-card-foot">
+                        <span>
+                          {t("runtime.exposure.target")} · {preset.target}
+                        </span>
+                        <button
+                          aria-label={`${t("runtime.exposure.copy")} ${t(preset.labelKey)}`}
+                          className="runtime-copy-button"
+                          onClick={() => void handleCopyExposureProxyPreset(preset)}
+                          type="button"
+                        >
+                          <ClipboardList size={14} />
+                          {copyState === "copied"
+                            ? t("runtime.exposure.copied")
+                            : copyState === "error"
+                              ? t("runtime.exposure.copyError")
+                              : t("runtime.exposure.copy")}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="runtime-volume-cookbook" aria-label={t("runtime.volume.aria")}>
+              <div className="runtime-apply-heading">
+                <FolderTree size={16} />
+                <div>
+                  <strong>{t("runtime.volume.title")}</strong>
+                  <span>{t("runtime.volume.subtitle")}</span>
+                </div>
+                <button className="runtime-copy-button" onClick={() => void handleCopyVolumeMountEnv()} type="button">
+                  <ClipboardList size={14} />
+                  {runtimeVolumeCopyStatus === "copied"
+                    ? t("runtime.volume.copied")
+                    : runtimeVolumeCopyStatus === "error"
+                      ? t("runtime.volume.copyError")
+                      : t("runtime.volume.copy")}
+                </button>
+              </div>
+              <div className={`runtime-volume-doctor ${mountDoctor?.status ?? "checking"}`}>
+                <HardDrive size={15} />
+                <div>
+                  <strong>
+                    {t("runtime.volume.doctor")} ·{" "}
+                    {mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking")}
+                  </strong>
+                  <span>{mountDoctor ? mountDoctorIssueDetail : t("runtime.volume.doctorLoading")}</span>
+                </div>
+              </div>
+              <div className="runtime-volume-grid">
+                {runtimeVolumePresets.map((preset) => (
+                  <article className={preset.tone} key={preset.id}>
+                    <div>
+                      <strong>{t(preset.labelKey)}</strong>
+                      <span>{t(preset.detailKey)}</span>
+                    </div>
+                    <code>{preset.hostPath}</code>
+                    <small>
+                      {preset.envKey} → {preset.containerPath}
+                    </small>
+                  </article>
+                ))}
+              </div>
+              <div className="runtime-volume-command-grid">
+                <article>
+                  <span>{t("runtime.volume.mkdir")}</span>
+                  <code>{runtimeVolumeMkdirCommand}</code>
+                </article>
+                <article>
+                  <span>{t("runtime.volume.env")}</span>
+                  <code>{runtimeVolumeEnvManifest}</code>
+                </article>
               </div>
             </div>
             {runtimeRestartMessage ? (
@@ -10277,6 +10932,130 @@ function restartAdapterPresets(): RestartAdapterPreset[] {
   ];
 }
 
+function volumeMountPresets(): VolumeMountPreset[] {
+  return [
+    {
+      id: "metadata",
+      labelKey: "runtime.volume.metadata",
+      detailKey: "runtime.volume.metadataDetail",
+      envKey: "CVN_METADATA_HOST_DIR",
+      hostPath: "/volume1/channel-vault-nas/metadata",
+      containerPath: "/app/metadata",
+      tone: "good",
+    },
+    {
+      id: "archive",
+      labelKey: "runtime.volume.archive",
+      detailKey: "runtime.volume.archiveDetail",
+      envKey: "CVN_DOWNLOAD_HOST_DIR",
+      hostPath: "/volume1/channel-vault-nas/archive",
+      containerPath: "/app/downfolder",
+      tone: "warn",
+    },
+    {
+      id: "runtime",
+      labelKey: "runtime.volume.runtime",
+      detailKey: "runtime.volume.runtimeDetail",
+      envKey: "CVN_RUNTIME_HOST_DIR",
+      hostPath: "/volume1/channel-vault-nas/runtime",
+      containerPath: "/app/runtime",
+      tone: "idle",
+    },
+  ];
+}
+
+function buildVolumeMountEnvManifest(presets: VolumeMountPreset[]) {
+  return presets.map((preset) => `${preset.envKey}=${preset.hostPath}`).join("\n");
+}
+
+function buildVolumeMountMkdirCommand(presets: VolumeMountPreset[]) {
+  return `mkdir -p ${presets.map((preset) => preset.hostPath).join(" ")}`;
+}
+
+const ACCESS_TOKEN_SMOKE_COMMAND = [
+  "# 1) Without a token, the API rejects the request once CVN_AUTH_TOKEN is set",
+  "curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8000/api/dashboard   # expect 401",
+  "# 2) With the operator token exported, the same request succeeds",
+  'curl -s -o /dev/null -w \'%{http_code}\\n\' -H "Authorization: Bearer $CVN_AUTH_TOKEN" http://127.0.0.1:8000/api/dashboard   # expect 200',
+].join("\n");
+
+function generateAccessToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function maskAccessToken(token: string): string {
+  if (!token) {
+    return "";
+  }
+  if (token.length <= 8) {
+    return "•".repeat(token.length);
+  }
+  return `${token.slice(0, 4)}${"•".repeat(Math.min(24, token.length - 4))}`;
+}
+
+function exposureProxyPresets(): ExposureProxyPreset[] {
+  return [
+    {
+      id: "nginx",
+      labelKey: "runtime.exposure.nginx",
+      detailKey: "runtime.exposure.nginxDetail",
+      badgeKey: "runtime.exposure.badgeTls",
+      target: "http://127.0.0.1:5173",
+      snippet: `server {
+  listen 443 ssl http2;
+  server_name vault.example.test;
+
+  ssl_certificate /etc/letsencrypt/live/vault.example.test/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/vault.example.test/privkey.pem;
+
+  client_max_body_size 64m;
+
+  location / {
+    proxy_pass http://127.0.0.1:5173;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}`,
+    },
+    {
+      id: "caddy",
+      labelKey: "runtime.exposure.caddy",
+      detailKey: "runtime.exposure.caddyDetail",
+      badgeKey: "runtime.exposure.badgeSimple",
+      target: "http://127.0.0.1:5173",
+      snippet: `vault.example.test {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:5173
+}`,
+    },
+    {
+      id: "cloudflare",
+      labelKey: "runtime.exposure.cloudflare",
+      detailKey: "runtime.exposure.cloudflareDetail",
+      badgeKey: "runtime.exposure.badgeTunnel",
+      target: "http://127.0.0.1:5173",
+      snippet: `tunnel: channel-vault-nas
+credentials-file: /etc/cloudflared/channel-vault-nas.json
+
+ingress:
+  - hostname: vault.example.test
+    service: http://127.0.0.1:5173
+  - service: http_status:404`,
+    },
+  ];
+}
+
 function buildComposeSmokeCommand(fastRepeat: boolean) {
   return [
     "CVN_WEB_PORT=15174",
@@ -10722,6 +11501,7 @@ function operationMissionActionLabel(mission: OperationMission, t: (key: Transla
 
 function operationMissionIcon(id: string): typeof ShieldCheck {
   if (id.includes("register")) return Link2;
+  if (id.includes("security") || id.includes("token")) return ShieldCheck;
   if (id.includes("drift")) return FileCheck2;
   if (id.includes("sidecar")) return FileArchive;
   if (id.includes("pressure")) return HardDrive;
@@ -11060,6 +11840,10 @@ function autoSyncStatusLabel(channel: ChannelDetail | null, t: (key: Translation
   return status;
 }
 
+function effectivePreflightStatus(job: DownloadJob, statusByJobId: Map<number, string>) {
+  return statusByJobId.get(job.id) ?? job.preflight_status;
+}
+
 function preflightLabel(status: string, t: (key: TranslationKey) => string) {
   if (status === "ready") return t("preflight.status.ready");
   if (status === "review") return t("preflight.status.review");
@@ -11224,6 +12008,26 @@ function metadataSchedulerNextTick(
     .replace("{seconds}", String(seconds % 60));
 }
 
+function demoSeedMessage(result: DemoWorkspaceResult, t: (key: TranslationKey) => string) {
+  if (!result.created) {
+    return t("firstRun.demo.exists").replace("{title}", result.channel_title || "Signal Lab");
+  }
+  return t("firstRun.demo.done")
+    .replace("{title}", result.channel_title)
+    .replace("{videos}", String(result.videos_created))
+    .replace("{jobs}", String(result.jobs_created));
+}
+
+function demoClearMessage(result: DemoWorkspaceClearResult, t: (key: TranslationKey) => string) {
+  if (!result.cleared) {
+    return t("demo.workspace.clear.missing");
+  }
+  return t("demo.workspace.clear.done")
+    .replace("{title}", result.channel_title || "Signal Lab")
+    .replace("{files}", String(result.files_removed))
+    .replace("{rows}", String(result.db_rows_removed));
+}
+
 function schedulerLastTick(status: RuntimeSettings["scheduler_status"], t: (key: TranslationKey) => string) {
   const timestamp = status.last_completed_at ?? status.last_started_at;
   if (!timestamp) return t("runtime.scheduler.none");
@@ -11291,6 +12095,78 @@ function sidecarKindLabel(kind: string, t: (key: TranslationKey) => string) {
   if (kind === "nfo") return t("library.sidecar.nfo");
   if (kind === "subtitle") return t("library.sidecar.subtitle");
   return kind;
+}
+
+function mountDoctorPathLabel(id: MountDoctorPath["id"], t: (key: TranslationKey) => string) {
+  return t(`mountDoctor.path.${id}` as TranslationKey);
+}
+
+function mountDoctorPathState(path: MountDoctorPath, t: (key: TranslationKey) => string) {
+  if (path.error) return t("mountDoctor.path.error");
+  if (!path.parent_exists) return t("mountDoctor.path.missing");
+  if (!path.parent_writable || !path.writable) return t("mountDoctor.path.readOnly");
+  if (path.id !== "database" && path.id !== "runtime" && !path.exists) return t("mountDoctor.path.missing");
+  if (path.is_mount) return t("mountDoctor.path.mounted");
+  return t("mountDoctor.path.writable");
+}
+
+function mountDoctorPathTone(path: MountDoctorPath, runningInContainer: boolean) {
+  if (path.error || !path.parent_exists || !path.parent_writable || !path.writable) return "bad";
+  if (path.id !== "database" && path.id !== "runtime" && !path.exists) return "bad";
+  if (runningInContainer && !path.is_mount) return "warn";
+  return "good";
+}
+
+function AuthGate({
+  authMessage,
+  authTokenDraft,
+  onClear,
+  onSubmit,
+  onTokenChange,
+  t,
+}: {
+  authMessage: string;
+  authTokenDraft: string;
+  onClear: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTokenChange: (value: string) => void;
+  t: (key: TranslationKey) => string;
+}) {
+  return (
+    <main className="auth-gate-shell" aria-label={t("auth.gate.aria")}>
+      <section className="auth-gate-panel">
+        <div className="auth-gate-mark">
+          <ShieldCheck size={24} />
+        </div>
+        <p className="panel-kicker">{t("auth.gate.kicker")}</p>
+        <h1>{t("auth.gate.title")}</h1>
+        <span>{t("auth.gate.subtitle")}</span>
+        <form className="auth-gate-form" onSubmit={onSubmit}>
+          <label>
+            {t("auth.gate.input")}
+            <input
+              autoComplete="current-password"
+              autoFocus
+              onChange={(event) => onTokenChange(event.target.value)}
+              placeholder={t("auth.gate.placeholder")}
+              type="password"
+              value={authTokenDraft}
+            />
+          </label>
+          <div className="auth-gate-actions">
+            <button className="primary-action" type="submit">
+              <ShieldCheck size={15} />
+              {t("auth.gate.submit")}
+            </button>
+            <button className="command-button" onClick={onClear} type="button">
+              {t("auth.gate.clear")}
+            </button>
+          </div>
+        </form>
+        {authMessage ? <p className="auth-gate-message">{authMessage}</p> : null}
+      </section>
+    </main>
+  );
 }
 
 function formatBytes(value: number) {

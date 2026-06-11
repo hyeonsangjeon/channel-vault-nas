@@ -12,6 +12,8 @@ const runtimeEnvFile = join(e2eRoot, "runtime.env");
 const backendUrl = `http://127.0.0.1:${backendPort}`;
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const pythonBin = process.env.CVN_E2E_PYTHON ?? "../backend/.venv/bin/python";
+const authToken = process.env.CVN_E2E_AUTH_TOKEN ?? "";
+const skipSeed = process.env.CVN_E2E_SKIP_SEED === "true";
 
 function sh(value: string) {
   return JSON.stringify(value);
@@ -20,17 +22,21 @@ function sh(value: string) {
 const backendCommand = [
   `PYTHON_BIN=${sh(pythonBin)}`,
   `rm -f ${sh(runtimeEnvFile)}`,
-  `CVN_E2E_DB_PATH=${sh(databasePath)} CVN_E2E_ARCHIVE_DIR=${sh(archiveDir)} "$PYTHON_BIN" ../backend/scripts/seed_e2e.py`,
+  `rm -f ${sh(databasePath)} ${sh(`${databasePath}-wal`)} ${sh(`${databasePath}-shm`)}`,
+  `rm -rf ${sh(archiveDir)}`,
+  `mkdir -p ${sh(metadataDir)} ${sh(archiveDir)}`,
+  skipSeed ? ":" : `CVN_E2E_DB_PATH=${sh(databasePath)} CVN_E2E_ARCHIVE_DIR=${sh(archiveDir)} "$PYTHON_BIN" ../backend/scripts/seed_e2e.py`,
   `cd ../backend && ${[
     `CVN_DATABASE_URL=${sh(`sqlite+aiosqlite:///${databasePath}`)}`,
     `CVN_DOWNLOAD_DIR=${sh(archiveDir)}`,
     `CVN_METADATA_DIR=${sh(metadataDir)}`,
     `CVN_RUNTIME_ENV_FILE=${sh(runtimeEnvFile)}`,
+    authToken ? `CVN_AUTH_TOKEN=${sh(authToken)}` : "",
     "CVN_DB_BACKUP_ON_STARTUP=false",
     "CVN_DB_MIGRATE_ON_STARTUP=false",
     `CVN_CORS_ORIGINS=${sh(JSON.stringify([frontendUrl, `http://localhost:${frontendPort}`]))}`,
     `"$PYTHON_BIN" -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
-  ].join(" ")}`,
+  ].filter(Boolean).join(" ")}`,
 ].join(" && ");
 
 export default defineConfig({
