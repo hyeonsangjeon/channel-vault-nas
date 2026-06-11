@@ -68,14 +68,16 @@ Focus: make daily operation smoother.
 
 Focus: NAS deployment confidence.
 
-- Versioned container images (the GHCR `Release images` workflow already builds
-  `api`/`web` images on `v*` tags; the beta goal is a validated, widely
-  published multi-arch image set).
-- Synology/QNAP-oriented install notes.
-- Systemd/supervisor package examples.
-- More restart adapter validation.
-- Backup/restore docs for SQLite plus filesystem sidecars.
-- Broader E2E coverage for token-protected and reverse-proxied deployments.
+- [x] Versioned container images — GHCR `Release images` workflow publishes
+  multi-arch `api`/`web` on `v*` tags (`0.1.0-alpha.1` published).
+- [x] Synology/QNAP-oriented install notes — [`docs/nas-install.md`](nas-install.md).
+- [x] Systemd/supervisor package examples — [`deploy/`](../deploy/README.md).
+- [x] More restart adapter validation — `backend/tests/test_restart_adapter.py`
+  covers command generation + execute-gating for every adapter.
+- [x] Backup/restore docs for SQLite plus filesystem sidecars —
+  [`docs/backup-restore.md`](backup-restore.md).
+- [ ] Broader E2E coverage for token-protected and reverse-proxied deployments
+  (token gate covered by `auth-gate.spec.ts`; reverse-proxy shape still open).
 
 ## Later
 

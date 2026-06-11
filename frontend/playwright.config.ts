@@ -51,6 +51,7 @@ export default defineConfig({
   use: {
     baseURL: frontendUrl,
     locale: "ko-KR",
+    permissions: ["clipboard-read", "clipboard-write"],
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

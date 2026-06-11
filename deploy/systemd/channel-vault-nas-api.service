@@ -1,0 +1,38 @@
+[Unit]
+# Channel Vault NAS API (bare-metal / VM host install, no Docker).
+# For Docker Compose deployments use CVN_RESTART_ADAPTER=docker-compose instead.
+Description=Channel Vault NAS API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust the account and paths to your install. Create a dedicated, non-root user.
+User=channelvault
+Group=channelvault
+WorkingDirectory=/opt/channel-vault-nas/backend
+
+# CVN_* environment lives in an env file (KEY=VALUE per line). The *_HOST_DIR
+# keys in .env.example are Docker Compose-only. For a host install set the
+# in-process keys directly, and pin CVN_DATABASE_URL so the live DB and its
+# backups co-locate on your NAS volume — otherwise the DB defaults to
+# <WorkingDirectory>/metadata/app.db while backups go under CVN_METADATA_DIR:
+#   CVN_AUTH_TOKEN=...
+#   CVN_DATABASE_URL=sqlite+aiosqlite:////volume1/channel-vault-nas/metadata/app.db   # 4 slashes = absolute
+#   CVN_METADATA_DIR=/volume1/channel-vault-nas/metadata
+#   CVN_DOWNLOAD_DIR=/volume1/channel-vault-nas/archive
+#   CVN_RUNTIME_ENV_FILE=/volume1/channel-vault-nas/runtime/.env.runtime
+EnvironmentFile=/opt/channel-vault-nas/.env
+
+# Keep the raw API bound to loopback; publish only the web tier via a reverse proxy.
+# Create the virtualenv first:
+#   cd /opt/channel-vault-nas/backend && python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+ExecStart=/opt/channel-vault-nas/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Restart=on-failure
+RestartSec=5
+# Give long yt-dlp passes time to stop cleanly when the worker is enabled.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
