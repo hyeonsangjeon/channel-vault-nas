@@ -267,7 +267,9 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert library_item.status_code == 200
     assert library_item.json()["id"] == first_video_id
     assert library_files.status_code == 200
+    assert isinstance(library_files.json()[0]["id"], int)
     assert library_files.json()[0]["filename"] == "video.mp4"
+    assert library_files.json()[0]["stream_url"].startswith(f"/api/library/{first_video_id}/files/")
     assert library_files.json()[0]["exists"] is False
     assert library_files.json()[0]["integrity_state"] == "missing_media"
     assert library_files.json()[0]["size_label"].endswith("MB")

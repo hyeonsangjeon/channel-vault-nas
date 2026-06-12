@@ -55,7 +55,8 @@ The project is in active alpha. Dates use Korea Standard Time.
 - Worker history now exposes completed/skipped/failed/slow filters, duration
   threshold querying, and slow-run diagnostic callouts in the queue drawer.
 - Library media details now include an in-app video preview backed by HTTP
-  `Range`-capable streaming for browser seeking.
+  `Range`-capable, per-file streaming for browser seeking and multi-file
+  archives.
 
 ### Changed
 

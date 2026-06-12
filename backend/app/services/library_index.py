@@ -99,6 +99,24 @@ async def first_streamable_file(*, db: AsyncSession, video_id: int, download_dir
     return None
 
 
+async def streamable_file_by_id(
+    *,
+    db: AsyncSession,
+    video_id: int,
+    media_file_id: int,
+    download_dir: str | Path,
+) -> Path | None:
+    """Return one indexed media file by id when it belongs to the video and exists."""
+    media = await db.get(MediaFile, media_file_id)
+    if media is None or media.video_id != video_id:
+        return None
+    root = Path(download_dir).resolve()
+    candidate = _safe_archive_path(root=root, relative_path=media.relative_path)
+    if candidate is not None and candidate.exists() and candidate.is_file():
+        return candidate
+    return None
+
+
 def _video_query(*, channel_id: int | None, query: str | None) -> Select[tuple[Video, Channel]]:
     statement = select(Video, Channel).join(Channel, Video.channel_id == Channel.id)
     if channel_id is not None:
@@ -246,6 +264,7 @@ def _to_library_file(*, media: MediaFile, root: Path) -> LibraryFile:
     expected_sidecars = [item for item in sidecars if item.kind != "subtitle"]
     missing_expected = [item for item in expected_sidecars if not item.exists]
     return LibraryFile(
+        id=media.id,
         video_id=media.video_id,
         relative_path=media.relative_path,
         filename=media.filename,
@@ -267,7 +286,7 @@ def _to_library_file(*, media: MediaFile, root: Path) -> LibraryFile:
         thumbnail_exists=_relative_file_exists(root=root, relative_path=media.thumbnail_path),
         nfo_exists=_relative_file_exists(root=root, relative_path=media.nfo_path),
         sidecars=sidecars,
-        stream_url=f"/api/library/{media.video_id}/stream",
+        stream_url=f"/api/library/{media.video_id}/files/{media.id}/stream",
     )
 
 

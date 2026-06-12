@@ -155,7 +155,8 @@ The library shows archived and missing videos together. It indexes sidecars,
 media files, codec/profile metadata, thumbnails, subtitles, queue state, and
 path integrity. Saved views make repeated NAS checks fast, and portable JSON
 export/import lets operators move useful views between installs. Media detail
-drawers can preview indexed files in-app through a range-capable stream endpoint.
+drawers can preview indexed files in-app through range-capable, per-file stream
+endpoints.
 
 ### Insights
 

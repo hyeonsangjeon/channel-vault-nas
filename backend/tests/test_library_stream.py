@@ -29,17 +29,26 @@ async def test_library_stream_supports_full_and_range_requests(
     run_migrations()
     await init_db()
     monkeypatch.setattr(settings, "download_dir", str(tmp_path))
-    video_id, payload = await _seed_streamable_media(tmp_path)
+    video_id, payload, audio_payload = await _seed_streamable_media(tmp_path)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        files = await client.get(f"/api/library/{video_id}/files")
         full = await client.get(f"/api/library/{video_id}/stream")
         partial = await client.get(f"/api/library/{video_id}/stream", headers={"Range": "bytes=2-5"})
         open_ended = await client.get(f"/api/library/{video_id}/stream", headers={"Range": "bytes=6-"})
         suffix = await client.get(f"/api/library/{video_id}/stream", headers={"Range": "bytes=-4"})
         invalid = await client.get(f"/api/library/{video_id}/stream", headers={"Range": "bytes=999-1000"})
         multi_range = await client.get(f"/api/library/{video_id}/stream", headers={"Range": "bytes=0-1,3-4"})
+        assert files.status_code == 200
+        files_payload = files.json()
+        file_by_name = {item["filename"]: item for item in files_payload}
+        audio_file = file_by_name["audio.m4a"]
+        audio_specific = await client.get(audio_file["stream_url"], headers={"Range": "bytes=0-4"})
+        wrong_video_specific = await client.get(f"/api/library/{video_id + 999}/files/{audio_file['id']}/stream")
 
+    assert file_by_name["video.mp4"]["stream_url"] == f"/api/library/{video_id}/files/{file_by_name['video.mp4']['id']}/stream"
+    assert audio_file["stream_url"] == f"/api/library/{video_id}/files/{audio_file['id']}/stream"
     assert full.status_code == 200
     assert full.headers["accept-ranges"] == "bytes"
     assert full.headers["content-length"] == str(len(payload))
@@ -64,9 +73,13 @@ async def test_library_stream_supports_full_and_range_requests(
     assert invalid.headers["content-range"] == f"bytes */{len(payload)}"
     assert multi_range.status_code == 416
     assert multi_range.headers["content-range"] == f"bytes */{len(payload)}"
+    assert audio_specific.status_code == 206
+    assert audio_specific.headers["content-range"] == f"bytes 0-4/{len(audio_payload)}"
+    assert audio_specific.content == audio_payload[:5]
+    assert wrong_video_specific.status_code == 404
 
 
-async def _seed_streamable_media(tmp_path: Path) -> tuple[int, bytes]:
+async def _seed_streamable_media(tmp_path: Path) -> tuple[int, bytes, bytes]:
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
         await session.execute(delete(DownloadWorkerRun))
@@ -117,9 +130,13 @@ async def _seed_streamable_media(tmp_path: Path) -> tuple[int, bytes]:
 
         relative_path = "channels/@streamlab [UC_STREAM]/2026/Streamable archive clip [streamable01]/video.mp4"
         payload = b"channel-vault-media-bytes"
+        audio_payload = b"channel-vault-audio-bytes"
         media_path = tmp_path / relative_path
         media_path.parent.mkdir(parents=True)
         media_path.write_bytes(payload)
+        audio_relative_path = "channels/@streamlab [UC_STREAM]/2026/Streamable archive clip [streamable01]/audio.m4a"
+        audio_path = tmp_path / audio_relative_path
+        audio_path.write_bytes(audio_payload)
 
         session.add(
             MediaFile(
@@ -138,7 +155,28 @@ async def _seed_streamable_media(tmp_path: Path) -> tuple[int, bytes]:
                 nfo_path=None,
                 thumbnail_path=None,
                 checksum=None,
+                created_at=datetime(2026, 6, 1, 12, 1, tzinfo=UTC),
+            )
+        )
+        session.add(
+            MediaFile(
+                video_id=video.id,
+                relative_path=audio_relative_path,
+                filename="audio.m4a",
+                size_bytes=len(audio_payload),
+                container="m4a",
+                video_codec=None,
+                audio_codec="aac",
+                fps=None,
+                width=None,
+                height=None,
+                duration_seconds=42,
+                info_json_path=None,
+                nfo_path=None,
+                thumbnail_path=None,
+                checksum=None,
+                created_at=datetime(2026, 6, 1, 12, 0, tzinfo=UTC),
             )
         )
         await session.commit()
-        return video.id, payload
+        return video.id, payload, audio_payload

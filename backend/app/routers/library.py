@@ -29,6 +29,7 @@ from app.services.library_index import (
     first_streamable_file,
     get_library_item,
     list_library_files,
+    streamable_file_by_id,
 )
 from app.services.library_views import (
     delete_library_view,
@@ -125,6 +126,25 @@ async def stream_library_video(
 ) -> Response:
     """Stream the first indexed media file when it exists on disk."""
     media_path = await first_streamable_file(db=db, video_id=video_id, download_dir=settings.download_dir)
+    if media_path is None:
+        raise HTTPException(status_code=404, detail="Media file not found.")
+    return _stream_file(media_path, range_header)
+
+
+@router.get("/{video_id:int}/files/{media_file_id:int}/stream")
+async def stream_library_media_file(
+    video_id: int,
+    media_file_id: int,
+    db: DbSession,
+    range_header: Annotated[str | None, Header(alias="Range")] = None,
+) -> Response:
+    """Stream one indexed media file when it belongs to the video and exists."""
+    media_path = await streamable_file_by_id(
+        db=db,
+        video_id=video_id,
+        media_file_id=media_file_id,
+        download_dir=settings.download_dir,
+    )
     if media_path is None:
         raise HTTPException(status_code=404, detail="Media file not found.")
     return _stream_file(media_path, range_header)
