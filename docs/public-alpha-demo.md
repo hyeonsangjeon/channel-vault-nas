@@ -160,3 +160,11 @@ For Docker Compose:
 ```bash
 CVN_COMPOSE_SMOKE_CLEANUP=true scripts/compose-smoke.sh
 ```
+
+For a running LAN/NAS/reverse-proxy deployment:
+
+```bash
+CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \
+CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \
+scripts/deployment-smoke.sh
+```
