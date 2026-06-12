@@ -6,6 +6,7 @@ BACKEND_PY="${CVN_PUBLIC_ALPHA_BACKEND_PY:-$ROOT_DIR/backend/.venv/bin/python}"
 BACKEND_RUFF="${CVN_PUBLIC_ALPHA_RUFF:-$ROOT_DIR/backend/.venv/bin/ruff}"
 BACKEND_PYTEST="${CVN_PUBLIC_ALPHA_PYTEST:-$ROOT_DIR/backend/.venv/bin/pytest}"
 PLAYWRIGHT_PROJECT="${CVN_PUBLIC_ALPHA_BROWSER_PROJECT:-chromium}"
+PUBLIC_ALPHA_AUTH_TOKEN="${CVN_PUBLIC_ALPHA_AUTH_TOKEN:-cvn-public-alpha-check-operator-token}"
 
 run_step() {
   local label="$1"
@@ -90,7 +91,10 @@ run_step "frontend build" bash -lc "cd frontend && npm run build"
 if [[ "${CVN_PUBLIC_ALPHA_SKIP_BROWSER:-false}" == "true" ]]; then
   printf "\n==> browser smoke skipped by CVN_PUBLIC_ALPHA_SKIP_BROWSER=true\n"
 else
-  run_step "browser smoke (${PLAYWRIGHT_PROJECT})" bash -lc "cd frontend && npm run e2e:smoke -- --project=${PLAYWRIGHT_PROJECT}"
+  quoted_project="$(printf "%q" "$PLAYWRIGHT_PROJECT")"
+  quoted_auth_token="$(printf "%q" "$PUBLIC_ALPHA_AUTH_TOKEN")"
+  run_step "browser smoke (${PLAYWRIGHT_PROJECT})" bash -lc "cd frontend && npm run e2e:smoke -- --project=${quoted_project}"
+  run_step "browser auth gate (${PLAYWRIGHT_PROJECT})" bash -lc "cd frontend && CVN_E2E_AUTH_TOKEN=${quoted_auth_token} npm run e2e:auth -- --project=${quoted_project}"
 fi
 
 run_step "diff whitespace" git diff --check

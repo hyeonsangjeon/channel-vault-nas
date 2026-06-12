@@ -151,6 +151,7 @@ pytest -q
 cd frontend
 npm run build
 npm run e2e:smoke -- --project=chromium
+CVN_E2E_AUTH_TOKEN=cvn-local-test-token npm run e2e:auth -- --project=chromium
 CVN_CAPTURE_PUBLIC_SCREENSHOTS=true npx playwright test e2e/public-screenshots.spec.ts --project=chromium
 ```
 
