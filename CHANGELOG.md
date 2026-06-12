@@ -43,6 +43,8 @@ The project is in active alpha. Dates use Korea Standard Time.
   generation and execute-gating.
 - Beta readiness onboarding surfaces: clean-install gate, runtime guide section
   rail, backup confidence panel, and a redacted Dashboard proof export.
+- Protected access E2E now verifies API `401`/`200` behavior plus browser unlock
+  and runs in CI/public-alpha checks with a non-secret test token.
 
 ### Changed
 

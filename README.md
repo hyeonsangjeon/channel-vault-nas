@@ -537,6 +537,17 @@ SQLite DB, and temporary NAS fixture, then verifies registration, queue actions,
 library views, runtime/tick surfaces, storage scan panels, worker controls, and
 rescan flows on desktop and mobile.
 
+Protected access smoke:
+
+```bash
+cd frontend
+CVN_E2E_AUTH_TOKEN=cvn-local-test-token npm run e2e:auth -- --project=chromium
+```
+
+This starts the same isolated stack with `CVN_AUTH_TOKEN` enabled, verifies that
+unauthenticated API calls return `401`, verifies bearer and `X-CVN-Token`
+requests, and confirms the browser access gate unlocks the console.
+
 Public-alpha release gate:
 
 ```bash
@@ -544,7 +555,7 @@ scripts/public-alpha-check.sh
 ```
 
 This runs backend lint/tests, locale key consistency, frontend build, Chromium
-browser smoke, and `git diff --check`. Set
+browser smoke, protected access smoke, and `git diff --check`. Set
 `CVN_PUBLIC_ALPHA_SKIP_BROWSER=true` when you only need the fast non-browser
 checks.
 

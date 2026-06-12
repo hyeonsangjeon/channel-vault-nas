@@ -78,8 +78,11 @@ Focus: NAS deployment confidence.
   [`docs/backup-restore.md`](backup-restore.md).
 - [x] Beta onboarding surfaces — clean-install gate, runtime guide section rail,
   backup confidence panel, and redacted Dashboard proof export.
-- [ ] Broader E2E coverage for token-protected and reverse-proxied deployments
-  (token gate covered by `auth-gate.spec.ts`; reverse-proxy shape still open).
+- [x] Token-protected E2E coverage — `auth-gate.spec.ts` checks API `401`/`200`
+  behavior and browser unlock, and runs in CI/public-alpha checks with a test
+  token.
+- [ ] Live reverse-proxy host smoke beyond the Compose proxy contract and
+  runtime guide cookbook.
 
 ## Later
 
