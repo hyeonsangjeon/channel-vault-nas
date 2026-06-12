@@ -60,6 +60,7 @@ import {
   cancelDownloadJob,
   deleteLibraryView,
   enqueueVideoDownload,
+  exportLibraryViews,
   getChannel,
   getChannelCadence,
   getChannelCoverage,
@@ -87,6 +88,7 @@ import {
   getStorageScan,
   getSupportBundle,
   getSyncJobs,
+  importLibraryViews,
   probeChannel,
   pruneMissingStorageIndex,
   pruneMetadataSyncTicks,
@@ -141,6 +143,8 @@ import {
   type LibraryItem,
   type LibraryFile,
   type LibrarySavedView,
+  type LibrarySavedViewBundle,
+  type LibrarySavedViewPayload,
   type LibrarySnapshot,
   type QueuePreflightPlan,
   type RescanApplyResult,
@@ -540,6 +544,8 @@ function App() {
   const [savedLibraryViews, setSavedLibraryViews] = useState<SavedLibraryView[]>(() => loadSavedLibraryViews());
   const [activeSavedLibraryViewId, setActiveSavedLibraryViewId] = useState<string | null>(null);
   const [libraryViewNameDraft, setLibraryViewNameDraft] = useState("");
+  const [libraryViewShareStatus, setLibraryViewShareStatus] = useState<CopyStatus>("idle");
+  const [libraryViewImportStatus, setLibraryViewImportStatus] = useState<"idle" | "importing" | "done" | "error">("idle");
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<LibraryItem | null>(null);
   const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryDetailStatus, setLibraryDetailStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -648,6 +654,7 @@ function App() {
   const registeredChannelIdRef = useRef<number | null>(null);
   const applyingRouteHashRef = useRef(false);
   const librarySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const libraryViewImportInputRef = useRef<HTMLInputElement | null>(null);
   const accessGuardRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -4264,6 +4271,74 @@ function App() {
     } catch (error) {
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function loadLibraryViewBundle(): Promise<LibrarySavedViewBundle> {
+    try {
+      return await exportLibraryViews();
+    } catch (error) {
+      if (handleAuthFailure(error)) throw error;
+      return buildLocalLibraryViewBundle(savedLibraryViews);
+    }
+  }
+
+  async function handleCopyLibraryViews() {
+    try {
+      await copyTextToClipboard(JSON.stringify(await loadLibraryViewBundle(), null, 2));
+      setLibraryViewShareStatus("copied");
+      window.setTimeout(() => setLibraryViewShareStatus("idle"), 1800);
+    } catch {
+      setLibraryViewShareStatus("error");
+      window.setTimeout(() => setLibraryViewShareStatus("idle"), 2200);
+    }
+  }
+
+  async function handleDownloadLibraryViews() {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      downloadTextFile(
+        `channel-vault-library-views-${timestamp}.json`,
+        JSON.stringify(await loadLibraryViewBundle(), null, 2),
+        "application/json;charset=utf-8",
+      );
+    } catch {
+      setLibraryViewShareStatus("error");
+      window.setTimeout(() => setLibraryViewShareStatus("idle"), 2200);
+    }
+  }
+
+  function handleChooseLibraryViewImport() {
+    libraryViewImportInputRef.current?.click();
+  }
+
+  async function handleImportLibraryViews(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setLibraryViewImportStatus("importing");
+      const payload = parseLibraryViewImportPayload(JSON.parse(await file.text()));
+      const imported = await importLibraryViews(payload);
+      setSavedLibraryViews(imported.views.map(toSavedLibraryView).slice(0, 10));
+      setWorkflowStatus("idle");
+      setWorkflowMessage(
+        t("library.saved.imported")
+          .replace("{count}", String(imported.imported_count))
+          .replace("{skipped}", String(imported.skipped_count)),
+      );
+      setLibraryViewImportStatus("done");
+      window.setTimeout(() => setLibraryViewImportStatus("idle"), 1800);
+    } catch (error) {
+      if (handleAuthFailure(error)) {
+        setLibraryViewImportStatus("error");
+        window.setTimeout(() => setLibraryViewImportStatus("idle"), 2200);
+        return;
+      }
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("library.saved.importError"));
+      setLibraryViewImportStatus("error");
+      window.setTimeout(() => setLibraryViewImportStatus("idle"), 2200);
     }
   }
 
@@ -7914,6 +7989,37 @@ function App() {
                 <Bookmark size={13} />
                 {t("library.saved.overwrite")}
               </button>
+              <div className="library-view-share-actions" aria-label={t("library.saved.share")}>
+                <button onClick={() => void handleCopyLibraryViews()} type="button">
+                  <ClipboardList size={13} />
+                  {libraryViewShareStatus === "copied"
+                    ? t("library.saved.copied")
+                    : libraryViewShareStatus === "error"
+                      ? t("library.saved.copyError")
+                      : t("library.saved.copy")}
+                </button>
+                <button onClick={() => void handleDownloadLibraryViews()} type="button">
+                  <Download size={13} />
+                  {t("library.saved.download")}
+                </button>
+                <button onClick={handleChooseLibraryViewImport} type="button">
+                  <FileArchive size={13} />
+                  {libraryViewImportStatus === "importing"
+                    ? t("library.saved.importing")
+                    : libraryViewImportStatus === "done"
+                      ? t("library.saved.importDone")
+                      : libraryViewImportStatus === "error"
+                        ? t("library.saved.importErrorShort")
+                        : t("library.saved.import")}
+                </button>
+                <input
+                  accept="application/json,.json"
+                  aria-label={t("library.saved.importInput")}
+                  onChange={(event) => void handleImportLibraryViews(event)}
+                  ref={libraryViewImportInputRef}
+                  type="file"
+                />
+              </div>
               {savedLibraryViews.map((view) => (
                 <div className={`saved-view-pill ${activeSavedLibraryViewId === view.id ? "active" : ""}`} key={view.id}>
                   <button onClick={() => handleApplySavedLibraryView(view)} type="button">
@@ -11404,6 +11510,61 @@ function loadSavedLibraryViews(): SavedLibraryView[] {
   } catch {
     return [];
   }
+}
+
+function buildLocalLibraryViewBundle(views: SavedLibraryView[]): LibrarySavedViewBundle {
+  const exported = views.slice(0, 50).map(savedLibraryViewToPayload);
+  return {
+    kind: "channel_vault_library_views",
+    version: 1,
+    generated_at: new Date().toISOString(),
+    count: exported.length,
+    views: exported,
+  };
+}
+
+function savedLibraryViewToPayload(view: SavedLibraryView): LibrarySavedViewPayload {
+  return {
+    name: view.name,
+    query: view.query,
+    integrity: view.integrity,
+    sidecar: view.sidecar,
+    codec: view.codec,
+  };
+}
+
+function parseLibraryViewImportPayload(value: unknown): LibrarySavedViewPayload[] {
+  const candidateViews = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" && Array.isArray((value as { views?: unknown }).views)
+      ? (value as { views: unknown[] }).views
+      : [];
+  const parsed = candidateViews
+    .map(parseLibraryViewPayload)
+    .filter((view): view is LibrarySavedViewPayload => Boolean(view))
+    .slice(0, 50);
+  if (!parsed.length) {
+    throw new Error("No saved library views found in JSON.");
+  }
+  return parsed;
+}
+
+function parseLibraryViewPayload(value: unknown): LibrarySavedViewPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const name = stringValue(record.name).trim();
+  if (!name) return null;
+  return {
+    name,
+    query: stringValue(record.query),
+    integrity: normalizeLibraryIntegrity(stringValue(record.integrity)),
+    sidecar: normalizeLibrarySidecar(stringValue(record.sidecar)),
+    codec: stringValue(record.codec),
+  };
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function loadArchiveTxtDraft(): string {

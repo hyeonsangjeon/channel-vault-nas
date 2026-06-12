@@ -8097,6 +8097,37 @@ button {
   opacity: 0.45;
 }
 
+.library-view-share-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.library-view-share-actions button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: #ddd6fe;
+  background: rgba(167, 139, 250, 0.075);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.library-view-share-actions button:hover {
+  border-color: rgba(167, 139, 250, 0.36);
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.library-view-share-actions input {
+  display: none;
+}
+
 .saved-view-pill {
   display: inline-flex;
   align-items: center;

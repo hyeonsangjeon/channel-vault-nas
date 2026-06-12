@@ -621,6 +621,22 @@ export type LibrarySavedViewPayload = {
   codec: string;
 };
 
+export type LibrarySavedViewBundle = {
+  kind: "channel_vault_library_views";
+  version: number;
+  generated_at: string;
+  count: number;
+  views: LibrarySavedViewPayload[];
+};
+
+export type LibrarySavedViewImportResult = {
+  imported_count: number;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  views: LibrarySavedView[];
+};
+
 export type LibrarySidecar = {
   kind: string;
   relative_path: string;
@@ -1326,6 +1342,14 @@ export async function deleteLibraryView(viewId: number): Promise<{ deleted: bool
     headers: authHeaders(),
   });
   return readJsonResponse<{ deleted: boolean }>(response);
+}
+
+export async function exportLibraryViews(): Promise<LibrarySavedViewBundle> {
+  return getJson("/api/library/views/export");
+}
+
+export async function importLibraryViews(views: LibrarySavedViewPayload[]): Promise<LibrarySavedViewImportResult> {
+  return postJson("/api/library/views/import", { views });
 }
 
 export async function getLibraryFiles(videoId: number): Promise<LibraryFile[]> {

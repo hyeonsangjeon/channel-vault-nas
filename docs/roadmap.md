@@ -55,7 +55,8 @@ Exit criteria:
 
 Focus: make daily operation smoother.
 
-- Saved library views become shareable/exportable.
+- [x] Saved library views become shareable/exportable via portable JSON copy,
+  download, and import.
 - Queue drawer gets richer failed/skipped/completed filters and slow-run
   diagnostics.
 - Storage scanner adds safer guided repair flows for orphan sidecars and

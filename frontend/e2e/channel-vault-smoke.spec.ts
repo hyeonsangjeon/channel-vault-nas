@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
+import { writeFileSync } from "node:fs";
 
 test.setTimeout(90_000);
 
@@ -577,6 +578,35 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   );
   await page.getByRole("button", { name: "덮어쓰기" }).click();
   expect((await (await overwrittenView).json()).name).toBe("무자막 h264");
+  await page.getByRole("button", { name: "JSON 복사" }).click();
+  await expect(page.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
+  const savedViewBundleText = await page.evaluate(() => navigator.clipboard.readText());
+  const savedViewBundle = JSON.parse(savedViewBundleText);
+  expect(savedViewBundle.kind).toBe("channel_vault_library_views");
+  expect(savedViewBundle.views.some((view: { name: string }) => view.name === "무자막 h264")).toBe(true);
+  const savedViewDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "JSON 다운로드" }).click();
+  expect((await savedViewDownload).suggestedFilename()).toContain("channel-vault-library-views");
+  const savedViewImportPath = testInfo.outputPath("saved-library-views-import.json");
+  writeFileSync(
+    savedViewImportPath,
+    JSON.stringify({
+      kind: "channel_vault_library_views",
+      version: 1,
+      views: [
+        {
+          name: "실패한 1080p",
+          query: "failed",
+          integrity: "missing_media",
+          sidecar: "all",
+          codec: "1080p",
+        },
+      ],
+    }),
+  );
+  await page.getByLabel("저장 뷰 JSON 가져오기").setInputFiles(savedViewImportPath);
+  await expect(page.getByRole("button", { name: "가져옴" })).toBeVisible();
+  await expect(page.locator(".saved-view-pill").filter({ hasText: "실패한 1080p" })).toBeVisible();
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("h264 1080p");
   await page.screenshot({ path: testInfo.outputPath("library-filtered.png"), fullPage: true });
   await page.locator(".library-card").filter({ hasText: "Golden hour archive" }).click();
