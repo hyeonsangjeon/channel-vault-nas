@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 import { writeFileSync } from "node:fs";
 
@@ -13,6 +13,12 @@ function watchBrowserErrors(page: Page) {
   });
   page.on("pageerror", (error) => errors.push(error.message));
   return errors;
+}
+
+async function dispatchButtonClick(button: Locator) {
+  await button.evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
 }
 
 async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
@@ -394,11 +400,11 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(exposureCookbook).toContainText("scripts/deployment-smoke.sh");
   const deploymentSmokeCopyButton = exposureCookbook.getByRole("button", { name: "배포 smoke 복사" });
   await expect(deploymentSmokeCopyButton).toBeVisible();
-  await deploymentSmokeCopyButton.click();
+  await dispatchButtonClick(deploymentSmokeCopyButton);
   await expect(deploymentSmokeCopyButton).toContainText("복사됨");
   const nginxProxyCopyButton = exposureCookbook.getByRole("button", { name: "프록시 복사 Nginx" });
   await expect(nginxProxyCopyButton).toBeVisible();
-  await nginxProxyCopyButton.click();
+  await dispatchButtonClick(nginxProxyCopyButton);
   await expect(nginxProxyCopyButton).toContainText("복사됨");
   await expect(runtimeGuide.getByText("Restart adapter 프리셋")).toBeVisible();
   await expect(runtimeGuide.getByText("Synology 패키지")).toBeVisible();
