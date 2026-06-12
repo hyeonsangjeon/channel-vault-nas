@@ -610,6 +610,7 @@ function App() {
     id: string;
     status: CopyStatus;
   } | null>(null);
+  const [runtimeDeploymentSmokeCopyStatus, setRuntimeDeploymentSmokeCopyStatus] = useState<CopyStatus>("idle");
   const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -2855,6 +2856,17 @@ function App() {
     } catch {
       setRuntimeProxyCopyStatus({ id: preset.id, status: "error" });
       window.setTimeout(() => setRuntimeProxyCopyStatus(null), 2200);
+    }
+  }
+
+  async function handleCopyDeploymentSmokeCommand() {
+    try {
+      await copyTextToClipboard(DEPLOYMENT_SMOKE_COMMAND);
+      setRuntimeDeploymentSmokeCopyStatus("copied");
+      window.setTimeout(() => setRuntimeDeploymentSmokeCopyStatus("idle"), 1800);
+    } catch {
+      setRuntimeDeploymentSmokeCopyStatus("error");
+      window.setTimeout(() => setRuntimeDeploymentSmokeCopyStatus("idle"), 2200);
     }
   }
 
@@ -9765,6 +9777,32 @@ function App() {
                 </div>
                 <code>CVN_API_PORT=127.0.0.1:8000</code>
               </div>
+              <div className="runtime-exposure-smoke">
+                <div className="runtime-exposure-card-head">
+                  <div>
+                    <strong>{t("runtime.exposure.smokeTitle")}</strong>
+                    <span>{t("runtime.exposure.smokeDetail")}</span>
+                  </div>
+                  <small>{t("runtime.exposure.smokeBadge")}</small>
+                </div>
+                <code>{DEPLOYMENT_SMOKE_COMMAND}</code>
+                <div className="runtime-exposure-card-foot">
+                  <span>{t("runtime.exposure.smokeCovers")}</span>
+                  <button
+                    aria-label={t("runtime.exposure.smokeCopy")}
+                    className="runtime-copy-button"
+                    onClick={() => void handleCopyDeploymentSmokeCommand()}
+                    type="button"
+                  >
+                    <ClipboardList size={14} />
+                    {runtimeDeploymentSmokeCopyStatus === "copied"
+                      ? t("runtime.exposure.smokeCopied")
+                      : runtimeDeploymentSmokeCopyStatus === "error"
+                        ? t("runtime.exposure.copyError")
+                        : t("runtime.exposure.smokeCopy")}
+                  </button>
+                </div>
+              </div>
               <div className="runtime-exposure-grid">
                 {runtimeExposureProxyPresets.map((preset) => {
                   const copyState = runtimeProxyCopyStatus?.id === preset.id ? runtimeProxyCopyStatus.status : "idle";
@@ -11700,6 +11738,13 @@ const ACCESS_TOKEN_SMOKE_COMMAND = [
   "curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8000/api/dashboard   # expect 401",
   "# 2) With the operator token exported, the same request succeeds",
   'curl -s -o /dev/null -w \'%{http_code}\\n\' -H "Authorization: Bearer $CVN_AUTH_TOKEN" http://127.0.0.1:8000/api/dashboard   # expect 200',
+].join("\n");
+
+const DEPLOYMENT_SMOKE_COMMAND = [
+  "CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \\",
+  'CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \\',
+  "CVN_DEPLOYMENT_SMOKE_FORBIDDEN_API_URL=http://vault.example.test:8000 \\",
+  "scripts/deployment-smoke.sh",
 ].join("\n");
 
 function generateAccessToken(): string {

@@ -3614,6 +3614,17 @@ button {
   margin-top: 10px;
 }
 
+.runtime-exposure-smoke {
+  min-width: 0;
+  margin-top: 10px;
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.075), rgba(56, 189, 248, 0.045)),
+    rgba(2, 6, 12, 0.3);
+}
+
 .runtime-exposure-grid article {
   min-width: 0;
   border: 1px solid rgba(56, 189, 248, 0.13);
@@ -3643,6 +3654,7 @@ button {
 .runtime-exposure-card-head span,
 .runtime-exposure-card-head small,
 .runtime-exposure-card-foot span,
+.runtime-exposure-smoke code,
 .runtime-exposure-grid code {
   display: block;
   overflow-wrap: anywhere;
@@ -3671,7 +3683,8 @@ button {
   white-space: nowrap;
 }
 
-.runtime-exposure-grid > article > code {
+.runtime-exposure-grid > article > code,
+.runtime-exposure-smoke > code {
   margin-top: 8px;
   max-height: 210px;
   overflow: auto;
@@ -3682,6 +3695,12 @@ button {
   font-size: 0.62rem;
   line-height: 1.45;
   white-space: pre;
+}
+
+.runtime-exposure-smoke > code {
+  border-left-color: rgba(52, 211, 153, 0.68);
+  color: #d1fae5;
+  background: rgba(52, 211, 153, 0.055);
 }
 
 .runtime-token-setup {
