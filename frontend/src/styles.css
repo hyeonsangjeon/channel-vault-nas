@@ -7379,7 +7379,7 @@ button {
 
 .worker-history-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -7730,6 +7730,13 @@ button {
     rgba(255, 255, 255, 0.035);
 }
 
+.worker-history-card.slow-run {
+  border-color: rgba(250, 204, 21, 0.22);
+  background:
+    linear-gradient(90deg, rgba(250, 204, 21, 0.1), transparent 70%),
+    rgba(255, 255, 255, 0.035);
+}
+
 .worker-history-card-head {
   display: flex;
   align-items: flex-start;
@@ -7793,6 +7800,18 @@ button {
   padding: 8px 9px;
   color: #f8df9c;
   background: rgba(245, 158, 11, 0.07);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.worker-history-slow {
+  display: block;
+  margin-top: 10px;
+  border-left: 2px solid var(--color-warning);
+  padding: 8px 9px;
+  color: #fde68a;
+  background: rgba(250, 204, 21, 0.075);
   font-size: 0.68rem;
   line-height: 1.45;
   overflow-wrap: anywhere;

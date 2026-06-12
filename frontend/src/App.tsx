@@ -189,6 +189,7 @@ import { languages, useI18n, type Language, type TranslationKey } from "./i18n";
 
 const qualityOptions = ["720p", "1080p", "best"];
 const DEMO_WORKSPACE_EXTERNAL_ID = "UC_CVN_DEMO_SIGNAL";
+const workerSlowRunThresholdSeconds = 10;
 type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
 type NavId = "dashboard" | "channels" | "library" | "queue" | "insights" | "settings";
 
@@ -202,7 +203,7 @@ const navItems: { key: TranslationKey; id: NavId }[] = [
 ];
 
 type ChannelDetailTab = "overview" | "downloads" | "library" | "logs" | "policy";
-type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
+type WorkerHistoryFilter = "all" | "failed" | "completed" | "skipped" | "slow" | "dry_run" | "live";
 type ArchiveEventFilter = "all" | "download" | "sync" | "library" | "storage" | "runtime" | "policy" | "failure";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
@@ -320,6 +321,9 @@ const retentionPresetValues = [100, 200, 500, 1000];
 const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "worker.history.filter.all" },
   { id: "failed", labelKey: "worker.history.filter.failed" },
+  { id: "completed", labelKey: "worker.history.filter.completed" },
+  { id: "skipped", labelKey: "worker.history.filter.skipped" },
+  { id: "slow", labelKey: "worker.history.filter.slow" },
   { id: "dry_run", labelKey: "worker.history.filter.dryRun" },
   { id: "live", labelKey: "worker.history.filter.live" },
 ];
@@ -1191,6 +1195,9 @@ function App() {
     () => ({
       total: workerHistoryRuns.length,
       failed: workerHistoryRuns.filter((run) => run.status === "failed" || run.failed_count > 0).length,
+      completed: workerHistoryRuns.filter((run) => run.status === "completed").length,
+      skipped: workerHistoryRuns.filter((run) => run.status === "skipped" || Boolean(run.skipped_reason)).length,
+      slow: workerHistoryRuns.filter((run) => (run.duration_seconds ?? 0) >= workerSlowRunThresholdSeconds).length,
       live: workerHistoryRuns.filter((run) => !run.dry_run).length,
       dryRun: workerHistoryRuns.filter((run) => run.dry_run).length,
     }),
@@ -11350,6 +11357,18 @@ function App() {
                 <strong>{workerHistorySummary.failed}</strong>
               </article>
               <article>
+                <span>{t("worker.history.filter.completed")}</span>
+                <strong>{workerHistorySummary.completed}</strong>
+              </article>
+              <article>
+                <span>{t("worker.history.filter.skipped")}</span>
+                <strong>{workerHistorySummary.skipped}</strong>
+              </article>
+              <article>
+                <span>{t("worker.history.filter.slow")}</span>
+                <strong>{workerHistorySummary.slow}</strong>
+              </article>
+              <article>
                 <span>{t("worker.history.filter.live")}</span>
                 <strong>{workerHistorySummary.live}</strong>
               </article>
@@ -11361,7 +11380,10 @@ function App() {
 
             <div className="worker-history-list">
               {workerHistoryRuns.map((run) => (
-                <article className={`worker-history-card ${run.failed_count ? "failed-run" : run.status}`} key={run.id}>
+                <article
+                  className={`worker-history-card ${run.failed_count ? "failed-run" : run.status} ${(run.duration_seconds ?? 0) >= workerSlowRunThresholdSeconds ? "slow-run" : ""}`}
+                  key={run.id}
+                >
                   <div className="worker-history-card-head">
                     <div>
                       <strong>{run.status}</strong>
@@ -11388,6 +11410,13 @@ function App() {
                   {run.skipped_reason ? (
                     <code className="worker-history-reason">
                       {t("worker.history.skipped")} · {run.skipped_reason}
+                    </code>
+                  ) : null}
+                  {(run.duration_seconds ?? 0) >= workerSlowRunThresholdSeconds ? (
+                    <code className="worker-history-slow">
+                      {t("worker.history.slowDiagnostic")
+                        .replace("{duration}", formatDuration(run.duration_seconds ?? 0))
+                        .replace("{threshold}", formatDuration(workerSlowRunThresholdSeconds))}
                     </code>
                   ) : null}
                 </article>
@@ -12818,6 +12847,9 @@ function isSelectableQueueJob(job: DownloadJob) {
 
 function workerHistoryQuery(filter: WorkerHistoryFilter): DownloadWorkerRunFilters {
   if (filter === "failed") return { failed_only: true };
+  if (filter === "completed") return { status: "completed" };
+  if (filter === "skipped") return { status: "skipped" };
+  if (filter === "slow") return { min_duration_seconds: workerSlowRunThresholdSeconds };
   if (filter === "dry_run") return { dry_run: true };
   if (filter === "live") return { dry_run: false };
   return {};

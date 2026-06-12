@@ -652,6 +652,25 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await downloadSummary.getByRole("button", { name: "닫기" }).click();
   await page.locator(".worker-run-ledger").getByRole("button", { name: "열기" }).click();
   await expect(page.getByLabel("워커 히스토리")).toBeVisible();
+  const workerHistoryFilters = page.locator(".worker-history-filters");
+  await expect(workerHistoryFilters.getByRole("button", { name: "완료" })).toBeVisible();
+  await expect(workerHistoryFilters.getByRole("button", { name: "건너뜀" })).toBeVisible();
+  await expect(workerHistoryFilters.getByRole("button", { name: "느림" })).toBeVisible();
+  const completedRunsResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/jobs/downloads/worker/runs") && response.url().includes("status=completed"),
+  );
+  await workerHistoryFilters.getByRole("button", { name: "완료" }).click();
+  expect((await completedRunsResponse).status()).toBe(200);
+  const skippedRunsResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/jobs/downloads/worker/runs") && response.url().includes("status=skipped"),
+  );
+  await workerHistoryFilters.getByRole("button", { name: "건너뜀" }).click();
+  expect((await skippedRunsResponse).status()).toBe(200);
+  const slowRunsResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/jobs/downloads/worker/runs") && response.url().includes("min_duration_seconds=10"),
+  );
+  await workerHistoryFilters.getByRole("button", { name: "느림" }).click();
+  expect((await slowRunsResponse).status()).toBe(200);
   await page.locator(".worker-history-filters").getByRole("button", { name: "드라이런" }).click();
   await expect(page.locator(".worker-history-card").first()).toContainText("locked");
   await page.screenshot({ path: testInfo.outputPath("worker-history.png"), fullPage: true });

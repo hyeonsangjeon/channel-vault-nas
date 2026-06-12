@@ -1239,6 +1239,7 @@ export type DownloadWorkerRunFilters = {
   status?: string;
   dry_run?: boolean;
   failed_only?: boolean;
+  min_duration_seconds?: number;
 };
 
 export async function getDownloadWorkerRuns(
@@ -1252,6 +1253,9 @@ export async function getDownloadWorkerRuns(
   if (filters.status) params.set("status", filters.status);
   if (typeof filters.dry_run === "boolean") params.set("dry_run", String(filters.dry_run));
   if (filters.failed_only) params.set("failed_only", "true");
+  if (typeof filters.min_duration_seconds === "number") {
+    params.set("min_duration_seconds", String(filters.min_duration_seconds));
+  }
   return getJson(`/api/jobs/downloads/worker/runs?${params}`);
 }
 
