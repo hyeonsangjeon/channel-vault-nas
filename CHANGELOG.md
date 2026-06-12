@@ -36,6 +36,9 @@ The project is in active alpha. Dates use Korea Standard Time.
   images`, triggered on `v*` tags) plus pull-based Docker Compose and direct
   `docker run` install modes via the `CVN_API_IMAGE` / `CVN_WEB_IMAGE`
   overrides.
+- Docker Hub `0.1.0-alpha.1` mirror publication and pull-based Compose smoke
+  verification for `modenaf360/channel-vault-nas-api` and
+  `modenaf360/channel-vault-nas-web`.
 - NAS deployment-confidence docs and examples: Synology/QNAP install guide
   (`docs/nas-install.md`), systemd/supervisor service examples (`deploy/`), and a
   SQLite + sidecar backup/restore runbook (`docs/backup-restore.md`).

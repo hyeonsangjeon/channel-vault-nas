@@ -116,7 +116,12 @@ wait_for_url "api health" "http://${API_HOST}:${API_PORT}/api/health"
 wait_for_url "proxied api health" "http://${WEB_HOST}:${WEB_PORT}/api/health"
 wait_for_url "web root" "http://${WEB_HOST}:${WEB_PORT}/"
 
-restart_adapter_json="$(curl -fsS "http://${WEB_HOST}:${WEB_PORT}/api/settings/runtime/restart")"
+runtime_curl_args=(-fsS)
+if [[ -n "${CVN_AUTH_TOKEN:-}" ]]; then
+  runtime_curl_args+=(-H "Authorization: Bearer ${CVN_AUTH_TOKEN}")
+fi
+
+restart_adapter_json="$(curl "${runtime_curl_args[@]}" "http://${WEB_HOST}:${WEB_PORT}/api/settings/runtime/restart")"
 if command -v python3 >/dev/null 2>&1; then
   RESTART_ADAPTER_JSON="$restart_adapter_json" python3 - <<'PY'
 import json

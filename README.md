@@ -55,14 +55,14 @@ This is an active alpha. The core loop is working locally:
 - Library index with media files, sidecar fidelity, codec/profile filters, in-app preview, and portable saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
-- Versioned Docker Hub and GHCR images for the guarded public alpha prerelease
+- Versioned Docker Hub and GHCR images for the guarded public alpha prerelease,
+  with Docker Hub pull-based Compose smoke verified
 
 Not ready yet:
 
 - Multi-user auth/session hardening for exposed networks
 - Published demo video/GIF assets
-- Anonymous Docker Hub and GHCR pull verification on the first public package
-  visibility pass
+- Anonymous GHCR pull verification on the first public package visibility pass
 - Production install guide for Synology/QNAP/systemd packages
 
 The current release direction and public-alpha gate are tracked in
@@ -310,10 +310,10 @@ mount the host Docker socket or ship with a Docker CLI.
 
 ### Run a published image (no build)
 
-Tagged releases publish `api` and `web` images to Docker Hub and GitHub
-Container Registry via the `Release images` workflow
-(`.github/workflows/release-images.yml`, triggered on `v*` tags). Docker Hub is
-the most familiar pull path for NAS operators; GHCR remains the GitHub-linked
+The current `Release images` workflow publishes `api` and `web` images to both
+Docker Hub and GitHub Container Registry (`.github/workflows/release-images.yml`,
+triggered on `v*` tags or manually with `workflow_dispatch`). Docker Hub is the
+most familiar pull path for NAS operators; GHCR remains the GitHub-linked
 release registry.
 
 For `v0.1.0-alpha.1` and later, run the app without building from source by
