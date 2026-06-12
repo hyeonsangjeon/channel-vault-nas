@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.schemas.archive import (
     ArchiveFileLayout,
@@ -109,7 +110,7 @@ async def probe_channel(
 @router.get("/{channel_id:int}", response_model=ChannelDetail)
 async def get_channel(channel_id: int, db: DbSession) -> ChannelDetail:
     """Return post-registration channel detail."""
-    detail = await get_channel_detail(db, channel_id)
+    detail = await get_channel_detail(db, channel_id, download_dir=settings.download_dir)
     if detail is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return detail
@@ -122,7 +123,9 @@ async def patch_channel(
     db: DbSession,
 ) -> ChannelDetail:
     """Update editable channel scheduling settings."""
-    detail = await update_channel_settings(db=db, channel_id=channel_id, payload=payload)
+    detail = await update_channel_settings(
+        db=db, channel_id=channel_id, payload=payload, download_dir=settings.download_dir
+    )
     if detail is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return detail
@@ -144,7 +147,7 @@ async def sync_channel(
 @router.get("/{channel_id:int}/videos", response_model=list[ChannelVideoRead])
 async def get_channel_videos(channel_id: int, db: DbSession) -> list[ChannelVideoRead]:
     """Return a channel video timeline."""
-    videos = await list_channel_videos(db, channel_id)
+    videos = await list_channel_videos(db, channel_id, download_dir=settings.download_dir)
     if videos is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return videos
@@ -185,6 +188,7 @@ async def create_download_candidates(
         channel_id=channel_id,
         quality=request.quality,
         limit=request.limit,
+        download_dir=settings.download_dir,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
@@ -194,7 +198,7 @@ async def create_download_candidates(
 @router.get("/{channel_id:int}/coverage", response_model=ChannelCoverage)
 async def get_channel_coverage(channel_id: int, db: DbSession) -> ChannelCoverage:
     """Return source/archived/missing/removed completeness for a channel."""
-    coverage = await build_channel_coverage_from_db(db, channel_id)
+    coverage = await build_channel_coverage_from_db(db, channel_id, download_dir=settings.download_dir)
     if coverage is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return coverage
@@ -203,7 +207,7 @@ async def get_channel_coverage(channel_id: int, db: DbSession) -> ChannelCoverag
 @router.get("/{channel_id:int}/missing", response_model=list[MissingVideo])
 async def get_missing_videos(channel_id: int, db: DbSession) -> list[MissingVideo]:
     """Return source videos that are not mirrored locally yet."""
-    videos = await list_missing_videos_from_db(db, channel_id)
+    videos = await list_missing_videos_from_db(db, channel_id, download_dir=settings.download_dir)
     if videos is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return videos
@@ -212,7 +216,7 @@ async def get_missing_videos(channel_id: int, db: DbSession) -> list[MissingVide
 @router.get("/{channel_id:int}/removed", response_model=list[RemovedVideo])
 async def get_removed_saved_videos(channel_id: int, db: DbSession) -> list[RemovedVideo]:
     """Return videos removed from source but preserved locally."""
-    videos = await list_removed_saved_videos_from_db(db, channel_id)
+    videos = await list_removed_saved_videos_from_db(db, channel_id, download_dir=settings.download_dir)
     if videos is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return videos

@@ -32,9 +32,10 @@ The project is in active alpha. Dates use Korea Standard Time.
 - In-app Public access guard in the runtime Env guide that generates a strong
   operator token locally, copies the token / `.env.runtime` line / 401/200 smoke
   test, and keeps the token in the browser only.
-- GitHub Container Registry image publish workflow (`Release images`, triggered
-  on `v*` tags) plus a pull-based Docker Compose install mode via the
-  `CVN_API_IMAGE` / `CVN_WEB_IMAGE` overrides.
+- Docker Hub and GitHub Container Registry image publish workflow (`Release
+  images`, triggered on `v*` tags) plus pull-based Docker Compose and direct
+  `docker run` install modes via the `CVN_API_IMAGE` / `CVN_WEB_IMAGE`
+  overrides.
 - NAS deployment-confidence docs and examples: Synology/QNAP install guide
   (`docs/nas-install.md`), systemd/supervisor service examples (`deploy/`), and a
   SQLite + sidecar backup/restore runbook (`docs/backup-restore.md`).
@@ -57,6 +58,9 @@ The project is in active alpha. Dates use Korea Standard Time.
 - Library media details now include an in-app video preview backed by HTTP
   `Range`-capable, per-file streaming for browser seeking and multi-file
   archives.
+- Library, channel coverage/detail/timeline, and dashboard archive counts now
+  use actual media existence under the archive root, so stale indexed rows are
+  surfaced as missing media instead of inflating local coverage.
 
 ### Changed
 

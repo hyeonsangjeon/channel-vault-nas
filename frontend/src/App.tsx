@@ -1156,7 +1156,7 @@ function App() {
     () =>
       recentCompletedVideoIds.size
         ? (library?.items ?? []).filter((item) => recentCompletedVideoIds.has(item.id))
-        : (library?.items ?? []).filter((item) => item.archive_state === "archived" || item.media_count > 0),
+        : (library?.items ?? []).filter((item) => item.archive_state === "archived"),
     [library, recentCompletedVideoIds],
   );
   const telemetryByJobId = useMemo(
@@ -7350,7 +7350,7 @@ function App() {
                   </span>
                 </div>
                 <div className="coverage-inspector" aria-label={t("detail.coverageApi.title")}>
-                  <div className="coverage-meter">
+                  <div className="coverage-meter" title={t("coverage.onDiskHint")}>
                     <div>
                       <strong>{channelCoveragePercent}%</strong>
                       <span>{t("detail.coverageApi.title")}</span>
@@ -8079,7 +8079,7 @@ function App() {
                 <span>{t("library.total")}</span>
                 <strong>{library?.total ?? activeTimeline.length}</strong>
               </article>
-              <article>
+              <article title={t("coverage.onDiskHint")}>
                 <span>{t("library.archived")}</span>
                 <strong>{library?.archived ?? 0}</strong>
               </article>
@@ -8110,6 +8110,7 @@ function App() {
                     <span>{item.video_external_id}</span>
                     <div className="library-fidelity">
                       {item.duration_seconds ? <em className="media-duration-chip">{formatDuration(item.duration_seconds)}</em> : null}
+                      {libraryHasStaleIndex(item) ? <em className="stale-index-chip">{t("library.state.indexedMissing")}</em> : null}
                       <em className={`integrity-chip ${item.integrity_state}`}>{integrityLabel(item.integrity_state, t)}</em>
                       <em>{t("library.fidelity").replace("{count}", String(fidelityCount(item)))}</em>
                       {mediaProfileLabel(item) ? <em className="media-profile-chip">{mediaProfileLabel(item)}</em> : null}
@@ -12734,6 +12735,10 @@ function libraryStateLabel(item: LibraryItem, t: (key: TranslationKey) => string
   if (item.queue_status === "queued") return t("library.state.queued");
   if (item.queue_status === "candidate") return t("library.state.candidate");
   return t("library.state.missing");
+}
+
+function libraryHasStaleIndex(item: LibraryItem) {
+  return item.archive_state !== "archived" && item.media_count > 0;
 }
 
 function libraryItemMissingSidecar(item: LibraryItem, filter: LibrarySidecarFilter) {

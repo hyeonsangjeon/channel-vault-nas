@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.archive import Channel, MediaFile, SyncJob, Video
+from app.models.archive import Channel, SyncJob, Video
+from app.schemas.archive import ChannelCoverage
 from app.schemas.jobs import (
     ChannelDetail,
     ChannelSettingsUpdate,
@@ -17,6 +19,8 @@ from app.schemas.jobs import (
     SyncJobRead,
 )
 from app.schemas.source import ChannelProbeRequest
+from app.services.archive_coverage import archived_video_ids_on_disk, resolve_archive_root
+from app.services.archive_metrics import build_channel_coverage_from_db
 from app.services.channel_registration import apply_probe_to_channel
 from app.services.event_bus import event_bus
 from app.services.ytdlp_probe import ChannelProbeError, probe_channel_source
@@ -26,8 +30,18 @@ class ChannelNotFoundError(LookupError):
     """Raised when a channel id does not exist."""
 
 
-async def get_channel_detail(db: AsyncSession, channel_id: int) -> ChannelDetail | None:
-    """Return one registered channel detail row."""
+async def get_channel_detail(
+    db: AsyncSession,
+    channel_id: int,
+    *,
+    download_dir: str | Path | None = None,
+) -> ChannelDetail | None:
+    """Return one registered channel detail row.
+
+    With a configured ``download_dir`` the archived/missing/removed counts are
+    recomputed disk-aware so the channel detail screen agrees with the Library
+    and the coverage API instead of showing stale persisted index counts.
+    """
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
@@ -38,7 +52,10 @@ async def get_channel_detail(db: AsyncSession, channel_id: int) -> ChannelDetail
         .order_by(SyncJob.created_at.desc(), SyncJob.id.desc())
         .limit(1)
     )
-    return to_channel_detail(channel, latest_auto_sync=latest_auto_sync)
+    coverage = None
+    if download_dir is not None:
+        coverage = await build_channel_coverage_from_db(db, channel_id, download_dir=download_dir)
+    return to_channel_detail(channel, latest_auto_sync=latest_auto_sync, coverage=coverage)
 
 
 async def update_channel_settings(
@@ -46,6 +63,7 @@ async def update_channel_settings(
     db: AsyncSession,
     channel_id: int,
     payload: ChannelSettingsUpdate,
+    download_dir: str | Path | None = None,
 ) -> ChannelDetail | None:
     """Patch editable channel scheduling fields."""
     channel = await db.get(Channel, channel_id)
@@ -67,27 +85,32 @@ async def update_channel_settings(
             "next_sync_due_at": next_sync_due_at.isoformat() if next_sync_due_at else None,
         },
     )
-    return await get_channel_detail(db, channel_id)
+    return await get_channel_detail(db, channel_id, download_dir=download_dir)
 
 
-async def list_channel_videos(db: AsyncSession, channel_id: int) -> list[ChannelVideoRead] | None:
-    """Return source videos for one channel ordered as a timeline."""
+async def list_channel_videos(
+    db: AsyncSession,
+    channel_id: int,
+    *,
+    download_dir: str | Path | None = None,
+) -> list[ChannelVideoRead] | None:
+    """Return source videos for one channel ordered as a timeline.
+
+    ``archive_state`` is disk-aware: a video is ``archived`` only when at least
+    one of its media files exists on disk under the archive root.
+    """
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
 
-    media_count = (
-        select(func.count(MediaFile.id))
-        .where(MediaFile.video_id == Video.id)
-        .correlate(Video)
-        .scalar_subquery()
-    )
+    root = resolve_archive_root(download_dir)
+    archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel_id)
     result = await db.execute(
-        select(Video, media_count.label("media_count"))
+        select(Video)
         .where(Video.channel_id == channel_id)
         .order_by(Video.published_at.desc(), Video.discovered_at.desc())
     )
-    return [to_channel_video(video, media_total) for video, media_total in result.all()]
+    return [to_channel_video(video, video.id in archived_ids) for video in result.scalars()]
 
 
 async def run_channel_sync(
@@ -180,8 +203,21 @@ async def list_sync_jobs(
     return [to_sync_job(job, channel) for job, channel in result.all()]
 
 
-def to_channel_detail(channel: Channel, *, latest_auto_sync: SyncJob | None = None) -> ChannelDetail:
-    """Convert an ORM channel into the detail API shape."""
+def to_channel_detail(
+    channel: Channel,
+    *,
+    latest_auto_sync: SyncJob | None = None,
+    coverage: ChannelCoverage | None = None,
+) -> ChannelDetail:
+    """Convert an ORM channel into the detail API shape.
+
+    When ``coverage`` (disk-aware) is supplied its archived/missing/removed
+    counts override the persisted index counts so the detail screen matches the
+    Library and coverage API.
+    """
+    archived_count = channel.archived_count if coverage is None else coverage.archived
+    missing_count = channel.missing_count if coverage is None else coverage.missing
+    removed_saved_count = channel.removed_saved_count if coverage is None else coverage.removed_saved
     return ChannelDetail(
         id=channel.id,
         title=channel.title,
@@ -192,9 +228,9 @@ def to_channel_detail(channel: Channel, *, latest_auto_sync: SyncJob | None = No
         thumbnail_url=channel.thumbnail_url,
         status=channel.status,
         video_count=channel.source_video_count,
-        archived_count=channel.archived_count,
-        missing_count=channel.missing_count,
-        removed_saved_count=channel.removed_saved_count,
+        archived_count=archived_count,
+        missing_count=missing_count,
+        removed_saved_count=removed_saved_count,
         last_synced_at=channel.last_synced_at,
         sync_interval_minutes=channel.sync_interval_minutes,
         next_sync_due_at=_next_sync_due_at(channel),
@@ -211,7 +247,7 @@ def to_channel_detail(channel: Channel, *, latest_auto_sync: SyncJob | None = No
     )
 
 
-def to_channel_video(video: Video, media_count: int | None) -> ChannelVideoRead:
+def to_channel_video(video: Video, archived_on_disk: bool) -> ChannelVideoRead:
     """Convert an ORM video into the timeline API shape."""
     return ChannelVideoRead(
         id=video.id,
@@ -224,7 +260,7 @@ def to_channel_video(video: Video, media_count: int | None) -> ChannelVideoRead:
         duration_seconds=video.duration_seconds,
         thumbnail_url=video.thumbnail_url,
         source_state=video.source_state,
-        archive_state="archived" if media_count else "missing",
+        archive_state="archived" if archived_on_disk else "missing",
         info_json_path=video.info_json_path,
         discovered_at=video.discovered_at,
     )

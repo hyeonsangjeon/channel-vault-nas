@@ -55,13 +55,14 @@ This is an active alpha. The core loop is working locally:
 - Library index with media files, sidecar fidelity, codec/profile filters, in-app preview, and portable saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
-- Versioned GHCR images for the guarded public alpha prerelease
+- Versioned Docker Hub and GHCR images for the guarded public alpha prerelease
 
 Not ready yet:
 
 - Multi-user auth/session hardening for exposed networks
 - Published demo video/GIF assets
-- Anonymous GHCR pull verification on the first public package visibility pass
+- Anonymous Docker Hub and GHCR pull verification on the first public package
+  visibility pass
 - Production install guide for Synology/QNAP/systemd packages
 
 The current release direction and public-alpha gate are tracked in
@@ -156,7 +157,9 @@ media files, codec/profile metadata, thumbnails, subtitles, queue state, and
 path integrity. Saved views make repeated NAS checks fast, and portable JSON
 export/import lets operators move useful views between installs. Media detail
 drawers can preview indexed files in-app through range-capable, per-file stream
-endpoints.
+endpoints. Archive counts are disk-aware across Library, Channel detail, and
+Dashboard coverage, so stale DB rows show as missing media instead of pretending
+the file is still on the NAS.
 
 ### Insights
 
@@ -180,9 +183,9 @@ There are three ways to run Channel Vault NAS:
   (see [Quickstart: Local Development](#quickstart-local-development)).
 - **Compose build from source** — build images from this repo with Docker
   Compose (the steps below). Best for evaluating the current `main`/branch code.
-- **Pull a published image** — run tagged images from GHCR without building
-  (see [Run a published image](#run-a-published-image-no-build)). Best for a
-  fast, reproducible install.
+- **Pull a published image** — run tagged images from Docker Hub or GHCR without
+  building (see [Run a published image](#run-a-published-image-no-build)). Best
+  for a fast, reproducible install.
 
 ```bash
 git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
@@ -307,10 +310,14 @@ mount the host Docker socket or ship with a Docker CLI.
 
 ### Run a published image (no build)
 
-Tagged releases publish `api` and `web` images to GitHub Container Registry via
-the `Release images` workflow (`.github/workflows/release-images.yml`, triggered
-on `v*` tags). For `v0.1.0-alpha.1` and later, run the app without building
-from source by pointing Compose at the published images:
+Tagged releases publish `api` and `web` images to Docker Hub and GitHub
+Container Registry via the `Release images` workflow
+(`.github/workflows/release-images.yml`, triggered on `v*` tags). Docker Hub is
+the most familiar pull path for NAS operators; GHCR remains the GitHub-linked
+release registry.
+
+For `v0.1.0-alpha.1` and later, run the app without building from source by
+pointing Compose at the published Docker Hub images:
 
 ```bash
 git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
@@ -318,14 +325,79 @@ cd channel-vault-nas
 cp .env.example .env
 mkdir -p metadata downfolder runtime
 
-export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
 docker compose pull
 docker compose up -d --no-build
 ```
 
+Equivalent GHCR image overrides:
+
+```bash
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+```
+
+Direct `docker run` is also possible. Compose is still recommended because it
+keeps ports, volumes, health checks, and restart policy in one file, but these
+commands are useful for registry smoke tests.
+
+Choose Docker Hub:
+
+```bash
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+```
+
+Or choose GHCR:
+
+```bash
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+```
+
+Then run both containers on one Docker network. The `api` network alias is
+required because the web image proxies `/api` and `/ws` to `http://api:8000`.
+
+```bash
+mkdir -p metadata downfolder runtime
+docker network create channel-vault-nas 2>/dev/null || true
+
+docker run -d \
+  --name channel-vault-nas-api \
+  --network channel-vault-nas \
+  --network-alias api \
+  -p 8000:8000 \
+  -e CVN_DATABASE_URL='sqlite+aiosqlite:///./metadata/app.db' \
+  -e CVN_METADATA_DIR='./metadata' \
+  -e CVN_DOWNLOAD_DIR='./downfolder' \
+  -e CVN_RUNTIME_ENV_FILE='/app/runtime/.env.runtime' \
+  -e CVN_DB_MIGRATE_ON_STARTUP=true \
+  -v "$PWD/metadata:/app/metadata" \
+  -v "$PWD/downfolder:/app/downfolder" \
+  -v "$PWD/runtime:/app/runtime" \
+  "$CVN_API_IMAGE"
+
+docker run -d \
+  --name channel-vault-nas-web \
+  --network channel-vault-nas \
+  -p 5173:80 \
+  "$CVN_WEB_IMAGE"
+```
+
+Open `http://127.0.0.1:5173/`. Cleanup:
+
+```bash
+docker rm -f channel-vault-nas-web channel-vault-nas-api
+docker network rm channel-vault-nas
+```
+
 Notes:
 
+- Docker Hub packages are published under `modenaf360/channel-vault-nas-api`
+  and `modenaf360/channel-vault-nas-web`.
+- Publishing to Docker Hub requires repository Actions secrets:
+  `DOCKERHUB_USERNAME=modenaf360` and `DOCKERHUB_TOKEN=<Docker Hub access token>`.
 - GHCR packages are private by default. If anonymous `docker compose pull`
   returns a permission error, the maintainer still needs to set both packages to
   Public and link them to this repo. Until then, run `docker login ghcr.io` with
@@ -607,8 +679,17 @@ Public demo recording:
 scripts/capture-public-demo.sh
 ```
 
+For guided, screen-by-screen operator walkthroughs, open the
+[`KO manual`](docs/user-manual.html) or
+[`EN manual`](docs/user-manual.en.html).
+When GitHub Pages is enabled from `main` / `docs`, the same manuals render as a
+static documentation site from [`docs/index.html`](docs/index.html).
+
 ## Documentation
 
+- [Documentation Site Entry](docs/index.html)
+- [User Manual (KO)](docs/user-manual.html)
+- [User Manual (EN)](docs/user-manual.en.html)
 - [Product Brief](docs/product-brief.md)
 - [Architecture](docs/architecture.md)
 - [Design Direction](docs/design-direction.md)
@@ -634,8 +715,8 @@ Before a public alpha release:
 
 - Run `scripts/public-alpha-check.sh`.
 - Validate Docker Compose on macOS, Linux, and one NAS-like host.
-- Publish versioned container images and verify anonymous GHCR pulls after the
-  packages are set Public.
+- Publish versioned container images and verify anonymous Docker Hub and GHCR
+  pulls after the packages are set Public.
 - Keep README screenshot assets current from the Playwright seeded fixture.
 - Record/share a short demo video or GIF with `scripts/capture-public-demo.sh`.
 - Keep the safe first-run demo and runtime error copy polished.

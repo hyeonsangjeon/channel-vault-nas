@@ -589,6 +589,11 @@ Rules:
 - Library file detail responses expose media id, media existence, per-file stream
   URL, compact size labels, integrity state, expected sidecar existence, and
   discovered subtitle sidecars while keeping paths archive-relative.
+- Library item `archive_state`, summary `archived` count, channel coverage,
+  channel detail counts, channel timeline archive states, dashboard coverage,
+  dashboard channel health, and dashboard storage bytes are based on media files
+  that still exist under the configured archive root. Stale DB rows remain
+  inspectable as indexed files but do not count as archived or mirrored locally.
 - Do not automatically rename archived media when a source title changes.
 - Prevent path traversal on every file endpoint.
 - Streaming endpoints support HTTP range requests for browser preview and

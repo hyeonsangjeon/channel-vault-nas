@@ -16,7 +16,8 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: ghcr.io
+  GHCR_REGISTRY: ghcr.io
+  DOCKERHUB_NAMESPACE: modenaf360
 
 jobs:
   images:
@@ -43,9 +44,15 @@ jobs:
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Resolve lowercase owner
         id: owner
@@ -55,7 +62,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.lc }}/${{ matrix.image }}
+          images: |
+            ${{ env.GHCR_REGISTRY }}/${{ steps.owner.outputs.lc }}/${{ matrix.image }}
+            docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}

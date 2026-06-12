@@ -1,6 +1,7 @@
 """Manual sync, scheduled metadata sync, and download queue API tests."""
 
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -250,14 +251,16 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert {job["priority"] for job in bulk.json()["jobs"]} == {95}
     assert library.status_code == 200
     assert library.json()["total"] == 1
-    assert library.json()["archived"] == 1
-    assert library.json()["items"][0]["archive_state"] == "archived"
-    assert library.json()["items"][0]["integrity_state"] == "partial_sidecars"
+    assert library.json()["archived"] == 0
+    assert library.json()["missing"] == 1
+    assert library.json()["total_bytes"] == 0
+    assert library.json()["items"][0]["archive_state"] == "missing"
+    assert library.json()["items"][0]["integrity_state"] == "missing_media"
     assert library.json()["items"][0]["queue_status"] == "queued"
     assert library.json()["items"][0]["video_codec"] == "h264"
-    assert library.json()["items"][0]["fidelity"]["media"] is True
+    assert library.json()["items"][0]["fidelity"]["media"] is False
     assert library_integrity.status_code == 200
-    assert library_integrity.json()["total"] == 1
+    assert library_integrity.json()["total"] == 0
     assert library_codec.status_code == 200
     assert library_codec.json()["total"] == 1
     assert library_missing_sidecar.status_code == 200
@@ -278,10 +281,10 @@ async def test_manual_sync_creates_job_and_download_candidates(monkeypatch: pyte
     assert library_stream.status_code == 404
     assert coverage.status_code == 200
     assert coverage.json()["source"] == 2
-    assert coverage.json()["archived"] == 1
-    assert coverage.json()["missing"] == 1
+    assert coverage.json()["archived"] == 0
+    assert coverage.json()["missing"] == 2
     assert missing.status_code == 200
-    assert [video["id"] for video in missing.json()] == ["6lXl1hkEgcA"]
+    assert [video["id"] for video in missing.json()] == ["n5soSphTPnI", "6lXl1hkEgcA"]
     assert removed.status_code == 200
     assert removed.json() == []
     assert cadence.status_code == 200
@@ -504,6 +507,7 @@ async def test_queue_preflight_keeps_best_quality_in_review() -> None:
 
 @pytest.mark.asyncio
 async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_worker_paused(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_migrations()
@@ -521,6 +525,7 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
         await session.execute(delete(Channel))
         await session.commit()
 
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
     monkeypatch.setattr(settings, "metadata_sync_scheduler_enabled", True)
     monkeypatch.setattr(settings, "metadata_sync_scheduler_interval_seconds", 60)
     monkeypatch.setattr(settings, "metadata_sync_scheduler_limit", 5)
@@ -592,11 +597,17 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
             policy.worker_pause_reason = "operator maintenance"
             old_video = await session.scalar(select(Video).where(Video.channel_id == channel_id))
             assert old_video is not None
+            old_media_relative = (
+                "channels/@wingnut987s4 [UCmLADXQtWVuzOnOK5TNrWaw]/2026/"
+                "2026-02-28 - Already mirrored briefing [oldArchive01]/video.mp4"
+            )
+            old_media_path = tmp_path / old_media_relative
+            old_media_path.parent.mkdir(parents=True, exist_ok=True)
+            old_media_path.write_bytes(b"already-mirrored-on-disk")
             session.add(
                 MediaFile(
                     video_id=old_video.id,
-                    relative_path="channels/@wingnut987s4 [UCmLADXQtWVuzOnOK5TNrWaw]/2026/"
-                    "2026-02-28 - Already mirrored briefing [oldArchive01]/video.mp4",
+                    relative_path=old_media_relative,
                     filename="video.mp4",
                     size_bytes=120_000_000,
                     container="mp4",
