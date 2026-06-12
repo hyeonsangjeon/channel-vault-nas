@@ -72,8 +72,8 @@ Focus: NAS deployment confidence.
 
 - [x] Versioned container images — `Release images` workflow publishes
   multi-arch `api`/`web` to Docker Hub and GHCR on `v*` tags
-  (`0.1.0-alpha.1` published on GHCR; Docker Hub mirror enabled for the next
-  release run).
+  (`0.1.0-alpha.1` published on Docker Hub and GHCR; Docker Hub pull-based
+  Compose smoke verified, GHCR anonymous pull waits on package visibility).
 - [x] Synology/QNAP-oriented install notes — [`docs/nas-install.md`](nas-install.md).
 - [x] Systemd/supervisor package examples — [`deploy/`](../deploy/README.md).
 - [x] More restart adapter validation — `backend/tests/test_restart_adapter.py`
