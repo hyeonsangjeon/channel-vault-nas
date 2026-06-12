@@ -52,7 +52,7 @@ This is an active alpha. The core loop is working locally:
 - Worker run audit with completed/skipped/failed/slow filters, scheduler tick logs, and event drawers
 - Runtime settings with `.env.runtime` apply/restart guidance
 - Storage scanner for real NAS folders, drift, pressure, and orphan sidecars
-- Library index with media files, sidecar fidelity, codec/profile filters, and portable saved views
+- Library index with media files, sidecar fidelity, codec/profile filters, in-app preview, and portable saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
 - Versioned GHCR images for the guarded public alpha prerelease
@@ -154,7 +154,8 @@ of 5 jobs per worker pass.
 The library shows archived and missing videos together. It indexes sidecars,
 media files, codec/profile metadata, thumbnails, subtitles, queue state, and
 path integrity. Saved views make repeated NAS checks fast, and portable JSON
-export/import lets operators move useful views between installs.
+export/import lets operators move useful views between installs. Media detail
+drawers can preview indexed files in-app through a range-capable stream endpoint.
 
 ### Insights
 

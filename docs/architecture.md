@@ -591,7 +591,8 @@ Rules:
   subtitle sidecars while keeping paths archive-relative.
 - Do not automatically rename archived media when a source title changes.
 - Prevent path traversal on every file endpoint.
-- Streaming endpoint should support HTTP range requests before beta.
+- The streaming endpoint supports HTTP range requests for browser preview and
+  seeking.
 - File deletion should separate DB record deletion from physical file deletion
   and make destructive operations explicit in the UI.
 
