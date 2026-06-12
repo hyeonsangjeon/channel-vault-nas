@@ -82,7 +82,7 @@ test("command palette opens operational surfaces and live status is visible", as
   const supportBundleResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/ops/support-bundle") && response.status() === 200,
   );
-  await page.getByRole("button", { name: "지원 번들 복사" }).click();
+  await dispatchButtonClick(page.getByRole("button", { name: "지원 번들 복사" }));
   const supportBundleResponse = await supportBundleResponsePromise;
   const supportBundle = await supportBundleResponse.json();
   expect(supportBundle.redaction.safe_for_public_issue).toBe(true);
@@ -91,7 +91,7 @@ test("command palette opens operational surfaces and live status is visible", as
   const betaProof = page.getByLabel("Beta onboarding proof export");
   await expect(betaProof).toContainText("이 설치가 public-safe인지 증거로 내보내기");
   await expect(betaProof.getByRole("button", { name: "proof 다운로드" })).toBeVisible();
-  await betaProof.getByRole("button", { name: "proof 복사" }).click();
+  await dispatchButtonClick(betaProof.getByRole("button", { name: "proof 복사" }));
   await expect(betaProof.getByRole("button", { name: "proof 복사됨" })).toBeVisible();
   const betaProofText = await page.evaluate(() => navigator.clipboard.readText());
   const betaProofPayload = JSON.parse(betaProofText);
@@ -100,7 +100,7 @@ test("command palette opens operational surfaces and live status is visible", as
   expect(betaProofText).not.toContain("Signal Lab");
   expect(betaProofText).not.toContain("https://");
   expect(betaProofText).not.toContain("/tmp/");
-  await releaseReadiness.getByRole("button", { name: "브리핑 복사" }).click();
+  await dispatchButtonClick(releaseReadiness.getByRole("button", { name: "브리핑 복사" }));
   await expect(releaseReadiness.getByRole("button", { name: "브리핑 복사됨" })).toBeVisible();
   await releaseReadiness.getByRole("button", { name: "복구 가이드" }).click();
   const runtimeGuideFromReadiness = page.getByLabel("런타임 env 매니페스트");
@@ -388,7 +388,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(tokenGuard).toContainText("CVN_AUTH_TOKEN=");
   const copyTokenButton = tokenGuard.getByRole("button", { name: "토큰 한 번 복사" });
   await expect(copyTokenButton).toBeVisible();
-  await copyTokenButton.click();
+  await dispatchButtonClick(copyTokenButton);
   await expect(copyTokenButton).toContainText("토큰 복사됨");
   await expect(runtimeGuide.getByText("외부 공개 cookbook")).toBeVisible();
   const exposureCookbook = runtimeGuide.getByLabel("외부 공개 cookbook");
@@ -415,7 +415,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(volumeCookbook).toContainText("CVN_DOWNLOAD_HOST_DIR");
   const volumeEnvCopyButton = runtimeGuide.getByRole("button", { name: "볼륨 env 복사" });
   await expect(volumeEnvCopyButton).toBeVisible();
-  await volumeEnvCopyButton.click();
+  await dispatchButtonClick(volumeEnvCopyButton);
   await expect(volumeEnvCopyButton).toContainText("복사됨");
   const backupRestore = runtimeGuide.getByLabel("백업 및 복구 confidence");
   await expect(backupRestore).toBeVisible();
@@ -424,11 +424,11 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(backupRestore).toContainText("Runtime overrides");
   const backupCopyButton = backupRestore.getByRole("button", { name: "백업 명령 복사" });
   await expect(backupCopyButton).toBeVisible();
-  await backupCopyButton.click();
+  await dispatchButtonClick(backupCopyButton);
   await expect(backupCopyButton).toContainText("복사됨");
   const restartPresetCopyButton = runtimeGuide.getByRole("button", { name: "env 복사 Docker Compose" });
   await expect(restartPresetCopyButton).toBeVisible();
-  await restartPresetCopyButton.click();
+  await dispatchButtonClick(restartPresetCopyButton);
   await expect(restartPresetCopyButton).toContainText("복사됨");
   const runtimeWorkerSummary = runtimeGuide.getByLabel("다운로드 worker summary export");
   await expect(runtimeWorkerSummary).toContainText("/api/jobs/downloads/worker/summary");
@@ -450,7 +450,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(schedulerDrawer.locator(".scheduler-tick-list.expanded")).toContainText("fixture retry budget exhausted");
   await schedulerDrawer.getByRole("button", { name: "느린 실행만" }).click();
   await expect(schedulerDrawer.getByText("interval seconds")).toBeVisible();
-  await schedulerDrawer.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(schedulerDrawer.getByRole("button", { name: "JSON 복사" }));
   await expect(schedulerDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   const schedulerExport = page.waitForEvent("download");
   await schedulerDrawer.getByRole("button", { name: "NDJSON" }).click();
@@ -469,7 +469,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await metadataDrawer.locator(".worker-history-filters").getByRole("button", { name: "완료" }).click();
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("감지 영상");
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("1");
-  await metadataDrawer.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(metadataDrawer.getByRole("button", { name: "JSON 복사" }));
   await expect(metadataDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   await expect(metadataDrawer.getByRole("button", { name: "NDJSON" })).toBeVisible();
   await expect(metadataDrawer.getByRole("button", { name: "CSV" })).toBeVisible();
@@ -480,7 +480,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("다음 tick");
   await page.screenshot({ path: testInfo.outputPath("metadata-tick-drawer.png"), fullPage: true });
   await metadataDrawer.getByRole("button", { name: "닫기" }).click();
-  await runtimeGuide.getByRole("button", { name: "매니페스트 복사" }).click();
+  await dispatchButtonClick(runtimeGuide.getByRole("button", { name: "매니페스트 복사" }));
   await expect(runtimeGuide.getByText("복사됨")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("runtime-env-guide.png"), fullPage: true });
   await page.getByRole("button", { name: "닫기" }).click();
@@ -561,7 +561,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(quarantineVault).toContainText("channels/@signalvaultlab [UC_CVN_E2E]/2026/restorable-sidecar/video.en.srt");
   await quarantineVault.getByRole("button", { name: "닫기" }).last().click();
   await storageTriage.getByRole("button", { name: "Sidecar 누락 보기" }).click();
-  await storageTriage.getByRole("button", { name: "보고서 복사" }).click();
+  await dispatchButtonClick(storageTriage.getByRole("button", { name: "보고서 복사" }));
   await expect(storageTriage.getByRole("button", { name: "복사됨" })).toBeVisible();
   const storageExport = page.waitForEvent("download");
   await storageTriage.getByRole("button", { name: "CSV 저장" }).click();
@@ -577,9 +577,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(channelStorageLens).toContainText("폴더 확인 명령");
   const storagePathCopyButton = channelStorageLens.getByRole("button", { name: "경로 복사" });
   const storageCommandCopyButton = channelStorageLens.getByRole("button", { name: "명령 복사" });
-  await storagePathCopyButton.click();
+  await dispatchButtonClick(storagePathCopyButton);
   await expect(storagePathCopyButton).toContainText("복사됨");
-  await storageCommandCopyButton.click();
+  await dispatchButtonClick(storageCommandCopyButton);
   await expect(storageCommandCopyButton).toContainText("복사됨");
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("아무거나");
   await page.getByRole("button", { name: "필터 초기화" }).click();
@@ -598,7 +598,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   );
   await page.getByRole("button", { name: "덮어쓰기" }).click();
   expect((await (await overwrittenView).json()).name).toBe("무자막 h264");
-  await page.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(page.getByRole("button", { name: "JSON 복사" }));
   await expect(page.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   const savedViewBundleText = await page.evaluate(() => navigator.clipboard.readText());
   const savedViewBundle = JSON.parse(savedViewBundleText);
@@ -661,7 +661,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const downloadSummary = page.getByLabel("다운로드 실행 요약");
   await expect(downloadSummary).toContainText("archive.txt staged");
   await expect(downloadSummary).toContainText("최근 worker pass");
-  await downloadSummary.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(downloadSummary.getByRole("button", { name: "JSON 복사" }));
   await expect(downloadSummary.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   const workerSummaryExportResponse = page.waitForResponse(
     (response) =>
@@ -709,7 +709,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
 
   await page.getByRole("button", { name: "프리플라이트" }).click();
   await expect(page.locator(".command-lines code").filter({ hasText: "yt-dlp" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "명령 복사" }).click();
+  await dispatchButtonClick(page.getByRole("button", { name: "명령 복사" }));
   await expect(page.getByRole("button", { name: "복사됨" })).toBeVisible();
   await expect(page.locator(".preflight-pill.ready").first()).toBeVisible();
   await expect(page.getByLabel("프리플라이트 런웨이")).toContainText("DB만 무장");
@@ -741,9 +741,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const eventDetail = eventLog.getByRole("region", { name: "이벤트 상세" });
   await expect(eventDetail).toBeVisible();
   await expect(eventDetail).toContainText("download.");
-  await eventDetail.getByRole("button", { name: "이 이벤트 복사" }).click();
+  await dispatchButtonClick(eventDetail.getByRole("button", { name: "이 이벤트 복사" }));
   await expect(eventDetail.getByRole("button", { name: "복사됨" })).toBeVisible();
-  await eventDetail.getByRole("button", { name: "curl 복사" }).click();
+  await dispatchButtonClick(eventDetail.getByRole("button", { name: "curl 복사" }));
   await expect(eventDetail.getByRole("button", { name: "curl 복사됨" })).toBeVisible();
   await expect(eventDetail.getByRole("button", { name: "큐에서 보기" })).toBeVisible();
   const eventDetailExport = page.waitForEvent("download");
