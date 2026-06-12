@@ -212,6 +212,8 @@ type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
 type LaunchRunwayState = "ready" | "active" | "locked";
+type ReleaseReadinessBriefTone = "ready" | "close" | "building";
+type CleanInstallGateStepState = "ready" | "active" | "warn";
 type DownloadTelemetryStatus = "running" | "completed" | "failed" | "cancelled";
 type EventStreamStatus = "connecting" | "live" | "error" | "closed";
 type AppRoute = {
@@ -228,6 +230,33 @@ type NavStatusBadge = {
   tone: NavStatusTone;
   label: string;
 };
+type ReleaseReadinessItem = {
+  id: string;
+  icon: typeof Link2;
+  ready: boolean;
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  actionKey: TranslationKey;
+  action: () => void;
+};
+type CleanInstallGateStep = {
+  id: string;
+  icon: typeof Link2;
+  state: CleanInstallGateStepState;
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  actionKey: TranslationKey;
+  disabled?: boolean;
+  action: () => void | Promise<void>;
+};
+type RuntimeGuideRailItem = {
+  id: string;
+  icon: typeof Link2;
+  labelKey: TranslationKey;
+  detail: string;
+  selector: string;
+  tone: NavStatusTone;
+};
 type VolumeMountPreset = {
   id: string;
   labelKey: TranslationKey;
@@ -236,6 +265,15 @@ type VolumeMountPreset = {
   hostPath: string;
   containerPath: string;
   tone: "good" | "warn" | "idle";
+};
+type BackupRestoreCommandId = "quiesced" | "sqlite" | "restore";
+type BackupRestorePathCard = {
+  id: "metadata" | "download" | "runtime";
+  labelKey: TranslationKey;
+  detailKey: TranslationKey;
+  path: MountDoctorPath | null;
+  displayPath: string;
+  tone: "good" | "warn" | "bad";
 };
 type ExposureProxyPreset = {
   id: string;
@@ -564,6 +602,10 @@ function App() {
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeVolumeCopyStatus, setRuntimeVolumeCopyStatus] = useState<CopyStatus>("idle");
+  const [runtimeBackupCopyStatus, setRuntimeBackupCopyStatus] = useState<{
+    id: BackupRestoreCommandId;
+    status: CopyStatus;
+  } | null>(null);
   const [runtimeProxyCopyStatus, setRuntimeProxyCopyStatus] = useState<{
     id: string;
     status: CopyStatus;
@@ -572,6 +614,8 @@ function App() {
   const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [supportBundleCopyStatus, setSupportBundleCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [betaBriefCopyStatus, setBetaBriefCopyStatus] = useState<CopyStatus>("idle");
+  const [betaProofCopyStatus, setBetaProofCopyStatus] = useState<CopyStatus>("idle");
   const [supportBundleSource, setSupportBundleSource] = useState<"idle" | "server" | "fallback">("idle");
   const [schedulerTickRetentionStatus, setSchedulerTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [metadataTickRetentionStatus, setMetadataTickRetentionStatus] = useState<RetentionStatus>("idle");
@@ -1489,6 +1533,18 @@ function App() {
   const runtimeVolumePresets = useMemo(() => volumeMountPresets(), []);
   const runtimeVolumeEnvManifest = useMemo(() => buildVolumeMountEnvManifest(runtimeVolumePresets), [runtimeVolumePresets]);
   const runtimeVolumeMkdirCommand = useMemo(() => buildVolumeMountMkdirCommand(runtimeVolumePresets), [runtimeVolumePresets]);
+  const runtimeBackupRestorePaths = useMemo(
+    () => buildBackupRestorePathCards(mountDoctor, runtimeSettings),
+    [mountDoctor, runtimeSettings],
+  );
+  const runtimeBackupRestoreCommands = useMemo(
+    () => buildBackupRestoreCommands(mountDoctor, runtimeSettings),
+    [mountDoctor, runtimeSettings],
+  );
+  const runtimeBackupRestoreReady =
+    Boolean(mountDoctor) &&
+    mountDoctor?.status !== "critical" &&
+    runtimeBackupRestorePaths.every((path) => path.tone !== "bad");
   const runtimeExposureProxyPresets = useMemo(() => exposureProxyPresets(), []);
   const schedulerTickSummary = useMemo(
     () => summarizeSchedulerTicks(schedulerTickRows.length ? schedulerTickRows : runtimeSettings?.scheduler_ticks ?? []),
@@ -2780,6 +2836,17 @@ function App() {
     }
   }
 
+  async function handleCopyBackupRestoreCommand(id: BackupRestoreCommandId) {
+    try {
+      await copyTextToClipboard(runtimeBackupRestoreCommands[id]);
+      setRuntimeBackupCopyStatus({ id, status: "copied" });
+      window.setTimeout(() => setRuntimeBackupCopyStatus(null), 1800);
+    } catch {
+      setRuntimeBackupCopyStatus({ id, status: "error" });
+      window.setTimeout(() => setRuntimeBackupCopyStatus(null), 2200);
+    }
+  }
+
   async function handleCopyExposureProxyPreset(preset: ExposureProxyPreset) {
     try {
       await copyTextToClipboard(preset.snippet);
@@ -2799,6 +2866,10 @@ function App() {
 
   function handleJumpToAccessGuard() {
     accessGuardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleRuntimeGuideRailClick(selector: string) {
+    scrollToAppSection(selector);
   }
 
   async function handleCopyAccessToken(kind: "token" | "env" | "smoke") {
@@ -3015,6 +3086,173 @@ function App() {
     }
   }
 
+  function buildBetaReadinessBrief() {
+    const pendingLines = releaseReadinessPendingItems.length
+      ? releaseReadinessPendingItems.map((item) => `- ${t(item.titleKey)}: ${t(item.detailKey)}`)
+      : [`- ${t("release.brief.nonePending")}`];
+    const mountDoctorLabel = mountDoctor
+      ? `${t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey)} (${mountDoctor.score})`
+      : t("runtime.checking");
+    const supportSourceLabel =
+      supportBundleSource === "server"
+        ? t("support.bundle.server")
+        : supportBundleSource === "fallback"
+          ? t("support.bundle.fallback")
+          : t("support.bundle.ready");
+
+    return [
+      "Channel Vault NAS beta readiness",
+      `${t("release.brief.generated")}: ${new Date().toISOString()}`,
+      `${t("release.brief.statusLabel")}: ${t(releaseReadinessBriefStatusKey)}`,
+      t("release.brief.score").replace("{done}", String(releaseReadinessDone)).replace("{total}", String(releaseReadinessItems.length)),
+      "",
+      t("release.brief.pendingTitle"),
+      ...pendingLines,
+      "",
+      `${t("mountDoctor.title")}: ${mountDoctorLabel}`,
+      `${t("release.readiness.backup.title")}: ${runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}`,
+      `${t("queue.console.title")}: ${queueConsoleCounts.queued} ${t("queue.queued")} · ${queueConsoleCounts.running} ${t("queue.running")} · ${queueConsoleCounts.failed} ${t("queue.failed")}`,
+      `${t("support.bundle.privacyTitle")}: ${supportSourceLabel}`,
+    ].join("\n");
+  }
+
+  async function handleCopyBetaReadinessBrief() {
+    try {
+      await copyTextToClipboard(buildBetaReadinessBrief());
+      setBetaBriefCopyStatus("copied");
+      window.setTimeout(() => setBetaBriefCopyStatus("idle"), 1800);
+    } catch {
+      setBetaBriefCopyStatus("error");
+      window.setTimeout(() => setBetaBriefCopyStatus("idle"), 2200);
+    }
+  }
+
+  function buildBetaProofPayload() {
+    return {
+      kind: "channel_vault_beta_onboarding_proof",
+      generated_at: new Date().toISOString(),
+      privacy: {
+        redacted_for_public_issue: true,
+        excludes: ["channel_titles", "video_titles", "source_urls", "absolute_paths", "generated_download_commands", "tokens"],
+      },
+      release_readiness: {
+        status: releaseReadinessBriefTone,
+        status_label: t(releaseReadinessBriefStatusKey),
+        score: {
+          done: releaseReadinessDone,
+          total: releaseReadinessItems.length,
+        },
+        checks: releaseReadinessItems.map((item) => ({
+          id: item.id,
+          ready: item.ready,
+          label: t(item.titleKey),
+        })),
+        pending: releaseReadinessPendingItems.map((item) => ({
+          id: item.id,
+          label: t(item.titleKey),
+        })),
+      },
+      clean_install_gate: {
+        visible_for_empty_workspace: !hasAnyRegisteredChannel,
+        ready: cleanInstallGateReadyCount,
+        total: cleanInstallGateSteps.length,
+        next_step: cleanInstallGateNextStep
+          ? {
+              id: cleanInstallGateNextStep.id,
+              state: cleanInstallGateNextStep.state,
+              label: t(cleanInstallGateNextStep.titleKey),
+            }
+          : null,
+        steps: cleanInstallGateSteps.map((step) => ({
+          id: step.id,
+          state: step.state,
+          label: t(step.titleKey),
+        })),
+      },
+      runtime: {
+        worker_enabled: runtimeSettings?.download_worker_enabled ?? null,
+        download_scheduler_enabled: runtimeSettings?.download_worker_scheduler_enabled ?? null,
+        metadata_scheduler_enabled: runtimeSettings?.metadata_sync_scheduler_enabled ?? null,
+        pending_restart: runtimeSettings?.pending_restart ?? null,
+        restart_adapter: restartAdapter?.adapter ?? null,
+        restart_executable: restartAdapter?.executable ?? null,
+        scheduler_state: runtimeSettings?.scheduler_status?.state ?? null,
+        metadata_scheduler_state: runtimeSettings?.metadata_scheduler_status?.state ?? null,
+      },
+      mounts: {
+        status: mountDoctor?.status ?? null,
+        score: mountDoctor?.score ?? null,
+        critical_count: mountDoctorCriticalCount,
+        warning_count: mountDoctorWarningCount,
+        inspected_roots: mountDoctorPathRows.length,
+      },
+      backup_restore: {
+        recoverable: runtimeBackupRestoreReady,
+        durable_roots: runtimeBackupRestorePaths.map((path) => ({
+          id: path.id,
+          tone: path.tone,
+          label: t(path.labelKey),
+          state: path.path ? mountDoctorPathState(path.path, t) : t("runtime.backup.pathUnknown"),
+        })),
+      },
+      storage: storageScan
+        ? {
+            scanned: true,
+            archive_label: storageScan.volume.archive_label,
+            free_label: storageScan.volume.free_label,
+            pressure_percent: storageScan.volume.pressure_percent,
+            drift: {
+              unindexed_media_count: storageScan.drift.unindexed_media_count,
+              indexed_missing_count: storageScan.drift.indexed_missing_count,
+            },
+            orphan_sidecar_count: storageScan.orphan_sidecars.length,
+          }
+        : {
+            scanned: false,
+          },
+      queue: {
+        counts: queueConsoleCounts,
+        worker_plan_ready: Boolean(queueConsoleWorkerPlan),
+        claimable_count: queueConsoleWorkerPlan?.claimable_count ?? null,
+        locked_reason_present: Boolean(queueConsoleWorkerPlan?.locked_reason),
+      },
+      library: {
+        total: library?.total ?? 0,
+        archived: library?.archived ?? 0,
+        missing: library?.missing ?? 0,
+      },
+      audit: {
+        recent_event_count: events.length,
+        scheduler_tick_count: runtimeSettings?.scheduler_ticks.length ?? 0,
+        metadata_tick_count: runtimeSettings?.metadata_sync_ticks.length ?? 0,
+      },
+      support_bundle: {
+        source: supportBundleSource,
+        server_redaction_preferred: true,
+      },
+    };
+  }
+
+  async function handleCopyBetaProof() {
+    try {
+      await copyTextToClipboard(JSON.stringify(buildBetaProofPayload(), null, 2));
+      setBetaProofCopyStatus("copied");
+      window.setTimeout(() => setBetaProofCopyStatus("idle"), 1800);
+    } catch {
+      setBetaProofCopyStatus("error");
+      window.setTimeout(() => setBetaProofCopyStatus("idle"), 2200);
+    }
+  }
+
+  function handleDownloadBetaProof() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadTextFile(
+      `channel-vault-beta-proof-${timestamp}.json`,
+      JSON.stringify(buildBetaProofPayload(), null, 2),
+      "application/json;charset=utf-8",
+    );
+  }
+
   async function handleCopyDownloadRunSummary() {
     let serverSummary: Awaited<ReturnType<typeof getDownloadWorkerRunSummary>> | null = null;
     try {
@@ -3169,6 +3407,7 @@ function App() {
     setRuntimeRestartMessage("");
     setRuntimeRestartPresetCopyStatus(null);
     setRuntimeComposeSmokeCopyStatus("idle");
+    setRuntimeBackupCopyStatus(null);
     setRuntimeApplyStatus("idle");
     setRuntimeApplyMessage("");
     setRuntimeGuideOpen(true);
@@ -4870,15 +5109,7 @@ function App() {
     : t("runtime.checking");
   const mountDoctorTopIssue = mountDoctor?.issues.find((issue) => issue.severity === "critical") ?? mountDoctor?.issues.find((issue) => issue.severity === "warning") ?? null;
   const mountDoctorPathRows = mountDoctor?.paths.filter((path) => ["database", "metadata", "download", "runtime"].includes(path.id)) ?? [];
-  const releaseReadinessItems: {
-    id: string;
-    icon: typeof Link2;
-    ready: boolean;
-    titleKey: TranslationKey;
-    detailKey: TranslationKey;
-    actionKey: TranslationKey;
-    action: () => void;
-  }[] = [
+  const releaseReadinessItems: ReleaseReadinessItem[] = [
     {
       id: "source",
       icon: Link2,
@@ -4941,6 +5172,19 @@ function App() {
       action: () => handleSelectNav("insights"),
     },
     {
+      id: "backup",
+      icon: FileArchive,
+      ready: runtimeBackupRestoreReady,
+      titleKey: "release.readiness.backup.title",
+      detailKey: "release.readiness.backup.detail",
+      actionKey: "release.readiness.backup.action",
+      action: () => {
+        setActiveNavId("settings");
+        void handleOpenRuntimeGuide();
+        scrollToAppSection(".runtime-console");
+      },
+    },
+    {
       id: "audit",
       icon: History,
       ready: events.length > 0 || (runtimeSettings?.scheduler_ticks.length ?? 0) > 0 || (runtimeSettings?.metadata_sync_ticks.length ?? 0) > 0,
@@ -4951,6 +5195,145 @@ function App() {
     },
   ];
   const releaseReadinessDone = releaseReadinessItems.filter((item) => item.ready).length;
+  const releaseReadinessPendingItems = releaseReadinessItems.filter((item) => !item.ready);
+  const releaseReadinessNextItem = releaseReadinessPendingItems[0] ?? null;
+  const releaseReadinessBriefTone: ReleaseReadinessBriefTone =
+    releaseReadinessDone === releaseReadinessItems.length
+      ? "ready"
+      : releaseReadinessDone >= Math.ceil(releaseReadinessItems.length * 0.75)
+        ? "close"
+        : "building";
+  const releaseReadinessBriefStatusKey = `release.brief.status.${releaseReadinessBriefTone}` as TranslationKey;
+  const releaseReadinessGapSummary = releaseReadinessPendingItems.length
+    ? t("release.brief.gaps").replace("{count}", String(releaseReadinessPendingItems.length))
+    : t("release.brief.nonePending");
+  const cleanInstallMountState: CleanInstallGateStepState = mountDoctor
+    ? mountDoctor.status === "critical"
+      ? "warn"
+      : "ready"
+    : "active";
+  const cleanInstallBackupState: CleanInstallGateStepState = runtimeBackupRestoreReady
+    ? "ready"
+    : mountDoctor?.status === "critical"
+      ? "warn"
+      : "active";
+  const cleanInstallGateSteps: CleanInstallGateStep[] = [
+    {
+      id: "access",
+      icon: KeyRound,
+      state: securityReadinessReady ? "ready" : "active",
+      titleKey: "firstRun.gate.access.title",
+      detailKey: "firstRun.gate.access.detail",
+      actionKey: "firstRun.gate.access.action",
+      action: async () => {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        window.setTimeout(() => handleJumpToAccessGuard(), 40);
+      },
+    },
+    {
+      id: "mounts",
+      icon: HardDrive,
+      state: cleanInstallMountState,
+      titleKey: "firstRun.gate.mounts.title",
+      detailKey: "firstRun.gate.mounts.detail",
+      actionKey: "firstRun.gate.mounts.action",
+      action: async () => {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        window.setTimeout(() => scrollToAppSection(".runtime-volume-cookbook"), 40);
+      },
+    },
+    {
+      id: "backup",
+      icon: FileArchive,
+      state: cleanInstallBackupState,
+      titleKey: "firstRun.gate.backup.title",
+      detailKey: "firstRun.gate.backup.detail",
+      actionKey: "firstRun.gate.backup.action",
+      action: async () => {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        window.setTimeout(() => scrollToAppSection(".runtime-backup-restore"), 40);
+      },
+    },
+    {
+      id: "demo",
+      icon: Database,
+      state: hasAnyRegisteredChannel ? "ready" : "active",
+      titleKey: "firstRun.gate.demo.title",
+      detailKey: "firstRun.gate.demo.detail",
+      actionKey: demoSeedStatus === "loading" ? "firstRun.demo.loading" : "firstRun.gate.demo.action",
+      disabled: demoSeedStatus === "loading",
+      action: handleSeedDemoWorkspace,
+    },
+    {
+      id: "diagnostics",
+      icon: ClipboardList,
+      state: supportBundleSource === "server" || supportBundleSource === "fallback" ? "ready" : "active",
+      titleKey: "firstRun.gate.diagnostics.title",
+      detailKey: "firstRun.gate.diagnostics.detail",
+      actionKey:
+        supportBundleCopyStatus === "copied"
+          ? "support.bundle.copied"
+          : supportBundleCopyStatus === "error"
+            ? "support.bundle.copyError"
+            : "firstRun.gate.diagnostics.action",
+      action: handleCopySupportBundle,
+    },
+  ];
+  const cleanInstallGateReadyCount = cleanInstallGateSteps.filter((step) => step.state === "ready").length;
+  const cleanInstallGateNextStep = cleanInstallGateSteps.find((step) => step.state !== "ready") ?? cleanInstallGateSteps.at(-1);
+  const runtimeGuideRailItems: RuntimeGuideRailItem[] = [
+    {
+      id: "security",
+      icon: KeyRound,
+      labelKey: "runtime.rail.security",
+      detail: securityReadinessReady ? t("runtime.token.stateProtected") : t("runtime.token.stateNeedsToken"),
+      selector: ".runtime-token-setup",
+      tone: securityReadinessReady ? "good" : "warn",
+    },
+    {
+      id: "volumes",
+      icon: FolderTree,
+      labelKey: "runtime.rail.volumes",
+      detail: mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking"),
+      selector: ".runtime-volume-cookbook",
+      tone: mountDoctor?.status === "critical" ? "bad" : mountDoctor?.status === "warning" ? "warn" : mountDoctor ? "good" : "active",
+    },
+    {
+      id: "backup",
+      icon: FileArchive,
+      labelKey: "runtime.rail.backup",
+      detail: runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn"),
+      selector: ".runtime-backup-restore",
+      tone: runtimeBackupRestoreReady ? "good" : "warn",
+    },
+    {
+      id: "exposure",
+      icon: ShieldCheck,
+      labelKey: "runtime.rail.exposure",
+      detail: securityReadinessReady ? t("runtime.exposure.guardReady") : t("runtime.exposure.guardWarn"),
+      selector: ".runtime-exposure-cookbook",
+      tone: securityReadinessReady ? "good" : "warn",
+    },
+    {
+      id: "restart",
+      icon: RotateCcw,
+      labelKey: "runtime.rail.restart",
+      detail: runtimeSettings?.pending_restart ? t("runtime.restart.pending") : restartAdapterLabel,
+      selector: ".runtime-restart-banner",
+      tone: runtimeSettings?.pending_restart ? "warn" : restartAdapter?.executable ? "good" : "active",
+    },
+    {
+      id: "scheduler",
+      icon: History,
+      labelKey: "runtime.rail.scheduler",
+      detail: `${schedulerRuntimeLabel} · ${metadataSchedulerRuntimeLabel}`,
+      selector: ".runtime-guide-state",
+      tone: runtimeSettings ? "active" : "neutral",
+    },
+  ];
 
   if (authRequired) {
     return (
@@ -5303,6 +5686,47 @@ function App() {
                 {workflowMessage ? (
                   <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
                 ) : null}
+                <div className="clean-install-gate" aria-label={t("firstRun.gate.aria")}>
+                  <div className="clean-install-head">
+                    <div>
+                      <p className="panel-kicker">{t("firstRun.gate.kicker")}</p>
+                      <h3>{t("firstRun.gate.title")}</h3>
+                      <span>
+                        {cleanInstallGateNextStep
+                          ? t("firstRun.gate.subtitle").replace("{next}", t(cleanInstallGateNextStep.titleKey))
+                          : t("firstRun.gate.done")}
+                      </span>
+                    </div>
+                    <div className="clean-install-score">
+                      <ShieldCheck size={15} />
+                      <strong>
+                        {cleanInstallGateReadyCount}/{cleanInstallGateSteps.length}
+                      </strong>
+                      <small>{t("firstRun.gate.score")}</small>
+                    </div>
+                  </div>
+                  <div className="clean-install-steps">
+                    {cleanInstallGateSteps.map((step, index) => {
+                      const StepIcon = step.icon;
+                      return (
+                        <article className={step.state} key={step.id}>
+                          <div className="clean-install-step-index">
+                            <span>{index + 1}</span>
+                            <StepIcon size={14} />
+                          </div>
+                          <div className="clean-install-step-copy">
+                            <em>{t(`firstRun.gate.status.${step.state}` as TranslationKey)}</em>
+                            <strong>{t(step.titleKey)}</strong>
+                            <small>{t(step.detailKey)}</small>
+                          </div>
+                          <button disabled={step.disabled} onClick={() => void step.action()} type="button">
+                            {t(step.actionKey)}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="first-source-grid">
                   <article>
                     <Link2 size={17} />
@@ -5382,6 +5806,91 @@ function App() {
                   <button onClick={handleDownloadSupportBundle} type="button">
                     <Download size={13} />
                     {t("support.bundle.download")}
+                  </button>
+                </div>
+              </div>
+              <div className={`release-brief ${releaseReadinessBriefTone}`} aria-label={t("release.brief.aria")}>
+                <div className="release-brief-state">
+                  <Sparkles size={16} />
+                  <div>
+                    <span>{t("release.brief.kicker")}</span>
+                    <strong>{t(releaseReadinessBriefStatusKey)}</strong>
+                    <small>
+                      {t("release.brief.score").replace("{done}", String(releaseReadinessDone)).replace("{total}", String(releaseReadinessItems.length))}
+                    </small>
+                  </div>
+                </div>
+                <div className="release-brief-next">
+                  <span>{releaseReadinessNextItem ? t("release.brief.next") : t("release.brief.readyNext")}</span>
+                  <strong>{releaseReadinessNextItem ? t(releaseReadinessNextItem.titleKey) : t("release.brief.allGreenTitle")}</strong>
+                  <small>{releaseReadinessNextItem ? t(releaseReadinessNextItem.detailKey) : t("release.brief.allGreenDetail")}</small>
+                </div>
+                <div className="release-brief-pills">
+                  <span className={releaseReadinessPendingItems.length ? "warn" : "good"}>
+                    {releaseReadinessGapSummary}
+                  </span>
+                  <span>{mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking")}</span>
+                  <span>{runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}</span>
+                </div>
+                <div className="release-brief-actions">
+                  {releaseReadinessNextItem ? (
+                    <button onClick={() => releaseReadinessNextItem.action()} type="button">
+                      <ChevronRight size={13} />
+                      {t("release.brief.openNext")}
+                    </button>
+                  ) : null}
+                  <button onClick={() => void handleCopyBetaReadinessBrief()} type="button">
+                    <ClipboardList size={13} />
+                    {betaBriefCopyStatus === "copied"
+                      ? t("release.brief.copied")
+                      : betaBriefCopyStatus === "error"
+                        ? t("release.brief.copyError")
+                        : t("release.brief.copy")}
+                  </button>
+                </div>
+              </div>
+              <div className="beta-proof-card" aria-label={t("beta.proof.aria")}>
+                <div className="beta-proof-copy">
+                  <p className="panel-kicker">{t("beta.proof.kicker")}</p>
+                  <strong>{t("beta.proof.title")}</strong>
+                  <span>{t("beta.proof.detail")}</span>
+                </div>
+                <div className="beta-proof-metrics">
+                  <article>
+                    <span>{t("beta.proof.readiness")}</span>
+                    <strong>{releaseReadinessDone}/{releaseReadinessItems.length}</strong>
+                  </article>
+                  <article>
+                    <span>{t("beta.proof.install")}</span>
+                    <strong>{cleanInstallGateReadyCount}/{cleanInstallGateSteps.length}</strong>
+                  </article>
+                  <article>
+                    <span>{t("beta.proof.privacy")}</span>
+                    <strong>{t("beta.proof.redacted")}</strong>
+                  </article>
+                  <article>
+                    <span>{t("beta.proof.source")}</span>
+                    <strong>
+                      {supportBundleSource === "server"
+                        ? t("support.bundle.server")
+                        : supportBundleSource === "fallback"
+                          ? t("support.bundle.fallback")
+                          : t("support.bundle.ready")}
+                    </strong>
+                  </article>
+                </div>
+                <div className="beta-proof-actions">
+                  <button onClick={() => void handleCopyBetaProof()} type="button">
+                    <ClipboardList size={13} />
+                    {betaProofCopyStatus === "copied"
+                      ? t("beta.proof.copied")
+                      : betaProofCopyStatus === "error"
+                        ? t("beta.proof.copyError")
+                        : t("beta.proof.copy")}
+                  </button>
+                  <button onClick={handleDownloadBetaProof} type="button">
+                    <Download size={13} />
+                    {t("beta.proof.download")}
                   </button>
                 </div>
               </div>
@@ -9009,6 +9518,19 @@ function App() {
               </div>
             ) : null}
 
+            <nav className="runtime-guide-rail" aria-label={t("runtime.rail.aria")}>
+              {runtimeGuideRailItems.map((item) => {
+                const RailIcon = item.icon;
+                return (
+                  <button className={item.tone} key={item.id} onClick={() => handleRuntimeGuideRailClick(item.selector)} type="button">
+                    <RailIcon size={14} />
+                    <span>{t(item.labelKey)}</span>
+                    <small>{item.detail}</small>
+                  </button>
+                );
+              })}
+            </nav>
+
             <div
               className={`runtime-secure-jump ${securityReadinessReady ? "good" : "warn"}`}
               aria-label={t("runtime.secure.aria")}
@@ -9328,6 +9850,90 @@ function App() {
                   <span>{t("runtime.volume.env")}</span>
                   <code>{runtimeVolumeEnvManifest}</code>
                 </article>
+              </div>
+            </div>
+            <div
+              className={`runtime-backup-restore ${runtimeBackupRestoreReady ? "good" : "warn"}`}
+              aria-label={t("runtime.backup.aria")}
+            >
+              <div className="runtime-apply-heading">
+                <FileArchive size={16} />
+                <div>
+                  <strong>{t("runtime.backup.title")}</strong>
+                  <span>{t("runtime.backup.subtitle")}</span>
+                </div>
+              </div>
+              <div className={`runtime-backup-state ${runtimeBackupRestoreReady ? "good" : "warn"}`}>
+                {runtimeBackupRestoreReady ? <ShieldCheck size={15} /> : <AlertTriangle size={15} />}
+                <div>
+                  <strong>{runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}</strong>
+                  <span>{runtimeBackupRestoreReady ? t("runtime.backup.readyDetail") : t("runtime.backup.warnDetail")}</span>
+                </div>
+              </div>
+              <div className="runtime-backup-grid">
+                {runtimeBackupRestorePaths.map((item) => (
+                  <article className={item.tone} key={item.id}>
+                    <div>
+                      <strong>{t(item.labelKey)}</strong>
+                      <span>{t(item.detailKey)}</span>
+                    </div>
+                    <code>{item.displayPath}</code>
+                    <small>{item.path ? mountDoctorPathState(item.path, t) : t("runtime.backup.pathUnknown")}</small>
+                  </article>
+                ))}
+              </div>
+              <div className="runtime-backup-command-grid">
+                {(
+                  [
+                    {
+                      id: "quiesced" as const,
+                      label: t("runtime.backup.quiesced"),
+                      detail: t("runtime.backup.quiescedDetail"),
+                      button: t("runtime.backup.copyQuiesced"),
+                    },
+                    {
+                      id: "sqlite" as const,
+                      label: t("runtime.backup.sqlite"),
+                      detail: t("runtime.backup.sqliteDetail"),
+                      button: t("runtime.backup.copySqlite"),
+                    },
+                    {
+                      id: "restore" as const,
+                      label: t("runtime.backup.restore"),
+                      detail: t("runtime.backup.restoreDetail"),
+                      button: t("runtime.backup.copyRestore"),
+                    },
+                  ] satisfies {
+                    id: BackupRestoreCommandId;
+                    label: string;
+                    detail: string;
+                    button: string;
+                  }[]
+                ).map((command) => {
+                  const copyState = runtimeBackupCopyStatus?.id === command.id ? runtimeBackupCopyStatus.status : "idle";
+                  return (
+                    <article key={command.id}>
+                      <div>
+                        <strong>{command.label}</strong>
+                        <span>{command.detail}</span>
+                      </div>
+                      <code>{runtimeBackupRestoreCommands[command.id]}</code>
+                      <button
+                        aria-label={command.button}
+                        className="runtime-copy-button"
+                        onClick={() => void handleCopyBackupRestoreCommand(command.id)}
+                        type="button"
+                      >
+                        <ClipboardList size={14} />
+                        {copyState === "copied"
+                          ? t("runtime.backup.copied")
+                          : copyState === "error"
+                            ? t("runtime.backup.copyError")
+                            : command.button}
+                      </button>
+                    </article>
+                  );
+                })}
               </div>
             </div>
             {runtimeRestartMessage ? (
@@ -10981,6 +11587,112 @@ function buildVolumeMountEnvManifest(presets: VolumeMountPreset[]) {
 
 function buildVolumeMountMkdirCommand(presets: VolumeMountPreset[]) {
   return `mkdir -p ${presets.map((preset) => preset.hostPath).join(" ")}`;
+}
+
+function buildBackupRestorePathCards(mountDoctor: MountDoctor | null, runtime: RuntimeSettings | null): BackupRestorePathCard[] {
+  const metadata = mountDoctorPath(mountDoctor, "metadata");
+  const download = mountDoctorPath(mountDoctor, "download");
+  const runtimeEnv = mountDoctorPath(mountDoctor, "runtime");
+  return [
+    {
+      id: "metadata",
+      labelKey: "runtime.backup.metadata",
+      detailKey: "runtime.backup.metadataDetail",
+      path: metadata,
+      displayPath: metadata?.resolved ?? runtime?.metadata_dir ?? "/volume1/channel-vault-nas/metadata",
+      tone: backupPathTone(metadata, mountDoctor),
+    },
+    {
+      id: "download",
+      labelKey: "runtime.backup.archive",
+      detailKey: "runtime.backup.archiveDetail",
+      path: download,
+      displayPath: download?.resolved ?? runtime?.download_dir ?? "/volume1/channel-vault-nas/archive",
+      tone: backupPathTone(download, mountDoctor),
+    },
+    {
+      id: "runtime",
+      labelKey: "runtime.backup.runtime",
+      detailKey: "runtime.backup.runtimeDetail",
+      path: runtimeEnv,
+      displayPath:
+        runtimeEnv?.resolved ??
+        (runtime?.managed_env_file && runtime.managed_env_file.startsWith("/")
+          ? parentPath(runtime.managed_env_file)
+          : "/volume1/channel-vault-nas/runtime"),
+      tone: backupPathTone(runtimeEnv, mountDoctor),
+    },
+  ];
+}
+
+function buildBackupRestoreCommands(
+  mountDoctor: MountDoctor | null,
+  runtime: RuntimeSettings | null,
+): Record<BackupRestoreCommandId, string> {
+  const metadataDir = backupResolvedPath(mountDoctor, "metadata", runtime?.metadata_dir ?? "/volume1/channel-vault-nas/metadata");
+  const archiveDir = backupResolvedPath(mountDoctor, "download", runtime?.download_dir ?? "/volume1/channel-vault-nas/archive");
+  const runtimeEnvFile = backupResolvedPath(
+    mountDoctor,
+    "runtime",
+    runtime?.managed_env_file && runtime.managed_env_file.startsWith("/")
+      ? runtime.managed_env_file
+      : "/volume1/channel-vault-nas/runtime/.env.runtime",
+  );
+  const runtimeDir = parentPath(runtimeEnvFile);
+  const databaseFile = backupResolvedPath(mountDoctor, "database", joinPath(metadataDir, "app.db"));
+  return {
+    quiesced: [
+      "# Stop briefly for a consistent metadata/runtime copy.",
+      "docker compose stop",
+      `rsync -a --delete ${shellQuote(ensureTrailingSlash(metadataDir))} /backup/cvn/metadata/`,
+      `rsync -a ${shellQuote(ensureTrailingSlash(archiveDir))} /backup/cvn/archive/`,
+      `rsync -a --delete ${shellQuote(ensureTrailingSlash(runtimeDir))} /backup/cvn/runtime/`,
+      "docker compose start",
+    ].join("\n"),
+    sqlite: [
+      "# Hot SQLite snapshot for the operational index.",
+      "mkdir -p /backup/cvn/metadata",
+      `sqlite3 ${shellQuote(databaseFile)} ".backup '/backup/cvn/metadata/app.db'"`,
+    ].join("\n"),
+    restore: [
+      "# Restore the same three durable roots, then start the app.",
+      "docker compose stop",
+      "rsync -a --delete /backup/cvn/metadata/ /volume1/channel-vault-nas/metadata/",
+      "rsync -a /backup/cvn/archive/ /volume1/channel-vault-nas/archive/",
+      "rsync -a --delete /backup/cvn/runtime/ /volume1/channel-vault-nas/runtime/",
+      "docker compose start",
+      "# If the DB was lost but archive sidecars survived:",
+      "curl -X POST http://127.0.0.1:8000/api/library/_rescan/apply",
+    ].join("\n"),
+  };
+}
+
+function mountDoctorPath(mountDoctor: MountDoctor | null, id: MountDoctorPath["id"]) {
+  return mountDoctor?.paths.find((path) => path.id === id) ?? null;
+}
+
+function backupPathTone(path: MountDoctorPath | null, mountDoctor: MountDoctor | null): BackupRestorePathCard["tone"] {
+  if (!path || !mountDoctor) return "warn";
+  return mountDoctorPathTone(path, mountDoctor.running_in_container) === "bad" ? "bad" : "good";
+}
+
+function backupResolvedPath(mountDoctor: MountDoctor | null, id: MountDoctorPath["id"], fallback: string) {
+  return mountDoctorPath(mountDoctor, id)?.resolved ?? fallback;
+}
+
+function parentPath(value: string) {
+  const normalized = value.replace(/\/+$/, "");
+  const index = normalized.lastIndexOf("/");
+  if (index <= 0) return ".";
+  return normalized.slice(0, index);
+}
+
+function joinPath(base: string, child: string) {
+  return `${base.replace(/\/+$/, "")}/${child}`;
+}
+
+function ensureTrailingSlash(value: string) {
+  return value.endsWith("/") ? value : `${value}/`;
 }
 
 const ACCESS_TOKEN_SMOKE_COMMAND = [
