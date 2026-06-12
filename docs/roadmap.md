@@ -62,7 +62,8 @@ Focus: make daily operation smoother.
   indexed-missing media.
 - Channel detail gains stronger coverage timeline, upload cadence, and next
   sync forecasting.
-- Demo video/GIF and public walkthrough assets are published.
+- Deterministic demo recording workflow exists; final published video/GIF asset
+  is still a release chore.
 
 ## 0.3.0-beta
 

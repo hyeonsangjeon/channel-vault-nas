@@ -46,6 +46,18 @@ The generated images are written to:
 docs/assets/screenshots/
 ```
 
+Record the public demo WebM from the same fixture:
+
+```bash
+scripts/capture-public-demo.sh
+```
+
+The generated file is written to:
+
+```text
+docs/assets/demo/channel-vault-public-alpha.webm
+```
+
 ## In-App Safe Demo Workspace
 
 Fresh empty installs can load the same kind of operator story from the UI.
@@ -153,6 +165,10 @@ npm run build
 npm run e2e:smoke -- --project=chromium
 CVN_E2E_AUTH_TOKEN=cvn-local-test-token npm run e2e:auth -- --project=chromium
 CVN_CAPTURE_PUBLIC_SCREENSHOTS=true npx playwright test e2e/public-screenshots.spec.ts --project=chromium
+```
+
+```bash
+scripts/capture-public-demo.sh
 ```
 
 For Docker Compose:

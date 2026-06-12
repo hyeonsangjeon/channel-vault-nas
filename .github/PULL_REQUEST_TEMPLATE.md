@@ -25,6 +25,7 @@
 - [ ] `npm run e2e:smoke -- --project=chromium` from `frontend/`
 - [ ] `CVN_E2E_AUTH_TOKEN=cvn-local-test-token npm run e2e:auth -- --project=chromium` from `frontend/`
 - [ ] `bash -n scripts/deployment-smoke.sh`
+- [ ] `bash -n scripts/capture-public-demo.sh`
 - [ ] `scripts/public-alpha-check.sh`
 
 ## Screenshots

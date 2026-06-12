@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "e2e:smoke": "playwright test",
     "e2e:auth": "playwright test e2e/auth-gate.spec.ts",
+    "e2e:demo": "playwright test e2e/public-demo-recording.spec.ts",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

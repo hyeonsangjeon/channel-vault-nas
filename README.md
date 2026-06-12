@@ -115,6 +115,16 @@ cd frontend
 CVN_CAPTURE_PUBLIC_SCREENSHOTS=true npx playwright test e2e/public-screenshots.spec.ts --project=chromium
 ```
 
+Record the deterministic public demo WebM:
+
+```bash
+scripts/capture-public-demo.sh
+```
+
+The generated recording is written to
+`docs/assets/demo/channel-vault-public-alpha.webm` and is ignored by git until a
+reviewed final asset is ready to publish.
+
 ## Product Tour
 
 ### Dashboard
@@ -588,6 +598,12 @@ cd frontend
 CVN_CAPTURE_PUBLIC_SCREENSHOTS=true npx playwright test e2e/public-screenshots.spec.ts --project=chromium
 ```
 
+Public demo recording:
+
+```bash
+scripts/capture-public-demo.sh
+```
+
 ## Documentation
 
 - [Product Brief](docs/product-brief.md)
@@ -618,7 +634,7 @@ Before a public alpha release:
 - Publish versioned container images and verify anonymous GHCR pulls after the
   packages are set Public.
 - Keep README screenshot assets current from the Playwright seeded fixture.
-- Record/share a short demo video or GIF from the public alpha runbook.
+- Record/share a short demo video or GIF with `scripts/capture-public-demo.sh`.
 - Keep the safe first-run demo and runtime error copy polished.
 - Run full backend, frontend build, and browser smoke tests.
 - Tag a guarded prerelease, such as `v0.1.0-alpha.1`.

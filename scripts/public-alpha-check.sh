@@ -57,6 +57,8 @@ check_public_surface() {
     "docs/public-alpha-demo.md"
     "docs/deployment-security.md"
     "scripts/deployment-smoke.sh"
+    "scripts/capture-public-demo.sh"
+    "docs/assets/demo/README.md"
     "docs/assets/screenshots/dashboard-cockpit.png"
     "docs/assets/screenshots/channel-downloads.png"
     "docs/assets/screenshots/queue-console.png"
@@ -87,7 +89,7 @@ run_step "backend lint" "$BACKEND_RUFF" check backend/app backend/tests backend/
 run_step "backend tests" "$BACKEND_PYTEST" backend/tests -q
 run_step "locale keys" check_locale_keys
 run_step "public repo surface" check_public_surface
-run_step "release script syntax" bash -lc "bash -n scripts/public-alpha-check.sh && bash -n scripts/compose-smoke.sh && bash -n scripts/deployment-smoke.sh"
+run_step "release script syntax" bash -lc "bash -n scripts/public-alpha-check.sh && bash -n scripts/compose-smoke.sh && bash -n scripts/deployment-smoke.sh && bash -n scripts/capture-public-demo.sh"
 run_step "frontend build" bash -lc "cd frontend && npm run build"
 
 if [[ "${CVN_PUBLIC_ALPHA_SKIP_BROWSER:-false}" == "true" ]]; then
