@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="520" viewBox="0 0 1400 520" role="img" aria-labelledby="title desc">
+  <title id="title">Channel Vault NAS archive cockpit hero</title>
+  <desc id="desc">A dark NAS console illustration showing metadata sync, guarded download queue, archive ledger, and library coverage.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#05070c"/>
+      <stop offset="0.48" stop-color="#0a111a"/>
+      <stop offset="1" stop-color="#07151a"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.5" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" fill="none" stroke="#162234" stroke-width="1" opacity="0.42"/>
+    </pattern>
+  </defs>
+
+  <rect width="1400" height="520" fill="url(#bg)"/>
+  <rect width="1400" height="520" fill="url(#grid)" opacity="0.52"/>
+  <path d="M70 426C216 370 319 460 464 410C657 344 786 426 930 375C1108 312 1208 351 1330 292" fill="none" stroke="#19364a" stroke-width="2"/>
+  <path d="M70 455C218 410 331 480 492 435C690 380 799 462 983 404C1140 354 1235 384 1330 334" fill="none" stroke="#143225" stroke-width="2"/>
+
+  <g transform="translate(84 66)">
+    <rect width="174" height="44" rx="12" fill="#111a24" stroke="#28384d"/>
+    <path d="M27 17h34v18H27z" fill="#0a1018" stroke="#38bdf8" stroke-width="3"/>
+    <path d="M32 10h21l8 7H27z" fill="#34d399"/>
+    <circle cx="37" cy="27" r="3" fill="#f59e0b"/>
+    <circle cx="50" cy="27" r="3" fill="#a78bfa"/>
+    <text x="76" y="29" fill="#e5edf7" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="18" font-weight="800">Channel Vault</text>
+  </g>
+
+  <g transform="translate(84 132)">
+    <text x="0" y="0" fill="#38bdf8" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800">NAS-first archive cockpit</text>
+    <text x="0" y="62" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="58" font-weight="900">Sync channels.</text>
+    <text x="0" y="128" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="58" font-weight="900">Download only</text>
+    <text x="0" y="194" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="58" font-weight="900">missing videos.</text>
+    <text x="0" y="258" fill="#d7e1ee" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="23" font-weight="700">Turn archive.txt, yt-dlp, SQLite, and NAS folders</text>
+    <text x="0" y="292" fill="#d7e1ee" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="23" font-weight="700">into one recoverable operator console.</text>
+  </g>
+
+  <g transform="translate(84 456)">
+    <rect width="180" height="42" rx="21" fill="#102033" stroke="#28506c"/>
+    <text x="24" y="27" fill="#c7f9ff" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="800">Guarded worker</text>
+    <rect x="196" width="194" height="42" rx="21" fill="#10241c" stroke="#266044"/>
+    <text x="220" y="27" fill="#cfffe6" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="800">Sidecar recovery</text>
+    <rect x="406" width="175" height="42" rx="21" fill="#251d13" stroke="#7a5122"/>
+    <text x="430" y="27" fill="#ffedc0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="800">Docker-ready</text>
+  </g>
+
+  <g transform="translate(764 84)">
+    <rect width="548" height="318" rx="22" fill="#0d1624" stroke="#2a4058"/>
+    <rect x="0" y="0" width="548" height="54" rx="22" fill="#132238" stroke="#2a4058"/>
+    <circle cx="29" cy="27" r="6" fill="#ef4444"/>
+    <circle cx="51" cy="27" r="6" fill="#f59e0b"/>
+    <circle cx="73" cy="27" r="6" fill="#34d399"/>
+    <text x="104" y="34" fill="#c7d2e0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" font-weight="700">docker pull, then archive with intent</text>
+
+    <text x="34" y="96" fill="#38bdf8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">$ export CVN_API_IMAGE=modenaf360/</text>
+    <text x="34" y="124" fill="#8bdcf7" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">  channel-vault-nas-api:0.1.0-alpha.1</text>
+    <text x="34" y="166" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">$ docker compose pull</text>
+    <text x="34" y="206" fill="#f59e0b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">$ docker compose up -d --no-build</text>
+
+    <rect x="34" y="244" width="143" height="38" rx="19" fill="#102033" stroke="#28506c"/>
+    <text x="56" y="269" fill="#c7f9ff" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">CI green</text>
+    <rect x="194" y="244" width="160" height="38" rx="19" fill="#10241c" stroke="#266044"/>
+    <text x="216" y="269" fill="#cfffe6" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">Docker Hub</text>
+    <rect x="371" y="244" width="143" height="38" rx="19" fill="#251d13" stroke="#7a5122"/>
+    <text x="393" y="269" fill="#ffedc0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">NAS local</text>
+  </g>
+</svg>
