@@ -50,6 +50,8 @@ The project is in active alpha. Dates use Korea Standard Time.
   API exposure checks.
 - Deterministic public demo recording workflow via
   `scripts/capture-public-demo.sh` and `frontend/e2e/public-demo-recording.spec.ts`.
+- Saved library views can now be exported, copied, downloaded, and imported as
+  portable JSON bundles via API and Library UI controls.
 
 ### Changed
 

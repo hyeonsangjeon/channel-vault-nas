@@ -12,6 +12,9 @@ from app.schemas.library import (
     LibraryFile,
     LibraryItem,
     LibrarySnapshot,
+    LibraryViewBundle,
+    LibraryViewImportRequest,
+    LibraryViewImportResult,
     LibraryViewRead,
     LibraryViewWrite,
     RescanApplyResult,
@@ -24,7 +27,13 @@ from app.services.library_index import (
     get_library_item,
     list_library_files,
 )
-from app.services.library_views import delete_library_view, list_library_views, save_library_view
+from app.services.library_views import (
+    delete_library_view,
+    export_library_views,
+    import_library_views,
+    list_library_views,
+    save_library_view,
+)
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -63,6 +72,18 @@ async def get_saved_library_views(db: DbSession, limit: int = 20) -> list[Librar
 async def post_saved_library_view(payload: LibraryViewWrite, db: DbSession) -> LibraryViewRead:
     """Create or update a reusable library filter view."""
     return await save_library_view(db=db, payload=payload)
+
+
+@router.get("/views/export", response_model=LibraryViewBundle)
+async def export_saved_library_views(db: DbSession, limit: int = 50) -> LibraryViewBundle:
+    """Return saved library views as a portable bundle."""
+    return await export_library_views(db=db, limit=limit)
+
+
+@router.post("/views/import", response_model=LibraryViewImportResult)
+async def import_saved_library_views(payload: LibraryViewImportRequest, db: DbSession) -> LibraryViewImportResult:
+    """Import saved library views from a portable bundle."""
+    return await import_library_views(db=db, payload=payload)
 
 
 @router.delete("/views/{view_id:int}")
