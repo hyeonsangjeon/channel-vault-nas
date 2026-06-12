@@ -8,11 +8,12 @@ arms them.
 
 Show the complete Channel Vault NAS loop:
 
-1. Register or select a source.
-2. Sync metadata.
-3. Stage only missing videos.
-4. Review a bounded download pass.
-5. Verify queue, library, storage, and runtime audit surfaces.
+1. Start from a safe clean-install story.
+2. Register or select a source.
+3. Sync metadata.
+4. Stage only missing videos.
+5. Review a bounded download pass.
+6. Verify queue, library, storage, runtime, backup, and redacted proof surfaces.
 
 ## Safe Fixture Path
 
@@ -57,6 +58,7 @@ This path is safe for screenshots and first-run evaluation:
 - It does not call YouTube.
 - It does not start downloads.
 - It refuses to run when the workspace already has registered real channels.
+- The clean-install gate explains the safety boundary before sample data is seeded.
 - It routes the operator straight to the channel Downloads tab after seeding.
 - It shows a demo banner with a clear action so sample data can be removed
   without touching real channels.
@@ -80,7 +82,8 @@ For a local public-alpha walkthrough:
 1. Start the app with Docker Compose or local development commands from the README.
 2. If `CVN_AUTH_TOKEN` is enabled, enter the operator token once. Do not show
    the token in recordings, livestreams, or screenshots.
-3. Open Dashboard and point out readiness, mission control, and the first-run runway.
+3. Open Dashboard and point out readiness, mission control, the clean-install
+   gate, and the beta proof export.
 4. On an empty workspace, load the safe demo to show the full app without external calls.
 5. Open Channels and show registration probing before anything is downloaded.
 6. Open a channel detail and move through Overview, Downloads, Library, Logs, and Policy.
@@ -90,7 +93,10 @@ For a local public-alpha walkthrough:
 10. Open Queue and show claimable, blocked, failed, retry, and job detail states.
 11. Open Library and show saved views, sidecar fidelity, codec/profile metadata, and media detail.
 12. Open Insights and show real storage scan, drift, pressure trend, orphan sidecars, and quarantine.
-13. Open Settings and show runtime flags, scheduler tick drawers, restart adapters, and support exports.
+13. Open Settings and show runtime flags, scheduler tick drawers, restart
+    adapters, backup confidence, and support exports.
+14. Return to Dashboard and copy/download the beta onboarding proof. Confirm it
+    is a redacted readiness snapshot, not an archive export or a secret dump.
 
 ## Real Download Guardrail
 
@@ -103,6 +109,18 @@ CVN_DOWNLOAD_WORKER_ENABLED=true
 Even when enabled, the UI keeps real worker passes behind a confirmation modal
 and limits one pass to at most five jobs. Candidate creation is allowed while
 workers are paused, but queue claim is blocked.
+
+## Redacted Proof And Support Export
+
+Use two exports in public demos:
+
+- **Support bundle**: server-generated diagnostics for bug reports. It redacts
+  tokens, absolute paths, source URLs, channel/video titles, and generated
+  download commands.
+- **Beta onboarding proof**: Dashboard-generated readiness evidence for
+  walkthroughs and release reviews. It summarizes clean-install, runtime,
+  backup, storage, queue, library, and audit posture without including secrets
+  or operator content.
 
 ## What To Avoid In Public Demos
 
