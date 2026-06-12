@@ -160,6 +160,7 @@ class LibrarySidecar(BaseModel):
 class LibraryFile(BaseModel):
     """One media file attached to a library video."""
 
+    id: int
     video_id: int
     relative_path: str
     filename: str

@@ -644,6 +644,7 @@ export type LibrarySidecar = {
 };
 
 export type LibraryFile = {
+  id: number;
   video_id: number;
   relative_path: string;
   filename: string;

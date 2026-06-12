@@ -414,7 +414,7 @@ POST   /api/library/_rescan/apply
 GET    /api/library/{video_id}
 GET    /api/library/{video_id}/files
 GET    /api/library/{video_id}/stream
-GET    /api/library/{video_id}/file
+GET    /api/library/{video_id}/files/{media_file_id}/stream
 
 GET    /api/settings/runtime
 PATCH  /api/settings/runtime
@@ -586,13 +586,14 @@ Rules:
 - Probe indexed media with `CVN_FFPROBE_BINARY` when available; probing must be
   optional and timeout-bound so a missing or slow binary never blocks archive
   recovery.
-- Library file detail responses expose media existence, stream URL, compact
-  size labels, integrity state, expected sidecar existence, and discovered
-  subtitle sidecars while keeping paths archive-relative.
+- Library file detail responses expose media id, media existence, per-file stream
+  URL, compact size labels, integrity state, expected sidecar existence, and
+  discovered subtitle sidecars while keeping paths archive-relative.
 - Do not automatically rename archived media when a source title changes.
 - Prevent path traversal on every file endpoint.
-- The streaming endpoint supports HTTP range requests for browser preview and
-  seeking.
+- Streaming endpoints support HTTP range requests for browser preview and
+  seeking; file-card actions use media-file-specific URLs so multi-file archives
+  open the selected file instead of the first available file.
 - File deletion should separate DB record deletion from physical file deletion
   and make destructive operations explicit in the UI.
 

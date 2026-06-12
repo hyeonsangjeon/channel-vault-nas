@@ -613,7 +613,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(page.getByLabel("미디어 파일 상세")).toBeVisible();
   const libraryPreview = page.getByLabel("미디어 미리보기");
   await expect(libraryPreview).toBeVisible();
-  await expect(libraryPreview.locator("video")).toHaveAttribute("src", /\/api\/library\/\d+\/stream/);
+  await expect(libraryPreview.locator("video")).toHaveAttribute("src", /\/api\/library\/\d+\/files\/\d+\/stream/);
   await expect(page.locator(".library-file-card").first()).toContainText("1080p");
   await expect(page.locator(".library-sidecar-grid").first()).toContainText("자막");
   await page.screenshot({ path: testInfo.outputPath("library-detail.png"), fullPage: true });
