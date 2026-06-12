@@ -49,7 +49,7 @@ This is an active alpha. The core loop is working locally:
 - Candidate generation for missing videos
 - Download queue with preflight, retry, cancel, and bounded worker passes
 - Real `yt-dlp` downloads when explicitly enabled
-- Worker run audit, scheduler tick logs, and event drawers
+- Worker run audit with completed/skipped/failed/slow filters, scheduler tick logs, and event drawers
 - Runtime settings with `.env.runtime` apply/restart guidance
 - Storage scanner for real NAS folders, drift, pressure, and orphan sidecars
 - Library index with media files, sidecar fidelity, codec/profile filters, and portable saved views

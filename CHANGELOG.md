@@ -52,6 +52,8 @@ The project is in active alpha. Dates use Korea Standard Time.
   `scripts/capture-public-demo.sh` and `frontend/e2e/public-demo-recording.spec.ts`.
 - Saved library views can now be exported, copied, downloaded, and imported as
   portable JSON bundles via API and Library UI controls.
+- Worker history now exposes completed/skipped/failed/slow filters, duration
+  threshold querying, and slow-run diagnostic callouts in the queue drawer.
 
 ### Changed
 
