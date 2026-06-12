@@ -76,6 +76,8 @@ Focus: NAS deployment confidence.
   covers command generation + execute-gating for every adapter.
 - [x] Backup/restore docs for SQLite plus filesystem sidecars —
   [`docs/backup-restore.md`](backup-restore.md).
+- [x] Beta onboarding surfaces — clean-install gate, runtime guide section rail,
+  backup confidence panel, and redacted Dashboard proof export.
 - [ ] Broader E2E coverage for token-protected and reverse-proxied deployments
   (token gate covered by `auth-gate.spec.ts`; reverse-proxy shape still open).
 

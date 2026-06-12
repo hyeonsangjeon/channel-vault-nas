@@ -41,6 +41,8 @@ The project is in active alpha. Dates use Korea Standard Time.
 - Restart-adapter validation tests (`backend/tests/test_restart_adapter.py`)
   covering docker-compose/systemd/supervisor/Synology/QNAP/hook/disabled command
   generation and execute-gating.
+- Beta readiness onboarding surfaces: clean-install gate, runtime guide section
+  rail, backup confidence panel, and a redacted Dashboard proof export.
 
 ### Changed
 
@@ -69,7 +71,8 @@ The project is in active alpha. Dates use Korea Standard Time.
   write is bounded by a timeout and falls back to a synchronous copy, and the
   E2E suite grants clipboard permissions for deterministic runs.
 
-## 0.1.0-alpha
+## 0.1.0-alpha.1 - 2026-06-11
 
-Planned first public alpha tag. See [Public Alpha Roadmap](docs/roadmap.md) for
-the release gate and scope.
+Guarded public alpha prerelease. See
+[v0.1.0-alpha.1](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1)
+and [Public Alpha Roadmap](docs/roadmap.md) for the release gate and scope.

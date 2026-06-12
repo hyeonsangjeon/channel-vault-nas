@@ -55,13 +55,13 @@ This is an active alpha. The core loop is working locally:
 - Library index with media files, sidecar fidelity, codec/profile filters, and saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
+- Versioned GHCR images for the guarded public alpha prerelease
 
 Not ready yet:
 
 - Multi-user auth/session hardening for exposed networks
 - Published demo video/GIF assets
-- Widely published container images (the GHCR release workflow is wired, but the
-  first public `v*` tag has not been cut yet)
+- Anonymous GHCR pull verification on the first public package visibility pass
 - Production install guide for Synology/QNAP/systemd packages
 
 The current release direction and public-alpha gate are tracked in
@@ -274,8 +274,8 @@ mount the host Docker socket or ship with a Docker CLI.
 
 Tagged releases publish `api` and `web` images to GitHub Container Registry via
 the `Release images` workflow (`.github/workflows/release-images.yml`, triggered
-on `v*` tags). Once a release tag exists, run the app without building from
-source by pointing Compose at the published images:
+on `v*` tags). For `v0.1.0-alpha.1` and later, run the app without building
+from source by pointing Compose at the published images:
 
 ```bash
 git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
@@ -291,13 +291,12 @@ docker compose up -d --no-build
 
 Notes:
 
-- No public release tag has been cut yet. Until one is, use the build-from-source
-  path above; the pull commands will return `manifest unknown` against a tag that
-  does not exist.
-- GHCR packages are private by default. The first time a tag is published, the
-  maintainer must set both packages to Public (and link them to this repo) so
-  anonymous `docker compose pull` works. Otherwise, run
-  `docker login ghcr.io` with a token that can read the packages.
+- GHCR packages are private by default. If anonymous `docker compose pull`
+  returns a permission error, the maintainer still needs to set both packages to
+  Public and link them to this repo. Until then, run `docker login ghcr.io` with
+  a token that can read the packages.
+- `manifest unknown` means the requested tag has not been published. Use a
+  listed release tag or build from source.
 - Set `CVN_API_IMAGE` and `CVN_WEB_IMAGE` together. If only one is set, Compose
   tries to pull the other from its default local tag and the pull fails.
 - `docker-compose.yml` defaults to local build tags
@@ -355,8 +354,9 @@ The demo path does not call YouTube and does not start downloads. It is intended
 for first impressions, screenshots, public-alpha walkthroughs, and contributor
 orientation. If the workspace already has real registered channels, the backend
 refuses to seed the demo so existing archives are not mixed with fixture data.
-Once loaded, the channel detail view shows a demo banner and a clear action that
-removes only the `Signal Lab` demo channel and its demo archive folder.
+The clean-install gate says this plainly before seeding. Once loaded, the
+channel detail view shows a demo banner and a clear action that removes only the
+`Signal Lab` demo channel and its demo archive folder.
 
 ## Quickstart: Local Development
 
@@ -424,7 +424,7 @@ Worker passes are intentionally bounded:
 ## 5-Minute Demo Flow
 
 1. Start with Docker Compose or the local development commands above.
-2. Open Dashboard and confirm the readiness cards, live event pill, and first-run runway.
+2. Open Dashboard and confirm the release readiness card, live event pill, and clean-install gate.
 3. If the workspace is empty, click the safe demo action to load `Signal Lab` without external calls.
 4. For a live source, go to Channels, paste a channel URL or handle, then probe before registering.
 5. Click Sync to detect source videos and open the channel detail tabs.
@@ -434,12 +434,16 @@ Worker passes are intentionally bounded:
 9. Open Queue to watch progress, failures, retries, and worker audit detail.
 10. Open Library and confirm completed media/index coverage changed.
 11. Open Insights to inspect storage pressure, drift, and orphan sidecars.
-12. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, and the support export surfaces.
+12. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, backup confidence, and support exports.
+13. Return to Dashboard and copy or download the beta onboarding proof JSON for a redacted readiness snapshot.
 
 Dashboard support export buttons request a server-generated redacted diagnostic
 bundle first, then fall back to the browser snapshot if the server endpoint is
 not available. The server bundle removes operator tokens, absolute paths,
 source URLs, channel/video titles, and generated download commands.
+The beta onboarding proof export is separate: it summarizes readiness, runtime,
+mount, queue, library, storage, and backup posture from the UI state while
+excluding titles, source URLs, absolute paths, generated commands, and tokens.
 
 The `archive.txt` path supports the classic workflow:
 
@@ -578,12 +582,13 @@ Before a public alpha release:
 
 - Run `scripts/public-alpha-check.sh`.
 - Validate Docker Compose on macOS, Linux, and one NAS-like host.
-- Publish versioned container images.
+- Publish versioned container images and verify anonymous GHCR pulls after the
+  packages are set Public.
 - Keep README screenshot assets current from the Playwright seeded fixture.
 - Record/share a short demo video or GIF from the public alpha runbook.
 - Keep the safe first-run demo and runtime error copy polished.
 - Run full backend, frontend build, and browser smoke tests.
-- Tag `v0.1.0-alpha`.
+- Tag a guarded prerelease, such as `v0.1.0-alpha.1`.
 
 ## Relationship To youtube-dl-nas
 
