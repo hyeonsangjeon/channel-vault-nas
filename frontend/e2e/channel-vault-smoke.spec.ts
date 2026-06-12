@@ -18,18 +18,32 @@ function watchBrowserErrors(page: Page) {
 async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "ko");
+    let clipboardText = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        readText: async () => clipboardText,
+        writeText: async (value: string) => {
+          clipboardText = value;
+        },
+      },
+    });
   });
   await page.route("**/api/dashboard", async (route) => {
-    const response = await route.fetch();
-    const payload = await response.json();
-    if (Array.isArray(payload.channels)) {
-      payload.channels.sort((left: { id: string }, right: { id: string }) => {
-        if (left.id === "c1") return -1;
-        if (right.id === "c1") return 1;
-        return left.id.localeCompare(right.id);
-      });
+    try {
+      const response = await route.fetch();
+      const payload = await response.json();
+      if (Array.isArray(payload.channels)) {
+        payload.channels.sort((left: { id: string }, right: { id: string }) => {
+          if (left.id === "c1") return -1;
+          if (right.id === "c1") return 1;
+          return left.id.localeCompare(right.id);
+        });
+      }
+      await route.fulfill({ response, json: payload });
+    } catch {
+      await route.continue();
     }
-    await route.fulfill({ response, json: payload });
   });
   await page.goto(path);
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
