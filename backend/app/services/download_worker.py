@@ -206,6 +206,7 @@ async def list_download_worker_runs(
     status: str | None = None,
     dry_run: bool | None = None,
     failed_only: bool = False,
+    min_duration_seconds: int | None = None,
     limit: int = 10,
 ) -> list[DownloadWorkerRunRead]:
     """Return newest persisted worker passes."""
@@ -218,6 +219,10 @@ async def list_download_worker_runs(
         query = query.where(DownloadWorkerRun.dry_run.is_(dry_run))
     if failed_only:
         query = query.where(or_(DownloadWorkerRun.status == "failed", DownloadWorkerRun.failed_count > 0))
+    if min_duration_seconds is not None:
+        threshold = max(0, min_duration_seconds)
+        duration_expr = (func.julianday(DownloadWorkerRun.completed_at) - func.julianday(DownloadWorkerRun.started_at)) * 86400
+        query = query.where(DownloadWorkerRun.completed_at.is_not(None), duration_expr >= threshold)
     effective_limit = max(1, min(limit, 100))
     rows = (await db.execute(query.order_by(DownloadWorkerRun.created_at.desc()).limit(effective_limit))).all()
     return [_to_worker_run_read(run, channel) for run, channel in rows]

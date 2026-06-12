@@ -102,6 +102,7 @@ async def get_download_worker_runs(
     status: str | None = None,
     dry_run: bool | None = None,
     failed_only: bool = False,
+    min_duration_seconds: int | None = None,
     limit: int = 10,
 ) -> list[DownloadWorkerRunRead]:
     """Return recent persisted worker pass audits."""
@@ -111,6 +112,7 @@ async def get_download_worker_runs(
         status=status,
         dry_run=dry_run,
         failed_only=failed_only,
+        min_duration_seconds=min_duration_seconds,
         limit=limit,
     )
 

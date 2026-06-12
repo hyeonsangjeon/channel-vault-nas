@@ -162,3 +162,27 @@ Expected: `200`.
 The browser UI stores the operator token in the current browser only. Rotate the
 token if it appears in logs, screenshots, shell history, or a shared browser
 profile.
+
+You can run the same checks as one command:
+
+```bash
+CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \
+CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \
+scripts/deployment-smoke.sh
+```
+
+The script checks the web root, proxied `/api/health`, protected
+`/api/dashboard` `401`/`200` behavior, bearer and `X-CVN-Token` headers, and
+WebSocket upgrade through the web/proxy endpoint. To prove a raw backend port is
+not exposed from the machine where you run the check, pass a URL that should be
+blocked:
+
+```bash
+CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \
+CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \
+CVN_DEPLOYMENT_SMOKE_FORBIDDEN_API_URL=http://vault.example.test:8000 \
+scripts/deployment-smoke.sh
+```
+
+For self-signed TLS during a private LAN test, add
+`CVN_DEPLOYMENT_SMOKE_INSECURE=true`.

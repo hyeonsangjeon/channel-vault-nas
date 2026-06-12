@@ -106,6 +106,36 @@ class LibraryViewWrite(BaseModel):
     codec: str = Field(default="", max_length=200)
 
 
+class LibraryViewExportItem(LibraryViewWrite):
+    """Portable saved library view without install-local IDs."""
+
+
+class LibraryViewBundle(BaseModel):
+    """Portable saved library view bundle for sharing between installs."""
+
+    kind: str = "channel_vault_library_views"
+    version: int = 1
+    generated_at: datetime
+    count: int
+    views: list[LibraryViewExportItem] = Field(default_factory=list, max_length=50)
+
+
+class LibraryViewImportRequest(BaseModel):
+    """Payload accepted by the saved-view import endpoint."""
+
+    views: list[LibraryViewExportItem] = Field(default_factory=list, min_length=1, max_length=50)
+
+
+class LibraryViewImportResult(BaseModel):
+    """Result of importing a saved-view bundle."""
+
+    imported_count: int
+    created_count: int
+    updated_count: int
+    skipped_count: int
+    views: list["LibraryViewRead"]
+
+
 class LibraryViewRead(BaseModel):
     """Persisted saved library filter view."""
 
@@ -130,6 +160,7 @@ class LibrarySidecar(BaseModel):
 class LibraryFile(BaseModel):
     """One media file attached to a library video."""
 
+    id: int
     video_id: int
     relative_path: str
     filename: str

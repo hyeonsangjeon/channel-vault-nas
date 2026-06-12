@@ -13,8 +13,16 @@ test("empty first run can load the safe demo workspace", async ({ page }) => {
   const firstRun = page.getByLabel("첫 소스 빈 상태");
   await expect(firstRun).toBeVisible();
   await expect(firstRun).toContainText("안전 데모 불러오기");
+  const cleanInstallGate = firstRun.getByLabel("클린 설치 beta gate");
+  await expect(cleanInstallGate).toContainText("첫 실제 아카이브 전에 5가지만 확인");
+  await expect(cleanInstallGate).toContainText("접근 보호");
+  await expect(cleanInstallGate).toContainText("마운트 확인");
+  await expect(cleanInstallGate).toContainText("복구 계획");
+  await expect(cleanInstallGate).toContainText("진단 복사");
+  await cleanInstallGate.getByRole("button", { name: "진단 복사" }).click();
+  await expect(cleanInstallGate.getByRole("button", { name: "번들 복사됨" })).toBeVisible();
 
-  await firstRun.getByRole("button", { name: "데모 불러오기" }).click();
+  await cleanInstallGate.getByRole("button", { name: "데모 불러오기" }).click();
 
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
   const tabs = page.getByLabel("채널 상세 탭");

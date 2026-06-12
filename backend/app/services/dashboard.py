@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.archive import Channel, DownloadJob, MediaFile, SyncJob, Video
+from app.models.archive import Channel, DownloadJob, SyncJob, Video
 from app.schemas.dashboard import (
     ActivityItem,
     ArchiveMetric,
@@ -17,15 +18,35 @@ from app.schemas.dashboard import (
     FidelitySummary,
     QueueLane,
 )
+from app.services.archive_coverage import (
+    archived_bytes_on_disk,
+    archived_video_ids_on_disk,
+    resolve_archive_root,
+)
+
+REMOVED_SOURCE_STATES = {"removed", "blocked", "deleted", "private"}
 
 
-async def build_dashboard_snapshot(db: AsyncSession) -> DashboardSnapshot:
-    """Build a live dashboard snapshot from the SQLite index."""
+async def build_dashboard_snapshot(
+    db: AsyncSession,
+    *,
+    download_dir: str | Path | None = None,
+) -> DashboardSnapshot:
+    """Build a live dashboard snapshot from the SQLite index.
+
+    Archive coverage and per-channel storage are disk-aware: a ``MediaFile`` row
+    only counts as archived/downloaded when its file exists under the configured
+    archive root, matching the Library. With no archive root configured the
+    counts fall back to trusting the DB index.
+    """
+    root = resolve_archive_root(download_dir)
     channel_count = await _scalar_count(db, select(func.count(Channel.id)))
-    source_count = await _scalar_count(db, select(func.count(Video.id)))
-    archived_count = await _scalar_count(db, select(func.count(func.distinct(MediaFile.video_id))))
-    missing_count = max(source_count - archived_count, 0)
-    removed_saved = await _scalar_count(db, select(func.coalesce(func.sum(Channel.removed_saved_count), 0)))
+    video_rows = (await db.execute(select(Video.id, Video.source_state))).all()
+    source_count = len(video_rows)
+    archived_ids = await archived_video_ids_on_disk(db=db, root=root)
+    archived_count = len(archived_ids)
+    missing_count = _missing_count(video_rows, archived_ids)
+    removed_saved = _removed_saved_count(video_rows, archived_ids)
     failed_downloads = await _scalar_count(db, select(func.count(DownloadJob.id)).where(DownloadJob.status == "failed"))
     queued_downloads = await _scalar_count(
         db,
@@ -58,7 +79,7 @@ async def build_dashboard_snapshot(db: AsyncSession) -> DashboardSnapshot:
             ArchiveMetric(
                 label="Archive Coverage",
                 value=f"{coverage_percent}%",
-                detail=f"{_format_int(archived_count)} mirrored locally",
+                detail=f"{_format_int(archived_count)} mirrored on disk",
                 tone="good" if missing_count == 0 and source_count else "warn",
             ),
             ArchiveMetric(
@@ -80,14 +101,14 @@ async def build_dashboard_snapshot(db: AsyncSession) -> DashboardSnapshot:
                 tone="active" if active_sync else "protected",
             ),
         ],
-        channels=await _channel_nodes(db),
+        channels=await _channel_nodes(db, root=root),
         links=[],
         queue=await _queue_lanes(db),
         activity=await _activity(db),
     )
 
 
-async def _channel_nodes(db: AsyncSession) -> list[ChannelNode]:
+async def _channel_nodes(db: AsyncSession, *, root: Path | None) -> list[ChannelNode]:
     result = await db.execute(select(Channel).order_by(Channel.created_at.desc()).limit(12))
     nodes: list[ChannelNode] = []
     for index, channel in enumerate(result.scalars().all(), start=1):
@@ -96,18 +117,23 @@ async def _channel_nodes(db: AsyncSession) -> list[ChannelNode]:
             select(func.count(DownloadJob.id))
             .join(Video, DownloadJob.video_id == Video.id)
             .where(Video.channel_id == channel.id)
-            .where(DownloadJob.status == "failed"),
+                .where(DownloadJob.status == "failed"),
         )
+        video_rows = (
+            await db.execute(select(Video.id, Video.source_state).where(Video.channel_id == channel.id))
+        ).all()
+        archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel.id)
+        missing_count = _missing_count(video_rows, archived_ids)
         total = max(channel.source_video_count, 1)
-        health = max(30, round(((total - channel.missing_count - failed_jobs) / total) * 100))
-        storage_bytes = await _channel_storage_bytes(db, channel.id)
+        health = max(30, round(((total - missing_count - failed_jobs) / total) * 100))
+        storage_bytes = await _channel_storage_bytes(db, channel.id, root=root)
         nodes.append(
             ChannelNode(
                 id=f"c{channel.id}",
                 title=channel.title,
                 health=health,
                 storage_gb=round(max(storage_bytes / 1024**3, 0.1), 1),
-                new_videos=channel.missing_count,
+                new_videos=missing_count,
                 failed_jobs=failed_jobs,
                 group=channel.handle or f"group-{index}",
             )
@@ -115,14 +141,10 @@ async def _channel_nodes(db: AsyncSession) -> list[ChannelNode]:
     return nodes
 
 
-async def _channel_storage_bytes(db: AsyncSession, channel_id: int) -> int:
-    media_bytes = await db.scalar(
-        select(func.coalesce(func.sum(MediaFile.size_bytes), 0))
-        .join(Video, MediaFile.video_id == Video.id)
-        .where(Video.channel_id == channel_id)
-    )
+async def _channel_storage_bytes(db: AsyncSession, channel_id: int, *, root: Path | None) -> int:
+    media_bytes = await archived_bytes_on_disk(db=db, root=root, channel_id=channel_id)
     if media_bytes:
-        return int(media_bytes)
+        return media_bytes
 
     queue_bytes = await db.scalar(
         select(func.coalesce(func.sum(DownloadJob.estimated_bytes), 0))
@@ -207,6 +229,22 @@ async def _activity(db: AsyncSession) -> list[ActivityItem]:
 async def _scalar_count(db: AsyncSession, statement) -> int:
     value = await db.scalar(statement)
     return int(value or 0)
+
+
+def _missing_count(video_rows: list[tuple[int, str]], archived_ids: set[int]) -> int:
+    return sum(
+        1
+        for video_id, source_state in video_rows
+        if video_id not in archived_ids and source_state not in REMOVED_SOURCE_STATES
+    )
+
+
+def _removed_saved_count(video_rows: list[tuple[int, str]], archived_ids: set[int]) -> int:
+    return sum(
+        1
+        for video_id, source_state in video_rows
+        if video_id in archived_ids and source_state in REMOVED_SOURCE_STATES
+    )
 
 
 def _format_int(value: int) -> str:

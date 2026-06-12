@@ -55,36 +55,49 @@ Exit criteria:
 
 Focus: make daily operation smoother.
 
-- Saved library views become shareable/exportable.
-- Queue drawer gets richer failed/skipped/completed filters and slow-run
+- [x] Saved library views become shareable/exportable via portable JSON copy,
+  download, and import.
+- [x] Queue drawer gets richer failed/skipped/completed filters and slow-run
   diagnostics.
 - Storage scanner adds safer guided repair flows for orphan sidecars and
   indexed-missing media.
 - Channel detail gains stronger coverage timeline, upload cadence, and next
   sync forecasting.
-- Demo video/GIF and public walkthrough assets are published.
+- Deterministic demo recording workflow exists; final published video/GIF asset
+  is still a release chore.
 
 ## 0.3.0-beta
 
 Focus: NAS deployment confidence.
 
-- [x] Versioned container images — GHCR `Release images` workflow publishes
-  multi-arch `api`/`web` on `v*` tags (`0.1.0-alpha.1` published).
+- [x] Versioned container images — `Release images` workflow publishes
+  multi-arch `api`/`web` to Docker Hub and GHCR on `v*` tags
+  (`0.1.0-alpha.1` published on GHCR; Docker Hub mirror enabled for the next
+  release run).
 - [x] Synology/QNAP-oriented install notes — [`docs/nas-install.md`](nas-install.md).
 - [x] Systemd/supervisor package examples — [`deploy/`](../deploy/README.md).
 - [x] More restart adapter validation — `backend/tests/test_restart_adapter.py`
   covers command generation + execute-gating for every adapter.
 - [x] Backup/restore docs for SQLite plus filesystem sidecars —
   [`docs/backup-restore.md`](backup-restore.md).
-- [ ] Broader E2E coverage for token-protected and reverse-proxied deployments
-  (token gate covered by `auth-gate.spec.ts`; reverse-proxy shape still open).
+- [x] Beta onboarding surfaces — clean-install gate, runtime guide section rail,
+  backup confidence panel, and redacted Dashboard proof export.
+- [x] Token-protected E2E coverage — `auth-gate.spec.ts` checks API `401`/`200`
+  behavior and browser unlock, and runs in CI/public-alpha checks with a test
+  token.
+- [x] Live deployment/reverse-proxy smoke script —
+  [`scripts/deployment-smoke.sh`](../scripts/deployment-smoke.sh) checks the
+  exposed web endpoint, proxied API, protected access, WebSocket upgrade, and
+  optional forbidden raw API URLs.
+- [x] Basic in-app library media preview with HTTP `Range` stream support for
+  browser seeking.
 
 ## Later
 
 - Google Takeout importer.
 - Full text subtitle search.
 - Optional source API integrations.
-- Streaming preview surfaces.
+- Advanced streaming preview surfaces, thumbnails, and optional transcode paths.
 - Advanced visual insights: storage treemap, sync timeline, policy simulator,
   and channel health matrix.
 - Multi-user/session auth hardening if the deployment model needs it.

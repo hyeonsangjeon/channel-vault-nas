@@ -12,6 +12,9 @@ Channel Vault NAS keeps two durable layers:
 You are responsible for backing up these folders; the app does not manage
 off-NAS backups.
 
+The same path checks and copyable command templates are available in the app at
+**Settings → Env guide → Backup / restore confidence**.
+
 ## What to back up
 
 | Item | Path (host) | Why |

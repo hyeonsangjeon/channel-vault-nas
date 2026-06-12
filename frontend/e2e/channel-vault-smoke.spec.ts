@@ -1,5 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
+import { writeFileSync } from "node:fs";
 
 test.setTimeout(90_000);
 
@@ -14,21 +15,41 @@ function watchBrowserErrors(page: Page) {
   return errors;
 }
 
+async function dispatchButtonClick(button: Locator) {
+  await button.evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+}
+
 async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "ko");
+    let clipboardText = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        readText: async () => clipboardText,
+        writeText: async (value: string) => {
+          clipboardText = value;
+        },
+      },
+    });
   });
   await page.route("**/api/dashboard", async (route) => {
-    const response = await route.fetch();
-    const payload = await response.json();
-    if (Array.isArray(payload.channels)) {
-      payload.channels.sort((left: { id: string }, right: { id: string }) => {
-        if (left.id === "c1") return -1;
-        if (right.id === "c1") return 1;
-        return left.id.localeCompare(right.id);
-      });
+    try {
+      const response = await route.fetch();
+      const payload = await response.json();
+      if (Array.isArray(payload.channels)) {
+        payload.channels.sort((left: { id: string }, right: { id: string }) => {
+          if (left.id === "c1") return -1;
+          if (right.id === "c1") return 1;
+          return left.id.localeCompare(right.id);
+        });
+      }
+      await route.fulfill({ response, json: payload });
+    } catch {
+      await route.continue();
     }
-    await route.fulfill({ response, json: payload });
   });
   await page.goto(path);
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
@@ -36,6 +57,10 @@ async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   const opsBoard = page.getByLabel("오늘의 아카이브 미션");
   await expect(opsBoard).toContainText("준비도");
   await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
+  const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
+  await expect(releaseReadiness).toContainText("백업/복구");
+  await expect(releaseReadiness).toContainText("Beta 런치 브리핑");
+  await expect(releaseReadiness).toContainText("다음 unblock");
   const mountDoctor = page.getByLabel("NAS 볼륨 마운트 진단");
   await expect(mountDoctor).toContainText("NAS 마운트 Doctor");
   await expect(mountDoctor).toContainText("DB");
@@ -57,11 +82,36 @@ test("command palette opens operational surfaces and live status is visible", as
   const supportBundleResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/ops/support-bundle") && response.status() === 200,
   );
-  await page.getByRole("button", { name: "지원 번들 복사" }).click();
+  await dispatchButtonClick(page.getByRole("button", { name: "지원 번들 복사" }));
   const supportBundleResponse = await supportBundleResponsePromise;
   const supportBundle = await supportBundleResponse.json();
   expect(supportBundle.redaction.safe_for_public_issue).toBe(true);
-  await expect(page.getByText("서버 redacted")).toBeVisible();
+  await expect(page.locator(".support-bundle-source").filter({ hasText: "서버 redacted" })).toBeVisible();
+  const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
+  const betaProof = page.getByLabel("Beta onboarding proof export");
+  await expect(betaProof).toContainText("이 설치가 public-safe인지 증거로 내보내기");
+  await expect(betaProof.getByRole("button", { name: "proof 다운로드" })).toBeVisible();
+  await dispatchButtonClick(betaProof.getByRole("button", { name: "proof 복사" }));
+  await expect(betaProof.getByRole("button", { name: "proof 복사됨" })).toBeVisible();
+  const betaProofText = await page.evaluate(() => navigator.clipboard.readText());
+  const betaProofPayload = JSON.parse(betaProofText);
+  expect(betaProofPayload.kind).toBe("channel_vault_beta_onboarding_proof");
+  expect(betaProofPayload.privacy.redacted_for_public_issue).toBe(true);
+  expect(betaProofText).not.toContain("Signal Lab");
+  expect(betaProofText).not.toContain("https://");
+  expect(betaProofText).not.toContain("/tmp/");
+  await dispatchButtonClick(releaseReadiness.getByRole("button", { name: "브리핑 복사" }));
+  await expect(releaseReadiness.getByRole("button", { name: "브리핑 복사됨" })).toBeVisible();
+  await releaseReadiness.getByRole("button", { name: "복구 가이드" }).click();
+  const runtimeGuideFromReadiness = page.getByLabel("런타임 env 매니페스트");
+  await expect(runtimeGuideFromReadiness).toBeVisible();
+  const runtimeRailFromReadiness = runtimeGuideFromReadiness.getByLabel("런타임 가이드 섹션");
+  await expect(runtimeRailFromReadiness).toContainText("보안");
+  await expect(runtimeRailFromReadiness).toContainText("볼륨");
+  await expect(runtimeRailFromReadiness).toContainText("백업");
+  await runtimeRailFromReadiness.getByRole("button").filter({ hasText: "백업" }).click();
+  await expect(runtimeGuideFromReadiness.getByLabel("백업 및 복구 confidence")).toBeVisible();
+  await runtimeGuideFromReadiness.getByRole("button", { name: "닫기" }).click();
 
   await page.getByRole("button", { name: "Command Palette 열기" }).click();
   const palette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
@@ -73,7 +123,12 @@ test("command palette opens operational surfaces and live status is visible", as
 
   const runtimeGuide = page.getByLabel("런타임 env 매니페스트");
   await expect(runtimeGuide).toBeVisible();
+  const runtimeRail = runtimeGuide.getByLabel("런타임 가이드 섹션");
+  await expect(runtimeRail).toContainText("재시작");
+  await expect(runtimeRail).toContainText("Scheduler");
+  await runtimeRail.getByRole("button").filter({ hasText: "볼륨" }).click();
   await expect(runtimeGuide).toContainText("Compose smoke 검증");
+  await expect(runtimeGuide.getByLabel("NAS 볼륨 마운트 cookbook")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("command-palette-runtime-guide.png"), fullPage: true });
   await runtimeGuide.getByRole("button", { name: "닫기" }).click();
 
@@ -333,7 +388,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(tokenGuard).toContainText("CVN_AUTH_TOKEN=");
   const copyTokenButton = tokenGuard.getByRole("button", { name: "토큰 한 번 복사" });
   await expect(copyTokenButton).toBeVisible();
-  await copyTokenButton.click();
+  await dispatchButtonClick(copyTokenButton);
   await expect(copyTokenButton).toContainText("토큰 복사됨");
   await expect(runtimeGuide.getByText("외부 공개 cookbook")).toBeVisible();
   const exposureCookbook = runtimeGuide.getByLabel("외부 공개 cookbook");
@@ -341,9 +396,15 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(exposureCookbook).toContainText("Nginx");
   await expect(exposureCookbook).toContainText("Caddy");
   await expect(exposureCookbook).toContainText("Cloudflare Tunnel");
+  await expect(exposureCookbook).toContainText("Live 배포 smoke");
+  await expect(exposureCookbook).toContainText("scripts/deployment-smoke.sh");
+  const deploymentSmokeCopyButton = exposureCookbook.getByRole("button", { name: "배포 smoke 복사" });
+  await expect(deploymentSmokeCopyButton).toBeVisible();
+  await dispatchButtonClick(deploymentSmokeCopyButton);
+  await expect(deploymentSmokeCopyButton).toContainText("복사됨");
   const nginxProxyCopyButton = exposureCookbook.getByRole("button", { name: "프록시 복사 Nginx" });
   await expect(nginxProxyCopyButton).toBeVisible();
-  await nginxProxyCopyButton.click();
+  await dispatchButtonClick(nginxProxyCopyButton);
   await expect(nginxProxyCopyButton).toContainText("복사됨");
   await expect(runtimeGuide.getByText("Restart adapter 프리셋")).toBeVisible();
   await expect(runtimeGuide.getByText("Synology 패키지")).toBeVisible();
@@ -354,11 +415,20 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(volumeCookbook).toContainText("CVN_DOWNLOAD_HOST_DIR");
   const volumeEnvCopyButton = runtimeGuide.getByRole("button", { name: "볼륨 env 복사" });
   await expect(volumeEnvCopyButton).toBeVisible();
-  await volumeEnvCopyButton.click();
+  await dispatchButtonClick(volumeEnvCopyButton);
   await expect(volumeEnvCopyButton).toContainText("복사됨");
+  const backupRestore = runtimeGuide.getByLabel("백업 및 복구 confidence");
+  await expect(backupRestore).toBeVisible();
+  await expect(backupRestore).toContainText("Metadata DB");
+  await expect(backupRestore).toContainText("Archive + sidecars");
+  await expect(backupRestore).toContainText("Runtime overrides");
+  const backupCopyButton = backupRestore.getByRole("button", { name: "백업 명령 복사" });
+  await expect(backupCopyButton).toBeVisible();
+  await dispatchButtonClick(backupCopyButton);
+  await expect(backupCopyButton).toContainText("복사됨");
   const restartPresetCopyButton = runtimeGuide.getByRole("button", { name: "env 복사 Docker Compose" });
   await expect(restartPresetCopyButton).toBeVisible();
-  await restartPresetCopyButton.click();
+  await dispatchButtonClick(restartPresetCopyButton);
   await expect(restartPresetCopyButton).toContainText("복사됨");
   const runtimeWorkerSummary = runtimeGuide.getByLabel("다운로드 worker summary export");
   await expect(runtimeWorkerSummary).toContainText("/api/jobs/downloads/worker/summary");
@@ -380,7 +450,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(schedulerDrawer.locator(".scheduler-tick-list.expanded")).toContainText("fixture retry budget exhausted");
   await schedulerDrawer.getByRole("button", { name: "느린 실행만" }).click();
   await expect(schedulerDrawer.getByText("interval seconds")).toBeVisible();
-  await schedulerDrawer.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(schedulerDrawer.getByRole("button", { name: "JSON 복사" }));
   await expect(schedulerDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   const schedulerExport = page.waitForEvent("download");
   await schedulerDrawer.getByRole("button", { name: "NDJSON" }).click();
@@ -399,7 +469,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await metadataDrawer.locator(".worker-history-filters").getByRole("button", { name: "완료" }).click();
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("감지 영상");
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("1");
-  await metadataDrawer.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(metadataDrawer.getByRole("button", { name: "JSON 복사" }));
   await expect(metadataDrawer.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   await expect(metadataDrawer.getByRole("button", { name: "NDJSON" })).toBeVisible();
   await expect(metadataDrawer.getByRole("button", { name: "CSV" })).toBeVisible();
@@ -410,7 +480,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(metadataDrawer.locator(".metadata-tick-list")).toContainText("다음 tick");
   await page.screenshot({ path: testInfo.outputPath("metadata-tick-drawer.png"), fullPage: true });
   await metadataDrawer.getByRole("button", { name: "닫기" }).click();
-  await runtimeGuide.getByRole("button", { name: "매니페스트 복사" }).click();
+  await dispatchButtonClick(runtimeGuide.getByRole("button", { name: "매니페스트 복사" }));
   await expect(runtimeGuide.getByText("복사됨")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("runtime-env-guide.png"), fullPage: true });
   await page.getByRole("button", { name: "닫기" }).click();
@@ -491,7 +561,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(quarantineVault).toContainText("channels/@signalvaultlab [UC_CVN_E2E]/2026/restorable-sidecar/video.en.srt");
   await quarantineVault.getByRole("button", { name: "닫기" }).last().click();
   await storageTriage.getByRole("button", { name: "Sidecar 누락 보기" }).click();
-  await storageTriage.getByRole("button", { name: "보고서 복사" }).click();
+  await dispatchButtonClick(storageTriage.getByRole("button", { name: "보고서 복사" }));
   await expect(storageTriage.getByRole("button", { name: "복사됨" })).toBeVisible();
   const storageExport = page.waitForEvent("download");
   await storageTriage.getByRole("button", { name: "CSV 저장" }).click();
@@ -507,9 +577,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(channelStorageLens).toContainText("폴더 확인 명령");
   const storagePathCopyButton = channelStorageLens.getByRole("button", { name: "경로 복사" });
   const storageCommandCopyButton = channelStorageLens.getByRole("button", { name: "명령 복사" });
-  await storagePathCopyButton.click();
+  await dispatchButtonClick(storagePathCopyButton);
   await expect(storagePathCopyButton).toContainText("복사됨");
-  await storageCommandCopyButton.click();
+  await dispatchButtonClick(storageCommandCopyButton);
   await expect(storageCommandCopyButton).toContainText("복사됨");
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("아무거나");
   await page.getByRole("button", { name: "필터 초기화" }).click();
@@ -528,10 +598,42 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   );
   await page.getByRole("button", { name: "덮어쓰기" }).click();
   expect((await (await overwrittenView).json()).name).toBe("무자막 h264");
+  await dispatchButtonClick(page.getByRole("button", { name: "JSON 복사" }));
+  await expect(page.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
+  const savedViewBundleText = await page.evaluate(() => navigator.clipboard.readText());
+  const savedViewBundle = JSON.parse(savedViewBundleText);
+  expect(savedViewBundle.kind).toBe("channel_vault_library_views");
+  expect(savedViewBundle.views.some((view: { name: string }) => view.name === "무자막 h264")).toBe(true);
+  const savedViewDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "JSON 다운로드" }).click();
+  expect((await savedViewDownload).suggestedFilename()).toContain("channel-vault-library-views");
+  const savedViewImportPath = testInfo.outputPath("saved-library-views-import.json");
+  writeFileSync(
+    savedViewImportPath,
+    JSON.stringify({
+      kind: "channel_vault_library_views",
+      version: 1,
+      views: [
+        {
+          name: "실패한 1080p",
+          query: "failed",
+          integrity: "missing_media",
+          sidecar: "all",
+          codec: "1080p",
+        },
+      ],
+    }),
+  );
+  await page.getByLabel("저장 뷰 JSON 가져오기").setInputFiles(savedViewImportPath);
+  await expect(page.getByRole("button", { name: "가져옴" })).toBeVisible();
+  await expect(page.locator(".saved-view-pill").filter({ hasText: "실패한 1080p" })).toBeVisible();
   await expect(page.getByLabel("활성 라이브러리 뷰")).toContainText("h264 1080p");
   await page.screenshot({ path: testInfo.outputPath("library-filtered.png"), fullPage: true });
   await page.locator(".library-card").filter({ hasText: "Golden hour archive" }).click();
   await expect(page.getByLabel("미디어 파일 상세")).toBeVisible();
+  const libraryPreview = page.getByLabel("미디어 미리보기");
+  await expect(libraryPreview).toBeVisible();
+  await expect(libraryPreview.locator("video")).toHaveAttribute("src", /\/api\/library\/\d+\/files\/\d+\/stream/);
   await expect(page.locator(".library-file-card").first()).toContainText("1080p");
   await expect(page.locator(".library-sidecar-grid").first()).toContainText("자막");
   await page.screenshot({ path: testInfo.outputPath("library-detail.png"), fullPage: true });
@@ -559,7 +661,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const downloadSummary = page.getByLabel("다운로드 실행 요약");
   await expect(downloadSummary).toContainText("archive.txt staged");
   await expect(downloadSummary).toContainText("최근 worker pass");
-  await downloadSummary.getByRole("button", { name: "JSON 복사" }).click();
+  await dispatchButtonClick(downloadSummary.getByRole("button", { name: "JSON 복사" }));
   await expect(downloadSummary.getByRole("button", { name: "JSON 복사됨" })).toBeVisible();
   const workerSummaryExportResponse = page.waitForResponse(
     (response) =>
@@ -573,6 +675,25 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await downloadSummary.getByRole("button", { name: "닫기" }).click();
   await page.locator(".worker-run-ledger").getByRole("button", { name: "열기" }).click();
   await expect(page.getByLabel("워커 히스토리")).toBeVisible();
+  const workerHistoryFilters = page.locator(".worker-history-filters");
+  await expect(workerHistoryFilters.getByRole("button", { name: "완료" })).toBeVisible();
+  await expect(workerHistoryFilters.getByRole("button", { name: "건너뜀" })).toBeVisible();
+  await expect(workerHistoryFilters.getByRole("button", { name: "느림" })).toBeVisible();
+  const completedRunsResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/jobs/downloads/worker/runs") && response.url().includes("status=completed"),
+  );
+  await workerHistoryFilters.getByRole("button", { name: "완료" }).click();
+  expect((await completedRunsResponse).status()).toBe(200);
+  const skippedRunsResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/jobs/downloads/worker/runs") && response.url().includes("status=skipped"),
+  );
+  await workerHistoryFilters.getByRole("button", { name: "건너뜀" }).click();
+  expect((await skippedRunsResponse).status()).toBe(200);
+  const slowRunsResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/jobs/downloads/worker/runs") && response.url().includes("min_duration_seconds=10"),
+  );
+  await workerHistoryFilters.getByRole("button", { name: "느림" }).click();
+  expect((await slowRunsResponse).status()).toBe(200);
   await page.locator(".worker-history-filters").getByRole("button", { name: "드라이런" }).click();
   await expect(page.locator(".worker-history-card").first()).toContainText("locked");
   await page.screenshot({ path: testInfo.outputPath("worker-history.png"), fullPage: true });
@@ -588,7 +709,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
 
   await page.getByRole("button", { name: "프리플라이트" }).click();
   await expect(page.locator(".command-lines code").filter({ hasText: "yt-dlp" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "명령 복사" }).click();
+  await dispatchButtonClick(page.getByRole("button", { name: "명령 복사" }));
   await expect(page.getByRole("button", { name: "복사됨" })).toBeVisible();
   await expect(page.locator(".preflight-pill.ready").first()).toBeVisible();
   await expect(page.getByLabel("프리플라이트 런웨이")).toContainText("DB만 무장");
@@ -620,9 +741,9 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const eventDetail = eventLog.getByRole("region", { name: "이벤트 상세" });
   await expect(eventDetail).toBeVisible();
   await expect(eventDetail).toContainText("download.");
-  await eventDetail.getByRole("button", { name: "이 이벤트 복사" }).click();
+  await dispatchButtonClick(eventDetail.getByRole("button", { name: "이 이벤트 복사" }));
   await expect(eventDetail.getByRole("button", { name: "복사됨" })).toBeVisible();
-  await eventDetail.getByRole("button", { name: "curl 복사" }).click();
+  await dispatchButtonClick(eventDetail.getByRole("button", { name: "curl 복사" }));
   await expect(eventDetail.getByRole("button", { name: "curl 복사됨" })).toBeVisible();
   await expect(eventDetail.getByRole("button", { name: "큐에서 보기" })).toBeVisible();
   const eventDetailExport = page.waitForEvent("download");

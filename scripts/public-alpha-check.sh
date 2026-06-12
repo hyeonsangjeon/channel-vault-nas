@@ -6,6 +6,7 @@ BACKEND_PY="${CVN_PUBLIC_ALPHA_BACKEND_PY:-$ROOT_DIR/backend/.venv/bin/python}"
 BACKEND_RUFF="${CVN_PUBLIC_ALPHA_RUFF:-$ROOT_DIR/backend/.venv/bin/ruff}"
 BACKEND_PYTEST="${CVN_PUBLIC_ALPHA_PYTEST:-$ROOT_DIR/backend/.venv/bin/pytest}"
 PLAYWRIGHT_PROJECT="${CVN_PUBLIC_ALPHA_BROWSER_PROJECT:-chromium}"
+PUBLIC_ALPHA_AUTH_TOKEN="${CVN_PUBLIC_ALPHA_AUTH_TOKEN:-cvn-public-alpha-check-operator-token}"
 
 run_step() {
   local label="$1"
@@ -55,6 +56,9 @@ check_public_surface() {
     "docs/roadmap.md"
     "docs/public-alpha-demo.md"
     "docs/deployment-security.md"
+    "scripts/deployment-smoke.sh"
+    "scripts/capture-public-demo.sh"
+    "docs/assets/demo/README.md"
     "docs/assets/screenshots/dashboard-cockpit.png"
     "docs/assets/screenshots/channel-downloads.png"
     "docs/assets/screenshots/queue-console.png"
@@ -85,12 +89,16 @@ run_step "backend lint" "$BACKEND_RUFF" check backend/app backend/tests backend/
 run_step "backend tests" "$BACKEND_PYTEST" backend/tests -q
 run_step "locale keys" check_locale_keys
 run_step "public repo surface" check_public_surface
+run_step "release script syntax" bash -lc "bash -n scripts/public-alpha-check.sh && bash -n scripts/compose-smoke.sh && bash -n scripts/deployment-smoke.sh && bash -n scripts/capture-public-demo.sh"
 run_step "frontend build" bash -lc "cd frontend && npm run build"
 
 if [[ "${CVN_PUBLIC_ALPHA_SKIP_BROWSER:-false}" == "true" ]]; then
   printf "\n==> browser smoke skipped by CVN_PUBLIC_ALPHA_SKIP_BROWSER=true\n"
 else
-  run_step "browser smoke (${PLAYWRIGHT_PROJECT})" bash -lc "cd frontend && npm run e2e:smoke -- --project=${PLAYWRIGHT_PROJECT}"
+  quoted_project="$(printf "%q" "$PLAYWRIGHT_PROJECT")"
+  quoted_auth_token="$(printf "%q" "$PUBLIC_ALPHA_AUTH_TOKEN")"
+  run_step "browser smoke (${PLAYWRIGHT_PROJECT})" bash -lc "cd frontend && npm run e2e:smoke -- --project=${quoted_project}"
+  run_step "browser auth gate (${PLAYWRIGHT_PROJECT})" bash -lc "cd frontend && CVN_E2E_AUTH_TOKEN=${quoted_auth_token} npm run e2e:auth -- --project=${quoted_project}"
 fi
 
 run_step "diff whitespace" git diff --check

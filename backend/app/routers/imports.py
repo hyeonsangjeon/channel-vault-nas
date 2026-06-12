@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.schemas.archive import (
     ArchiveTxtPreviewRequest,
@@ -29,7 +30,12 @@ async def get_import_sources() -> list[ImportSource]:
 @router.post("/archive-txt/preview", response_model=ArchiveTxtPreviewResult)
 async def preview_archive_txt_import(payload: ArchiveTxtPreviewRequest, db: DbSession) -> ArchiveTxtPreviewResult:
     """Preview how a youtube-dl archive.txt maps to the current vault index."""
-    return await preview_archive_txt(db, content=payload.content, channel_id=payload.channel_id)
+    return await preview_archive_txt(
+        db,
+        content=payload.content,
+        channel_id=payload.channel_id,
+        download_dir=settings.download_dir,
+    )
 
 
 @router.post("/archive-txt/stage", response_model=ArchiveTxtStageResult)
@@ -42,6 +48,7 @@ async def stage_archive_txt_import(payload: ArchiveTxtStageRequest, db: DbSessio
         quality=payload.quality,
         limit=payload.limit,
         create_candidates=payload.create_candidates,
+        download_dir=settings.download_dir,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Channel not found.")

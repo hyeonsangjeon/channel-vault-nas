@@ -60,6 +60,7 @@ import {
   cancelDownloadJob,
   deleteLibraryView,
   enqueueVideoDownload,
+  exportLibraryViews,
   getChannel,
   getChannelCadence,
   getChannelCoverage,
@@ -87,6 +88,7 @@ import {
   getStorageScan,
   getSupportBundle,
   getSyncJobs,
+  importLibraryViews,
   probeChannel,
   pruneMissingStorageIndex,
   pruneMetadataSyncTicks,
@@ -141,6 +143,8 @@ import {
   type LibraryItem,
   type LibraryFile,
   type LibrarySavedView,
+  type LibrarySavedViewBundle,
+  type LibrarySavedViewPayload,
   type LibrarySnapshot,
   type QueuePreflightPlan,
   type RescanApplyResult,
@@ -185,6 +189,7 @@ import { languages, useI18n, type Language, type TranslationKey } from "./i18n";
 
 const qualityOptions = ["720p", "1080p", "best"];
 const DEMO_WORKSPACE_EXTERNAL_ID = "UC_CVN_DEMO_SIGNAL";
+const workerSlowRunThresholdSeconds = 10;
 type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
 type NavId = "dashboard" | "channels" | "library" | "queue" | "insights" | "settings";
 
@@ -198,7 +203,7 @@ const navItems: { key: TranslationKey; id: NavId }[] = [
 ];
 
 type ChannelDetailTab = "overview" | "downloads" | "library" | "logs" | "policy";
-type WorkerHistoryFilter = "all" | "failed" | "dry_run" | "live";
+type WorkerHistoryFilter = "all" | "failed" | "completed" | "skipped" | "slow" | "dry_run" | "live";
 type ArchiveEventFilter = "all" | "download" | "sync" | "library" | "storage" | "runtime" | "policy" | "failure";
 type SchedulerTickStatusFilter = "all" | "completed" | "failed" | "skipped" | "running";
 type SchedulerDurationFilter = "all" | "slow";
@@ -212,6 +217,8 @@ type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
 type LaunchRunwayState = "ready" | "active" | "locked";
+type ReleaseReadinessBriefTone = "ready" | "close" | "building";
+type CleanInstallGateStepState = "ready" | "active" | "warn";
 type DownloadTelemetryStatus = "running" | "completed" | "failed" | "cancelled";
 type EventStreamStatus = "connecting" | "live" | "error" | "closed";
 type AppRoute = {
@@ -228,6 +235,33 @@ type NavStatusBadge = {
   tone: NavStatusTone;
   label: string;
 };
+type ReleaseReadinessItem = {
+  id: string;
+  icon: typeof Link2;
+  ready: boolean;
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  actionKey: TranslationKey;
+  action: () => void;
+};
+type CleanInstallGateStep = {
+  id: string;
+  icon: typeof Link2;
+  state: CleanInstallGateStepState;
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  actionKey: TranslationKey;
+  disabled?: boolean;
+  action: () => void | Promise<void>;
+};
+type RuntimeGuideRailItem = {
+  id: string;
+  icon: typeof Link2;
+  labelKey: TranslationKey;
+  detail: string;
+  selector: string;
+  tone: NavStatusTone;
+};
 type VolumeMountPreset = {
   id: string;
   labelKey: TranslationKey;
@@ -236,6 +270,15 @@ type VolumeMountPreset = {
   hostPath: string;
   containerPath: string;
   tone: "good" | "warn" | "idle";
+};
+type BackupRestoreCommandId = "quiesced" | "sqlite" | "restore";
+type BackupRestorePathCard = {
+  id: "metadata" | "download" | "runtime";
+  labelKey: TranslationKey;
+  detailKey: TranslationKey;
+  path: MountDoctorPath | null;
+  displayPath: string;
+  tone: "good" | "warn" | "bad";
 };
 type ExposureProxyPreset = {
   id: string;
@@ -278,6 +321,9 @@ const retentionPresetValues = [100, 200, 500, 1000];
 const workerHistoryFilters: { id: WorkerHistoryFilter; labelKey: TranslationKey }[] = [
   { id: "all", labelKey: "worker.history.filter.all" },
   { id: "failed", labelKey: "worker.history.filter.failed" },
+  { id: "completed", labelKey: "worker.history.filter.completed" },
+  { id: "skipped", labelKey: "worker.history.filter.skipped" },
+  { id: "slow", labelKey: "worker.history.filter.slow" },
   { id: "dry_run", labelKey: "worker.history.filter.dryRun" },
   { id: "live", labelKey: "worker.history.filter.live" },
 ];
@@ -502,6 +548,8 @@ function App() {
   const [savedLibraryViews, setSavedLibraryViews] = useState<SavedLibraryView[]>(() => loadSavedLibraryViews());
   const [activeSavedLibraryViewId, setActiveSavedLibraryViewId] = useState<string | null>(null);
   const [libraryViewNameDraft, setLibraryViewNameDraft] = useState("");
+  const [libraryViewShareStatus, setLibraryViewShareStatus] = useState<CopyStatus>("idle");
+  const [libraryViewImportStatus, setLibraryViewImportStatus] = useState<"idle" | "importing" | "done" | "error">("idle");
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<LibraryItem | null>(null);
   const [selectedLibraryFiles, setSelectedLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryDetailStatus, setLibraryDetailStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -564,14 +612,21 @@ function App() {
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeVolumeCopyStatus, setRuntimeVolumeCopyStatus] = useState<CopyStatus>("idle");
+  const [runtimeBackupCopyStatus, setRuntimeBackupCopyStatus] = useState<{
+    id: BackupRestoreCommandId;
+    status: CopyStatus;
+  } | null>(null);
   const [runtimeProxyCopyStatus, setRuntimeProxyCopyStatus] = useState<{
     id: string;
     status: CopyStatus;
   } | null>(null);
+  const [runtimeDeploymentSmokeCopyStatus, setRuntimeDeploymentSmokeCopyStatus] = useState<CopyStatus>("idle");
   const [launchCommandCopyStatus, setLaunchCommandCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [schedulerTickCopyStatus, setSchedulerTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [metadataTickCopyStatus, setMetadataTickCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [supportBundleCopyStatus, setSupportBundleCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [betaBriefCopyStatus, setBetaBriefCopyStatus] = useState<CopyStatus>("idle");
+  const [betaProofCopyStatus, setBetaProofCopyStatus] = useState<CopyStatus>("idle");
   const [supportBundleSource, setSupportBundleSource] = useState<"idle" | "server" | "fallback">("idle");
   const [schedulerTickRetentionStatus, setSchedulerTickRetentionStatus] = useState<RetentionStatus>("idle");
   const [metadataTickRetentionStatus, setMetadataTickRetentionStatus] = useState<RetentionStatus>("idle");
@@ -603,6 +658,7 @@ function App() {
   const registeredChannelIdRef = useRef<number | null>(null);
   const applyingRouteHashRef = useRef(false);
   const librarySearchInputRef = useRef<HTMLInputElement | null>(null);
+  const libraryViewImportInputRef = useRef<HTMLInputElement | null>(null);
   const accessGuardRef = useRef<HTMLDivElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1066,6 +1122,10 @@ function App() {
     () => downloadJobs.filter((job) => archiveTxtSummaryJobIds.has(job.id)),
     [archiveTxtSummaryJobIds, downloadJobs],
   );
+  const selectedLibraryPreviewFile = useMemo(
+    () => selectedLibraryFiles.find((file) => file.exists) ?? null,
+    [selectedLibraryFiles],
+  );
   const latestWorkerRun = workerRuns[0] ?? null;
   const latestWorkerAuditJobIds = useMemo(
     () => {
@@ -1096,7 +1156,7 @@ function App() {
     () =>
       recentCompletedVideoIds.size
         ? (library?.items ?? []).filter((item) => recentCompletedVideoIds.has(item.id))
-        : (library?.items ?? []).filter((item) => item.archive_state === "archived" || item.media_count > 0),
+        : (library?.items ?? []).filter((item) => item.archive_state === "archived"),
     [library, recentCompletedVideoIds],
   );
   const telemetryByJobId = useMemo(
@@ -1139,6 +1199,9 @@ function App() {
     () => ({
       total: workerHistoryRuns.length,
       failed: workerHistoryRuns.filter((run) => run.status === "failed" || run.failed_count > 0).length,
+      completed: workerHistoryRuns.filter((run) => run.status === "completed").length,
+      skipped: workerHistoryRuns.filter((run) => run.status === "skipped" || Boolean(run.skipped_reason)).length,
+      slow: workerHistoryRuns.filter((run) => (run.duration_seconds ?? 0) >= workerSlowRunThresholdSeconds).length,
       live: workerHistoryRuns.filter((run) => !run.dry_run).length,
       dryRun: workerHistoryRuns.filter((run) => run.dry_run).length,
     }),
@@ -1489,6 +1552,18 @@ function App() {
   const runtimeVolumePresets = useMemo(() => volumeMountPresets(), []);
   const runtimeVolumeEnvManifest = useMemo(() => buildVolumeMountEnvManifest(runtimeVolumePresets), [runtimeVolumePresets]);
   const runtimeVolumeMkdirCommand = useMemo(() => buildVolumeMountMkdirCommand(runtimeVolumePresets), [runtimeVolumePresets]);
+  const runtimeBackupRestorePaths = useMemo(
+    () => buildBackupRestorePathCards(mountDoctor, runtimeSettings),
+    [mountDoctor, runtimeSettings],
+  );
+  const runtimeBackupRestoreCommands = useMemo(
+    () => buildBackupRestoreCommands(mountDoctor, runtimeSettings),
+    [mountDoctor, runtimeSettings],
+  );
+  const runtimeBackupRestoreReady =
+    Boolean(mountDoctor) &&
+    mountDoctor?.status !== "critical" &&
+    runtimeBackupRestorePaths.every((path) => path.tone !== "bad");
   const runtimeExposureProxyPresets = useMemo(() => exposureProxyPresets(), []);
   const schedulerTickSummary = useMemo(
     () => summarizeSchedulerTicks(schedulerTickRows.length ? schedulerTickRows : runtimeSettings?.scheduler_ticks ?? []),
@@ -2780,6 +2855,17 @@ function App() {
     }
   }
 
+  async function handleCopyBackupRestoreCommand(id: BackupRestoreCommandId) {
+    try {
+      await copyTextToClipboard(runtimeBackupRestoreCommands[id]);
+      setRuntimeBackupCopyStatus({ id, status: "copied" });
+      window.setTimeout(() => setRuntimeBackupCopyStatus(null), 1800);
+    } catch {
+      setRuntimeBackupCopyStatus({ id, status: "error" });
+      window.setTimeout(() => setRuntimeBackupCopyStatus(null), 2200);
+    }
+  }
+
   async function handleCopyExposureProxyPreset(preset: ExposureProxyPreset) {
     try {
       await copyTextToClipboard(preset.snippet);
@@ -2791,6 +2877,17 @@ function App() {
     }
   }
 
+  async function handleCopyDeploymentSmokeCommand() {
+    try {
+      await copyTextToClipboard(DEPLOYMENT_SMOKE_COMMAND);
+      setRuntimeDeploymentSmokeCopyStatus("copied");
+      window.setTimeout(() => setRuntimeDeploymentSmokeCopyStatus("idle"), 1800);
+    } catch {
+      setRuntimeDeploymentSmokeCopyStatus("error");
+      window.setTimeout(() => setRuntimeDeploymentSmokeCopyStatus("idle"), 2200);
+    }
+  }
+
   function handleGenerateAccessToken() {
     setAccessTokenValue(generateAccessToken());
     setAccessTokenRevealed(false);
@@ -2799,6 +2896,10 @@ function App() {
 
   function handleJumpToAccessGuard() {
     accessGuardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleRuntimeGuideRailClick(selector: string) {
+    scrollToAppSection(selector);
   }
 
   async function handleCopyAccessToken(kind: "token" | "env" | "smoke") {
@@ -3015,6 +3116,173 @@ function App() {
     }
   }
 
+  function buildBetaReadinessBrief() {
+    const pendingLines = releaseReadinessPendingItems.length
+      ? releaseReadinessPendingItems.map((item) => `- ${t(item.titleKey)}: ${t(item.detailKey)}`)
+      : [`- ${t("release.brief.nonePending")}`];
+    const mountDoctorLabel = mountDoctor
+      ? `${t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey)} (${mountDoctor.score})`
+      : t("runtime.checking");
+    const supportSourceLabel =
+      supportBundleSource === "server"
+        ? t("support.bundle.server")
+        : supportBundleSource === "fallback"
+          ? t("support.bundle.fallback")
+          : t("support.bundle.ready");
+
+    return [
+      "Channel Vault NAS beta readiness",
+      `${t("release.brief.generated")}: ${new Date().toISOString()}`,
+      `${t("release.brief.statusLabel")}: ${t(releaseReadinessBriefStatusKey)}`,
+      t("release.brief.score").replace("{done}", String(releaseReadinessDone)).replace("{total}", String(releaseReadinessItems.length)),
+      "",
+      t("release.brief.pendingTitle"),
+      ...pendingLines,
+      "",
+      `${t("mountDoctor.title")}: ${mountDoctorLabel}`,
+      `${t("release.readiness.backup.title")}: ${runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}`,
+      `${t("queue.console.title")}: ${queueConsoleCounts.queued} ${t("queue.queued")} · ${queueConsoleCounts.running} ${t("queue.running")} · ${queueConsoleCounts.failed} ${t("queue.failed")}`,
+      `${t("support.bundle.privacyTitle")}: ${supportSourceLabel}`,
+    ].join("\n");
+  }
+
+  async function handleCopyBetaReadinessBrief() {
+    try {
+      await copyTextToClipboard(buildBetaReadinessBrief());
+      setBetaBriefCopyStatus("copied");
+      window.setTimeout(() => setBetaBriefCopyStatus("idle"), 1800);
+    } catch {
+      setBetaBriefCopyStatus("error");
+      window.setTimeout(() => setBetaBriefCopyStatus("idle"), 2200);
+    }
+  }
+
+  function buildBetaProofPayload() {
+    return {
+      kind: "channel_vault_beta_onboarding_proof",
+      generated_at: new Date().toISOString(),
+      privacy: {
+        redacted_for_public_issue: true,
+        excludes: ["channel_titles", "video_titles", "source_urls", "absolute_paths", "generated_download_commands", "tokens"],
+      },
+      release_readiness: {
+        status: releaseReadinessBriefTone,
+        status_label: t(releaseReadinessBriefStatusKey),
+        score: {
+          done: releaseReadinessDone,
+          total: releaseReadinessItems.length,
+        },
+        checks: releaseReadinessItems.map((item) => ({
+          id: item.id,
+          ready: item.ready,
+          label: t(item.titleKey),
+        })),
+        pending: releaseReadinessPendingItems.map((item) => ({
+          id: item.id,
+          label: t(item.titleKey),
+        })),
+      },
+      clean_install_gate: {
+        visible_for_empty_workspace: !hasAnyRegisteredChannel,
+        ready: cleanInstallGateReadyCount,
+        total: cleanInstallGateSteps.length,
+        next_step: cleanInstallGateNextStep
+          ? {
+              id: cleanInstallGateNextStep.id,
+              state: cleanInstallGateNextStep.state,
+              label: t(cleanInstallGateNextStep.titleKey),
+            }
+          : null,
+        steps: cleanInstallGateSteps.map((step) => ({
+          id: step.id,
+          state: step.state,
+          label: t(step.titleKey),
+        })),
+      },
+      runtime: {
+        worker_enabled: runtimeSettings?.download_worker_enabled ?? null,
+        download_scheduler_enabled: runtimeSettings?.download_worker_scheduler_enabled ?? null,
+        metadata_scheduler_enabled: runtimeSettings?.metadata_sync_scheduler_enabled ?? null,
+        pending_restart: runtimeSettings?.pending_restart ?? null,
+        restart_adapter: restartAdapter?.adapter ?? null,
+        restart_executable: restartAdapter?.executable ?? null,
+        scheduler_state: runtimeSettings?.scheduler_status?.state ?? null,
+        metadata_scheduler_state: runtimeSettings?.metadata_scheduler_status?.state ?? null,
+      },
+      mounts: {
+        status: mountDoctor?.status ?? null,
+        score: mountDoctor?.score ?? null,
+        critical_count: mountDoctorCriticalCount,
+        warning_count: mountDoctorWarningCount,
+        inspected_roots: mountDoctorPathRows.length,
+      },
+      backup_restore: {
+        recoverable: runtimeBackupRestoreReady,
+        durable_roots: runtimeBackupRestorePaths.map((path) => ({
+          id: path.id,
+          tone: path.tone,
+          label: t(path.labelKey),
+          state: path.path ? mountDoctorPathState(path.path, t) : t("runtime.backup.pathUnknown"),
+        })),
+      },
+      storage: storageScan
+        ? {
+            scanned: true,
+            archive_label: storageScan.volume.archive_label,
+            free_label: storageScan.volume.free_label,
+            pressure_percent: storageScan.volume.pressure_percent,
+            drift: {
+              unindexed_media_count: storageScan.drift.unindexed_media_count,
+              indexed_missing_count: storageScan.drift.indexed_missing_count,
+            },
+            orphan_sidecar_count: storageScan.orphan_sidecars.length,
+          }
+        : {
+            scanned: false,
+          },
+      queue: {
+        counts: queueConsoleCounts,
+        worker_plan_ready: Boolean(queueConsoleWorkerPlan),
+        claimable_count: queueConsoleWorkerPlan?.claimable_count ?? null,
+        locked_reason_present: Boolean(queueConsoleWorkerPlan?.locked_reason),
+      },
+      library: {
+        total: library?.total ?? 0,
+        archived: library?.archived ?? 0,
+        missing: library?.missing ?? 0,
+      },
+      audit: {
+        recent_event_count: events.length,
+        scheduler_tick_count: runtimeSettings?.scheduler_ticks.length ?? 0,
+        metadata_tick_count: runtimeSettings?.metadata_sync_ticks.length ?? 0,
+      },
+      support_bundle: {
+        source: supportBundleSource,
+        server_redaction_preferred: true,
+      },
+    };
+  }
+
+  async function handleCopyBetaProof() {
+    try {
+      await copyTextToClipboard(JSON.stringify(buildBetaProofPayload(), null, 2));
+      setBetaProofCopyStatus("copied");
+      window.setTimeout(() => setBetaProofCopyStatus("idle"), 1800);
+    } catch {
+      setBetaProofCopyStatus("error");
+      window.setTimeout(() => setBetaProofCopyStatus("idle"), 2200);
+    }
+  }
+
+  function handleDownloadBetaProof() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadTextFile(
+      `channel-vault-beta-proof-${timestamp}.json`,
+      JSON.stringify(buildBetaProofPayload(), null, 2),
+      "application/json;charset=utf-8",
+    );
+  }
+
   async function handleCopyDownloadRunSummary() {
     let serverSummary: Awaited<ReturnType<typeof getDownloadWorkerRunSummary>> | null = null;
     try {
@@ -3169,6 +3437,7 @@ function App() {
     setRuntimeRestartMessage("");
     setRuntimeRestartPresetCopyStatus(null);
     setRuntimeComposeSmokeCopyStatus("idle");
+    setRuntimeBackupCopyStatus(null);
     setRuntimeApplyStatus("idle");
     setRuntimeApplyMessage("");
     setRuntimeGuideOpen(true);
@@ -4013,6 +4282,74 @@ function App() {
     } catch (error) {
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function loadLibraryViewBundle(): Promise<LibrarySavedViewBundle> {
+    try {
+      return await exportLibraryViews();
+    } catch (error) {
+      if (handleAuthFailure(error)) throw error;
+      return buildLocalLibraryViewBundle(savedLibraryViews);
+    }
+  }
+
+  async function handleCopyLibraryViews() {
+    try {
+      await copyTextToClipboard(JSON.stringify(await loadLibraryViewBundle(), null, 2));
+      setLibraryViewShareStatus("copied");
+      window.setTimeout(() => setLibraryViewShareStatus("idle"), 1800);
+    } catch {
+      setLibraryViewShareStatus("error");
+      window.setTimeout(() => setLibraryViewShareStatus("idle"), 2200);
+    }
+  }
+
+  async function handleDownloadLibraryViews() {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      downloadTextFile(
+        `channel-vault-library-views-${timestamp}.json`,
+        JSON.stringify(await loadLibraryViewBundle(), null, 2),
+        "application/json;charset=utf-8",
+      );
+    } catch {
+      setLibraryViewShareStatus("error");
+      window.setTimeout(() => setLibraryViewShareStatus("idle"), 2200);
+    }
+  }
+
+  function handleChooseLibraryViewImport() {
+    libraryViewImportInputRef.current?.click();
+  }
+
+  async function handleImportLibraryViews(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setLibraryViewImportStatus("importing");
+      const payload = parseLibraryViewImportPayload(JSON.parse(await file.text()));
+      const imported = await importLibraryViews(payload);
+      setSavedLibraryViews(imported.views.map(toSavedLibraryView).slice(0, 10));
+      setWorkflowStatus("idle");
+      setWorkflowMessage(
+        t("library.saved.imported")
+          .replace("{count}", String(imported.imported_count))
+          .replace("{skipped}", String(imported.skipped_count)),
+      );
+      setLibraryViewImportStatus("done");
+      window.setTimeout(() => setLibraryViewImportStatus("idle"), 1800);
+    } catch (error) {
+      if (handleAuthFailure(error)) {
+        setLibraryViewImportStatus("error");
+        window.setTimeout(() => setLibraryViewImportStatus("idle"), 2200);
+        return;
+      }
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("library.saved.importError"));
+      setLibraryViewImportStatus("error");
+      window.setTimeout(() => setLibraryViewImportStatus("idle"), 2200);
     }
   }
 
@@ -4870,15 +5207,7 @@ function App() {
     : t("runtime.checking");
   const mountDoctorTopIssue = mountDoctor?.issues.find((issue) => issue.severity === "critical") ?? mountDoctor?.issues.find((issue) => issue.severity === "warning") ?? null;
   const mountDoctorPathRows = mountDoctor?.paths.filter((path) => ["database", "metadata", "download", "runtime"].includes(path.id)) ?? [];
-  const releaseReadinessItems: {
-    id: string;
-    icon: typeof Link2;
-    ready: boolean;
-    titleKey: TranslationKey;
-    detailKey: TranslationKey;
-    actionKey: TranslationKey;
-    action: () => void;
-  }[] = [
+  const releaseReadinessItems: ReleaseReadinessItem[] = [
     {
       id: "source",
       icon: Link2,
@@ -4941,6 +5270,19 @@ function App() {
       action: () => handleSelectNav("insights"),
     },
     {
+      id: "backup",
+      icon: FileArchive,
+      ready: runtimeBackupRestoreReady,
+      titleKey: "release.readiness.backup.title",
+      detailKey: "release.readiness.backup.detail",
+      actionKey: "release.readiness.backup.action",
+      action: () => {
+        setActiveNavId("settings");
+        void handleOpenRuntimeGuide();
+        scrollToAppSection(".runtime-console");
+      },
+    },
+    {
       id: "audit",
       icon: History,
       ready: events.length > 0 || (runtimeSettings?.scheduler_ticks.length ?? 0) > 0 || (runtimeSettings?.metadata_sync_ticks.length ?? 0) > 0,
@@ -4951,6 +5293,145 @@ function App() {
     },
   ];
   const releaseReadinessDone = releaseReadinessItems.filter((item) => item.ready).length;
+  const releaseReadinessPendingItems = releaseReadinessItems.filter((item) => !item.ready);
+  const releaseReadinessNextItem = releaseReadinessPendingItems[0] ?? null;
+  const releaseReadinessBriefTone: ReleaseReadinessBriefTone =
+    releaseReadinessDone === releaseReadinessItems.length
+      ? "ready"
+      : releaseReadinessDone >= Math.ceil(releaseReadinessItems.length * 0.75)
+        ? "close"
+        : "building";
+  const releaseReadinessBriefStatusKey = `release.brief.status.${releaseReadinessBriefTone}` as TranslationKey;
+  const releaseReadinessGapSummary = releaseReadinessPendingItems.length
+    ? t("release.brief.gaps").replace("{count}", String(releaseReadinessPendingItems.length))
+    : t("release.brief.nonePending");
+  const cleanInstallMountState: CleanInstallGateStepState = mountDoctor
+    ? mountDoctor.status === "critical"
+      ? "warn"
+      : "ready"
+    : "active";
+  const cleanInstallBackupState: CleanInstallGateStepState = runtimeBackupRestoreReady
+    ? "ready"
+    : mountDoctor?.status === "critical"
+      ? "warn"
+      : "active";
+  const cleanInstallGateSteps: CleanInstallGateStep[] = [
+    {
+      id: "access",
+      icon: KeyRound,
+      state: securityReadinessReady ? "ready" : "active",
+      titleKey: "firstRun.gate.access.title",
+      detailKey: "firstRun.gate.access.detail",
+      actionKey: "firstRun.gate.access.action",
+      action: async () => {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        window.setTimeout(() => handleJumpToAccessGuard(), 40);
+      },
+    },
+    {
+      id: "mounts",
+      icon: HardDrive,
+      state: cleanInstallMountState,
+      titleKey: "firstRun.gate.mounts.title",
+      detailKey: "firstRun.gate.mounts.detail",
+      actionKey: "firstRun.gate.mounts.action",
+      action: async () => {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        window.setTimeout(() => scrollToAppSection(".runtime-volume-cookbook"), 40);
+      },
+    },
+    {
+      id: "backup",
+      icon: FileArchive,
+      state: cleanInstallBackupState,
+      titleKey: "firstRun.gate.backup.title",
+      detailKey: "firstRun.gate.backup.detail",
+      actionKey: "firstRun.gate.backup.action",
+      action: async () => {
+        setActiveNavId("settings");
+        await handleOpenRuntimeGuide();
+        window.setTimeout(() => scrollToAppSection(".runtime-backup-restore"), 40);
+      },
+    },
+    {
+      id: "demo",
+      icon: Database,
+      state: hasAnyRegisteredChannel ? "ready" : "active",
+      titleKey: "firstRun.gate.demo.title",
+      detailKey: "firstRun.gate.demo.detail",
+      actionKey: demoSeedStatus === "loading" ? "firstRun.demo.loading" : "firstRun.gate.demo.action",
+      disabled: demoSeedStatus === "loading",
+      action: handleSeedDemoWorkspace,
+    },
+    {
+      id: "diagnostics",
+      icon: ClipboardList,
+      state: supportBundleSource === "server" || supportBundleSource === "fallback" ? "ready" : "active",
+      titleKey: "firstRun.gate.diagnostics.title",
+      detailKey: "firstRun.gate.diagnostics.detail",
+      actionKey:
+        supportBundleCopyStatus === "copied"
+          ? "support.bundle.copied"
+          : supportBundleCopyStatus === "error"
+            ? "support.bundle.copyError"
+            : "firstRun.gate.diagnostics.action",
+      action: handleCopySupportBundle,
+    },
+  ];
+  const cleanInstallGateReadyCount = cleanInstallGateSteps.filter((step) => step.state === "ready").length;
+  const cleanInstallGateNextStep = cleanInstallGateSteps.find((step) => step.state !== "ready") ?? cleanInstallGateSteps.at(-1);
+  const runtimeGuideRailItems: RuntimeGuideRailItem[] = [
+    {
+      id: "security",
+      icon: KeyRound,
+      labelKey: "runtime.rail.security",
+      detail: securityReadinessReady ? t("runtime.token.stateProtected") : t("runtime.token.stateNeedsToken"),
+      selector: ".runtime-token-setup",
+      tone: securityReadinessReady ? "good" : "warn",
+    },
+    {
+      id: "volumes",
+      icon: FolderTree,
+      labelKey: "runtime.rail.volumes",
+      detail: mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking"),
+      selector: ".runtime-volume-cookbook",
+      tone: mountDoctor?.status === "critical" ? "bad" : mountDoctor?.status === "warning" ? "warn" : mountDoctor ? "good" : "active",
+    },
+    {
+      id: "backup",
+      icon: FileArchive,
+      labelKey: "runtime.rail.backup",
+      detail: runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn"),
+      selector: ".runtime-backup-restore",
+      tone: runtimeBackupRestoreReady ? "good" : "warn",
+    },
+    {
+      id: "exposure",
+      icon: ShieldCheck,
+      labelKey: "runtime.rail.exposure",
+      detail: securityReadinessReady ? t("runtime.exposure.guardReady") : t("runtime.exposure.guardWarn"),
+      selector: ".runtime-exposure-cookbook",
+      tone: securityReadinessReady ? "good" : "warn",
+    },
+    {
+      id: "restart",
+      icon: RotateCcw,
+      labelKey: "runtime.rail.restart",
+      detail: runtimeSettings?.pending_restart ? t("runtime.restart.pending") : restartAdapterLabel,
+      selector: ".runtime-restart-banner",
+      tone: runtimeSettings?.pending_restart ? "warn" : restartAdapter?.executable ? "good" : "active",
+    },
+    {
+      id: "scheduler",
+      icon: History,
+      labelKey: "runtime.rail.scheduler",
+      detail: `${schedulerRuntimeLabel} · ${metadataSchedulerRuntimeLabel}`,
+      selector: ".runtime-guide-state",
+      tone: runtimeSettings ? "active" : "neutral",
+    },
+  ];
 
   if (authRequired) {
     return (
@@ -5303,6 +5784,47 @@ function App() {
                 {workflowMessage ? (
                   <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
                 ) : null}
+                <div className="clean-install-gate" aria-label={t("firstRun.gate.aria")}>
+                  <div className="clean-install-head">
+                    <div>
+                      <p className="panel-kicker">{t("firstRun.gate.kicker")}</p>
+                      <h3>{t("firstRun.gate.title")}</h3>
+                      <span>
+                        {cleanInstallGateNextStep
+                          ? t("firstRun.gate.subtitle").replace("{next}", t(cleanInstallGateNextStep.titleKey))
+                          : t("firstRun.gate.done")}
+                      </span>
+                    </div>
+                    <div className="clean-install-score">
+                      <ShieldCheck size={15} />
+                      <strong>
+                        {cleanInstallGateReadyCount}/{cleanInstallGateSteps.length}
+                      </strong>
+                      <small>{t("firstRun.gate.score")}</small>
+                    </div>
+                  </div>
+                  <div className="clean-install-steps">
+                    {cleanInstallGateSteps.map((step, index) => {
+                      const StepIcon = step.icon;
+                      return (
+                        <article className={step.state} key={step.id}>
+                          <div className="clean-install-step-index">
+                            <span>{index + 1}</span>
+                            <StepIcon size={14} />
+                          </div>
+                          <div className="clean-install-step-copy">
+                            <em>{t(`firstRun.gate.status.${step.state}` as TranslationKey)}</em>
+                            <strong>{t(step.titleKey)}</strong>
+                            <small>{t(step.detailKey)}</small>
+                          </div>
+                          <button disabled={step.disabled} onClick={() => void step.action()} type="button">
+                            {t(step.actionKey)}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="first-source-grid">
                   <article>
                     <Link2 size={17} />
@@ -5382,6 +5904,91 @@ function App() {
                   <button onClick={handleDownloadSupportBundle} type="button">
                     <Download size={13} />
                     {t("support.bundle.download")}
+                  </button>
+                </div>
+              </div>
+              <div className={`release-brief ${releaseReadinessBriefTone}`} aria-label={t("release.brief.aria")}>
+                <div className="release-brief-state">
+                  <Sparkles size={16} />
+                  <div>
+                    <span>{t("release.brief.kicker")}</span>
+                    <strong>{t(releaseReadinessBriefStatusKey)}</strong>
+                    <small>
+                      {t("release.brief.score").replace("{done}", String(releaseReadinessDone)).replace("{total}", String(releaseReadinessItems.length))}
+                    </small>
+                  </div>
+                </div>
+                <div className="release-brief-next">
+                  <span>{releaseReadinessNextItem ? t("release.brief.next") : t("release.brief.readyNext")}</span>
+                  <strong>{releaseReadinessNextItem ? t(releaseReadinessNextItem.titleKey) : t("release.brief.allGreenTitle")}</strong>
+                  <small>{releaseReadinessNextItem ? t(releaseReadinessNextItem.detailKey) : t("release.brief.allGreenDetail")}</small>
+                </div>
+                <div className="release-brief-pills">
+                  <span className={releaseReadinessPendingItems.length ? "warn" : "good"}>
+                    {releaseReadinessGapSummary}
+                  </span>
+                  <span>{mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking")}</span>
+                  <span>{runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}</span>
+                </div>
+                <div className="release-brief-actions">
+                  {releaseReadinessNextItem ? (
+                    <button onClick={() => releaseReadinessNextItem.action()} type="button">
+                      <ChevronRight size={13} />
+                      {t("release.brief.openNext")}
+                    </button>
+                  ) : null}
+                  <button onClick={() => void handleCopyBetaReadinessBrief()} type="button">
+                    <ClipboardList size={13} />
+                    {betaBriefCopyStatus === "copied"
+                      ? t("release.brief.copied")
+                      : betaBriefCopyStatus === "error"
+                        ? t("release.brief.copyError")
+                        : t("release.brief.copy")}
+                  </button>
+                </div>
+              </div>
+              <div className="beta-proof-card" aria-label={t("beta.proof.aria")}>
+                <div className="beta-proof-copy">
+                  <p className="panel-kicker">{t("beta.proof.kicker")}</p>
+                  <strong>{t("beta.proof.title")}</strong>
+                  <span>{t("beta.proof.detail")}</span>
+                </div>
+                <div className="beta-proof-metrics">
+                  <article>
+                    <span>{t("beta.proof.readiness")}</span>
+                    <strong>{releaseReadinessDone}/{releaseReadinessItems.length}</strong>
+                  </article>
+                  <article>
+                    <span>{t("beta.proof.install")}</span>
+                    <strong>{cleanInstallGateReadyCount}/{cleanInstallGateSteps.length}</strong>
+                  </article>
+                  <article>
+                    <span>{t("beta.proof.privacy")}</span>
+                    <strong>{t("beta.proof.redacted")}</strong>
+                  </article>
+                  <article>
+                    <span>{t("beta.proof.source")}</span>
+                    <strong>
+                      {supportBundleSource === "server"
+                        ? t("support.bundle.server")
+                        : supportBundleSource === "fallback"
+                          ? t("support.bundle.fallback")
+                          : t("support.bundle.ready")}
+                    </strong>
+                  </article>
+                </div>
+                <div className="beta-proof-actions">
+                  <button onClick={() => void handleCopyBetaProof()} type="button">
+                    <ClipboardList size={13} />
+                    {betaProofCopyStatus === "copied"
+                      ? t("beta.proof.copied")
+                      : betaProofCopyStatus === "error"
+                        ? t("beta.proof.copyError")
+                        : t("beta.proof.copy")}
+                  </button>
+                  <button onClick={handleDownloadBetaProof} type="button">
+                    <Download size={13} />
+                    {t("beta.proof.download")}
                   </button>
                 </div>
               </div>
@@ -6743,7 +7350,7 @@ function App() {
                   </span>
                 </div>
                 <div className="coverage-inspector" aria-label={t("detail.coverageApi.title")}>
-                  <div className="coverage-meter">
+                  <div className="coverage-meter" title={t("coverage.onDiskHint")}>
                     <div>
                       <strong>{channelCoveragePercent}%</strong>
                       <span>{t("detail.coverageApi.title")}</span>
@@ -7393,6 +8000,37 @@ function App() {
                 <Bookmark size={13} />
                 {t("library.saved.overwrite")}
               </button>
+              <div className="library-view-share-actions" aria-label={t("library.saved.share")}>
+                <button onClick={() => void handleCopyLibraryViews()} type="button">
+                  <ClipboardList size={13} />
+                  {libraryViewShareStatus === "copied"
+                    ? t("library.saved.copied")
+                    : libraryViewShareStatus === "error"
+                      ? t("library.saved.copyError")
+                      : t("library.saved.copy")}
+                </button>
+                <button onClick={() => void handleDownloadLibraryViews()} type="button">
+                  <Download size={13} />
+                  {t("library.saved.download")}
+                </button>
+                <button onClick={handleChooseLibraryViewImport} type="button">
+                  <FileArchive size={13} />
+                  {libraryViewImportStatus === "importing"
+                    ? t("library.saved.importing")
+                    : libraryViewImportStatus === "done"
+                      ? t("library.saved.importDone")
+                      : libraryViewImportStatus === "error"
+                        ? t("library.saved.importErrorShort")
+                        : t("library.saved.import")}
+                </button>
+                <input
+                  accept="application/json,.json"
+                  aria-label={t("library.saved.importInput")}
+                  onChange={(event) => void handleImportLibraryViews(event)}
+                  ref={libraryViewImportInputRef}
+                  type="file"
+                />
+              </div>
               {savedLibraryViews.map((view) => (
                 <div className={`saved-view-pill ${activeSavedLibraryViewId === view.id ? "active" : ""}`} key={view.id}>
                   <button onClick={() => handleApplySavedLibraryView(view)} type="button">
@@ -7441,7 +8079,7 @@ function App() {
                 <span>{t("library.total")}</span>
                 <strong>{library?.total ?? activeTimeline.length}</strong>
               </article>
-              <article>
+              <article title={t("coverage.onDiskHint")}>
                 <span>{t("library.archived")}</span>
                 <strong>{library?.archived ?? 0}</strong>
               </article>
@@ -7472,6 +8110,7 @@ function App() {
                     <span>{item.video_external_id}</span>
                     <div className="library-fidelity">
                       {item.duration_seconds ? <em className="media-duration-chip">{formatDuration(item.duration_seconds)}</em> : null}
+                      {libraryHasStaleIndex(item) ? <em className="stale-index-chip">{t("library.state.indexedMissing")}</em> : null}
                       <em className={`integrity-chip ${item.integrity_state}`}>{integrityLabel(item.integrity_state, t)}</em>
                       <em>{t("library.fidelity").replace("{count}", String(fidelityCount(item)))}</em>
                       {mediaProfileLabel(item) ? <em className="media-profile-chip">{mediaProfileLabel(item)}</em> : null}
@@ -9009,6 +9648,19 @@ function App() {
               </div>
             ) : null}
 
+            <nav className="runtime-guide-rail" aria-label={t("runtime.rail.aria")}>
+              {runtimeGuideRailItems.map((item) => {
+                const RailIcon = item.icon;
+                return (
+                  <button className={item.tone} key={item.id} onClick={() => handleRuntimeGuideRailClick(item.selector)} type="button">
+                    <RailIcon size={14} />
+                    <span>{t(item.labelKey)}</span>
+                    <small>{item.detail}</small>
+                  </button>
+                );
+              })}
+            </nav>
+
             <div
               className={`runtime-secure-jump ${securityReadinessReady ? "good" : "warn"}`}
               aria-label={t("runtime.secure.aria")}
@@ -9243,6 +9895,32 @@ function App() {
                 </div>
                 <code>CVN_API_PORT=127.0.0.1:8000</code>
               </div>
+              <div className="runtime-exposure-smoke">
+                <div className="runtime-exposure-card-head">
+                  <div>
+                    <strong>{t("runtime.exposure.smokeTitle")}</strong>
+                    <span>{t("runtime.exposure.smokeDetail")}</span>
+                  </div>
+                  <small>{t("runtime.exposure.smokeBadge")}</small>
+                </div>
+                <code>{DEPLOYMENT_SMOKE_COMMAND}</code>
+                <div className="runtime-exposure-card-foot">
+                  <span>{t("runtime.exposure.smokeCovers")}</span>
+                  <button
+                    aria-label={t("runtime.exposure.smokeCopy")}
+                    className="runtime-copy-button"
+                    onClick={() => void handleCopyDeploymentSmokeCommand()}
+                    type="button"
+                  >
+                    <ClipboardList size={14} />
+                    {runtimeDeploymentSmokeCopyStatus === "copied"
+                      ? t("runtime.exposure.smokeCopied")
+                      : runtimeDeploymentSmokeCopyStatus === "error"
+                        ? t("runtime.exposure.copyError")
+                        : t("runtime.exposure.smokeCopy")}
+                  </button>
+                </div>
+              </div>
               <div className="runtime-exposure-grid">
                 {runtimeExposureProxyPresets.map((preset) => {
                   const copyState = runtimeProxyCopyStatus?.id === preset.id ? runtimeProxyCopyStatus.status : "idle";
@@ -9328,6 +10006,90 @@ function App() {
                   <span>{t("runtime.volume.env")}</span>
                   <code>{runtimeVolumeEnvManifest}</code>
                 </article>
+              </div>
+            </div>
+            <div
+              className={`runtime-backup-restore ${runtimeBackupRestoreReady ? "good" : "warn"}`}
+              aria-label={t("runtime.backup.aria")}
+            >
+              <div className="runtime-apply-heading">
+                <FileArchive size={16} />
+                <div>
+                  <strong>{t("runtime.backup.title")}</strong>
+                  <span>{t("runtime.backup.subtitle")}</span>
+                </div>
+              </div>
+              <div className={`runtime-backup-state ${runtimeBackupRestoreReady ? "good" : "warn"}`}>
+                {runtimeBackupRestoreReady ? <ShieldCheck size={15} /> : <AlertTriangle size={15} />}
+                <div>
+                  <strong>{runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}</strong>
+                  <span>{runtimeBackupRestoreReady ? t("runtime.backup.readyDetail") : t("runtime.backup.warnDetail")}</span>
+                </div>
+              </div>
+              <div className="runtime-backup-grid">
+                {runtimeBackupRestorePaths.map((item) => (
+                  <article className={item.tone} key={item.id}>
+                    <div>
+                      <strong>{t(item.labelKey)}</strong>
+                      <span>{t(item.detailKey)}</span>
+                    </div>
+                    <code>{item.displayPath}</code>
+                    <small>{item.path ? mountDoctorPathState(item.path, t) : t("runtime.backup.pathUnknown")}</small>
+                  </article>
+                ))}
+              </div>
+              <div className="runtime-backup-command-grid">
+                {(
+                  [
+                    {
+                      id: "quiesced" as const,
+                      label: t("runtime.backup.quiesced"),
+                      detail: t("runtime.backup.quiescedDetail"),
+                      button: t("runtime.backup.copyQuiesced"),
+                    },
+                    {
+                      id: "sqlite" as const,
+                      label: t("runtime.backup.sqlite"),
+                      detail: t("runtime.backup.sqliteDetail"),
+                      button: t("runtime.backup.copySqlite"),
+                    },
+                    {
+                      id: "restore" as const,
+                      label: t("runtime.backup.restore"),
+                      detail: t("runtime.backup.restoreDetail"),
+                      button: t("runtime.backup.copyRestore"),
+                    },
+                  ] satisfies {
+                    id: BackupRestoreCommandId;
+                    label: string;
+                    detail: string;
+                    button: string;
+                  }[]
+                ).map((command) => {
+                  const copyState = runtimeBackupCopyStatus?.id === command.id ? runtimeBackupCopyStatus.status : "idle";
+                  return (
+                    <article key={command.id}>
+                      <div>
+                        <strong>{command.label}</strong>
+                        <span>{command.detail}</span>
+                      </div>
+                      <code>{runtimeBackupRestoreCommands[command.id]}</code>
+                      <button
+                        aria-label={command.button}
+                        className="runtime-copy-button"
+                        onClick={() => void handleCopyBackupRestoreCommand(command.id)}
+                        type="button"
+                      >
+                        <ClipboardList size={14} />
+                        {copyState === "copied"
+                          ? t("runtime.backup.copied")
+                          : copyState === "error"
+                            ? t("runtime.backup.copyError")
+                            : command.button}
+                      </button>
+                    </article>
+                  );
+                })}
               </div>
             </div>
             {runtimeRestartMessage ? (
@@ -10600,6 +11362,18 @@ function App() {
                 <strong>{workerHistorySummary.failed}</strong>
               </article>
               <article>
+                <span>{t("worker.history.filter.completed")}</span>
+                <strong>{workerHistorySummary.completed}</strong>
+              </article>
+              <article>
+                <span>{t("worker.history.filter.skipped")}</span>
+                <strong>{workerHistorySummary.skipped}</strong>
+              </article>
+              <article>
+                <span>{t("worker.history.filter.slow")}</span>
+                <strong>{workerHistorySummary.slow}</strong>
+              </article>
+              <article>
                 <span>{t("worker.history.filter.live")}</span>
                 <strong>{workerHistorySummary.live}</strong>
               </article>
@@ -10611,7 +11385,10 @@ function App() {
 
             <div className="worker-history-list">
               {workerHistoryRuns.map((run) => (
-                <article className={`worker-history-card ${run.failed_count ? "failed-run" : run.status}`} key={run.id}>
+                <article
+                  className={`worker-history-card ${run.failed_count ? "failed-run" : run.status} ${(run.duration_seconds ?? 0) >= workerSlowRunThresholdSeconds ? "slow-run" : ""}`}
+                  key={run.id}
+                >
                   <div className="worker-history-card-head">
                     <div>
                       <strong>{run.status}</strong>
@@ -10638,6 +11415,13 @@ function App() {
                   {run.skipped_reason ? (
                     <code className="worker-history-reason">
                       {t("worker.history.skipped")} · {run.skipped_reason}
+                    </code>
+                  ) : null}
+                  {(run.duration_seconds ?? 0) >= workerSlowRunThresholdSeconds ? (
+                    <code className="worker-history-slow">
+                      {t("worker.history.slowDiagnostic")
+                        .replace("{duration}", formatDuration(run.duration_seconds ?? 0))
+                        .replace("{threshold}", formatDuration(workerSlowRunThresholdSeconds))}
                     </code>
                   ) : null}
                 </article>
@@ -10678,8 +11462,8 @@ function App() {
                 <ExternalLink size={14} />
                 {t("library.detail.source")}
               </a>
-              {selectedLibraryFiles.find((file) => file.exists) ? (
-                <a href={apiUrl(selectedLibraryFiles.find((file) => file.exists)?.stream_url ?? "")} rel="noreferrer" target="_blank">
+              {selectedLibraryPreviewFile ? (
+                <a href={apiUrl(selectedLibraryPreviewFile.stream_url)} rel="noreferrer" target="_blank">
                   <Film size={14} />
                   {t("library.detail.stream")}
                 </a>
@@ -10704,6 +11488,21 @@ function App() {
                 <strong>{libraryStateLabel(selectedLibraryItem, t)}</strong>
               </article>
             </div>
+
+            {selectedLibraryPreviewFile ? (
+              <section aria-label={t("library.detail.preview")} className="library-preview-panel">
+                <div className="library-preview-head">
+                  <div>
+                    <span>{t("library.detail.previewSubtitle")}</span>
+                    <strong>{selectedLibraryPreviewFile.filename}</strong>
+                  </div>
+                  <em>{selectedLibraryPreviewFile.size_label}</em>
+                </div>
+                <video controls playsInline preload="metadata" src={apiUrl(selectedLibraryPreviewFile.stream_url)}>
+                  {t("library.detail.previewUnsupported")}
+                </video>
+              </section>
+            ) : null}
 
             <div className="library-detail-list">
               {libraryDetailStatus === "loading" ? <p className="empty-copy">{t("library.detail.loading")}</p> : null}
@@ -10760,6 +11559,61 @@ function loadSavedLibraryViews(): SavedLibraryView[] {
   } catch {
     return [];
   }
+}
+
+function buildLocalLibraryViewBundle(views: SavedLibraryView[]): LibrarySavedViewBundle {
+  const exported = views.slice(0, 50).map(savedLibraryViewToPayload);
+  return {
+    kind: "channel_vault_library_views",
+    version: 1,
+    generated_at: new Date().toISOString(),
+    count: exported.length,
+    views: exported,
+  };
+}
+
+function savedLibraryViewToPayload(view: SavedLibraryView): LibrarySavedViewPayload {
+  return {
+    name: view.name,
+    query: view.query,
+    integrity: view.integrity,
+    sidecar: view.sidecar,
+    codec: view.codec,
+  };
+}
+
+function parseLibraryViewImportPayload(value: unknown): LibrarySavedViewPayload[] {
+  const candidateViews = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" && Array.isArray((value as { views?: unknown }).views)
+      ? (value as { views: unknown[] }).views
+      : [];
+  const parsed = candidateViews
+    .map(parseLibraryViewPayload)
+    .filter((view): view is LibrarySavedViewPayload => Boolean(view))
+    .slice(0, 50);
+  if (!parsed.length) {
+    throw new Error("No saved library views found in JSON.");
+  }
+  return parsed;
+}
+
+function parseLibraryViewPayload(value: unknown): LibrarySavedViewPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const name = stringValue(record.name).trim();
+  if (!name) return null;
+  return {
+    name,
+    query: stringValue(record.query),
+    integrity: normalizeLibraryIntegrity(stringValue(record.integrity)),
+    sidecar: normalizeLibrarySidecar(stringValue(record.sidecar)),
+    codec: stringValue(record.codec),
+  };
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function loadArchiveTxtDraft(): string {
@@ -10983,11 +11837,124 @@ function buildVolumeMountMkdirCommand(presets: VolumeMountPreset[]) {
   return `mkdir -p ${presets.map((preset) => preset.hostPath).join(" ")}`;
 }
 
+function buildBackupRestorePathCards(mountDoctor: MountDoctor | null, runtime: RuntimeSettings | null): BackupRestorePathCard[] {
+  const metadata = mountDoctorPath(mountDoctor, "metadata");
+  const download = mountDoctorPath(mountDoctor, "download");
+  const runtimeEnv = mountDoctorPath(mountDoctor, "runtime");
+  return [
+    {
+      id: "metadata",
+      labelKey: "runtime.backup.metadata",
+      detailKey: "runtime.backup.metadataDetail",
+      path: metadata,
+      displayPath: metadata?.resolved ?? runtime?.metadata_dir ?? "/volume1/channel-vault-nas/metadata",
+      tone: backupPathTone(metadata, mountDoctor),
+    },
+    {
+      id: "download",
+      labelKey: "runtime.backup.archive",
+      detailKey: "runtime.backup.archiveDetail",
+      path: download,
+      displayPath: download?.resolved ?? runtime?.download_dir ?? "/volume1/channel-vault-nas/archive",
+      tone: backupPathTone(download, mountDoctor),
+    },
+    {
+      id: "runtime",
+      labelKey: "runtime.backup.runtime",
+      detailKey: "runtime.backup.runtimeDetail",
+      path: runtimeEnv,
+      displayPath:
+        runtimeEnv?.resolved ??
+        (runtime?.managed_env_file && runtime.managed_env_file.startsWith("/")
+          ? parentPath(runtime.managed_env_file)
+          : "/volume1/channel-vault-nas/runtime"),
+      tone: backupPathTone(runtimeEnv, mountDoctor),
+    },
+  ];
+}
+
+function buildBackupRestoreCommands(
+  mountDoctor: MountDoctor | null,
+  runtime: RuntimeSettings | null,
+): Record<BackupRestoreCommandId, string> {
+  const metadataDir = backupResolvedPath(mountDoctor, "metadata", runtime?.metadata_dir ?? "/volume1/channel-vault-nas/metadata");
+  const archiveDir = backupResolvedPath(mountDoctor, "download", runtime?.download_dir ?? "/volume1/channel-vault-nas/archive");
+  const runtimeEnvFile = backupResolvedPath(
+    mountDoctor,
+    "runtime",
+    runtime?.managed_env_file && runtime.managed_env_file.startsWith("/")
+      ? runtime.managed_env_file
+      : "/volume1/channel-vault-nas/runtime/.env.runtime",
+  );
+  const runtimeDir = parentPath(runtimeEnvFile);
+  const databaseFile = backupResolvedPath(mountDoctor, "database", joinPath(metadataDir, "app.db"));
+  return {
+    quiesced: [
+      "# Stop briefly for a consistent metadata/runtime copy.",
+      "docker compose stop",
+      `rsync -a --delete ${shellQuote(ensureTrailingSlash(metadataDir))} /backup/cvn/metadata/`,
+      `rsync -a ${shellQuote(ensureTrailingSlash(archiveDir))} /backup/cvn/archive/`,
+      `rsync -a --delete ${shellQuote(ensureTrailingSlash(runtimeDir))} /backup/cvn/runtime/`,
+      "docker compose start",
+    ].join("\n"),
+    sqlite: [
+      "# Hot SQLite snapshot for the operational index.",
+      "mkdir -p /backup/cvn/metadata",
+      `sqlite3 ${shellQuote(databaseFile)} ".backup '/backup/cvn/metadata/app.db'"`,
+    ].join("\n"),
+    restore: [
+      "# Restore the same three durable roots, then start the app.",
+      "docker compose stop",
+      "rsync -a --delete /backup/cvn/metadata/ /volume1/channel-vault-nas/metadata/",
+      "rsync -a /backup/cvn/archive/ /volume1/channel-vault-nas/archive/",
+      "rsync -a --delete /backup/cvn/runtime/ /volume1/channel-vault-nas/runtime/",
+      "docker compose start",
+      "# If the DB was lost but archive sidecars survived:",
+      "curl -X POST http://127.0.0.1:8000/api/library/_rescan/apply",
+    ].join("\n"),
+  };
+}
+
+function mountDoctorPath(mountDoctor: MountDoctor | null, id: MountDoctorPath["id"]) {
+  return mountDoctor?.paths.find((path) => path.id === id) ?? null;
+}
+
+function backupPathTone(path: MountDoctorPath | null, mountDoctor: MountDoctor | null): BackupRestorePathCard["tone"] {
+  if (!path || !mountDoctor) return "warn";
+  return mountDoctorPathTone(path, mountDoctor.running_in_container) === "bad" ? "bad" : "good";
+}
+
+function backupResolvedPath(mountDoctor: MountDoctor | null, id: MountDoctorPath["id"], fallback: string) {
+  return mountDoctorPath(mountDoctor, id)?.resolved ?? fallback;
+}
+
+function parentPath(value: string) {
+  const normalized = value.replace(/\/+$/, "");
+  const index = normalized.lastIndexOf("/");
+  if (index <= 0) return ".";
+  return normalized.slice(0, index);
+}
+
+function joinPath(base: string, child: string) {
+  return `${base.replace(/\/+$/, "")}/${child}`;
+}
+
+function ensureTrailingSlash(value: string) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
 const ACCESS_TOKEN_SMOKE_COMMAND = [
   "# 1) Without a token, the API rejects the request once CVN_AUTH_TOKEN is set",
   "curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8000/api/dashboard   # expect 401",
   "# 2) With the operator token exported, the same request succeeds",
   'curl -s -o /dev/null -w \'%{http_code}\\n\' -H "Authorization: Bearer $CVN_AUTH_TOKEN" http://127.0.0.1:8000/api/dashboard   # expect 200',
+].join("\n");
+
+const DEPLOYMENT_SMOKE_COMMAND = [
+  "CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \\",
+  'CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \\',
+  "CVN_DEPLOYMENT_SMOKE_FORBIDDEN_API_URL=http://vault.example.test:8000 \\",
+  "scripts/deployment-smoke.sh",
 ].join("\n");
 
 function generateAccessToken(): string {
@@ -11770,6 +12737,10 @@ function libraryStateLabel(item: LibraryItem, t: (key: TranslationKey) => string
   return t("library.state.missing");
 }
 
+function libraryHasStaleIndex(item: LibraryItem) {
+  return item.archive_state !== "archived" && item.media_count > 0;
+}
+
 function libraryItemMissingSidecar(item: LibraryItem, filter: LibrarySidecarFilter) {
   if (filter === "any") {
     return !item.fidelity.info_json || !item.fidelity.thumbnail || !item.fidelity.subtitles || !item.fidelity.nfo;
@@ -11900,6 +12871,9 @@ function isSelectableQueueJob(job: DownloadJob) {
 
 function workerHistoryQuery(filter: WorkerHistoryFilter): DownloadWorkerRunFilters {
   if (filter === "failed") return { failed_only: true };
+  if (filter === "completed") return { status: "completed" };
+  if (filter === "skipped") return { status: "skipped" };
+  if (filter === "slow") return { min_duration_seconds: workerSlowRunThresholdSeconds };
   if (filter === "dry_run") return { dry_run: true };
   if (filter === "live") return { dry_run: false };
   return {};

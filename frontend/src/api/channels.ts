@@ -621,6 +621,22 @@ export type LibrarySavedViewPayload = {
   codec: string;
 };
 
+export type LibrarySavedViewBundle = {
+  kind: "channel_vault_library_views";
+  version: number;
+  generated_at: string;
+  count: number;
+  views: LibrarySavedViewPayload[];
+};
+
+export type LibrarySavedViewImportResult = {
+  imported_count: number;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  views: LibrarySavedView[];
+};
+
 export type LibrarySidecar = {
   kind: string;
   relative_path: string;
@@ -628,6 +644,7 @@ export type LibrarySidecar = {
 };
 
 export type LibraryFile = {
+  id: number;
   video_id: number;
   relative_path: string;
   filename: string;
@@ -1223,6 +1240,7 @@ export type DownloadWorkerRunFilters = {
   status?: string;
   dry_run?: boolean;
   failed_only?: boolean;
+  min_duration_seconds?: number;
 };
 
 export async function getDownloadWorkerRuns(
@@ -1236,6 +1254,9 @@ export async function getDownloadWorkerRuns(
   if (filters.status) params.set("status", filters.status);
   if (typeof filters.dry_run === "boolean") params.set("dry_run", String(filters.dry_run));
   if (filters.failed_only) params.set("failed_only", "true");
+  if (typeof filters.min_duration_seconds === "number") {
+    params.set("min_duration_seconds", String(filters.min_duration_seconds));
+  }
   return getJson(`/api/jobs/downloads/worker/runs?${params}`);
 }
 
@@ -1326,6 +1347,14 @@ export async function deleteLibraryView(viewId: number): Promise<{ deleted: bool
     headers: authHeaders(),
   });
   return readJsonResponse<{ deleted: boolean }>(response);
+}
+
+export async function exportLibraryViews(): Promise<LibrarySavedViewBundle> {
+  return getJson("/api/library/views/export");
+}
+
+export async function importLibraryViews(views: LibrarySavedViewPayload[]): Promise<LibrarySavedViewImportResult> {
+  return postJson("/api/library/views/import", { views });
 }
 
 export async function getLibraryFiles(videoId: number): Promise<LibraryFile[]> {

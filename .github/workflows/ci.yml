@@ -115,3 +115,9 @@ jobs:
       - name: Run isolated browser smoke
         working-directory: frontend
         run: npm run e2e:smoke -- --project=chromium
+
+      - name: Run protected browser smoke
+        working-directory: frontend
+        env:
+          CVN_E2E_AUTH_TOKEN: cvn-ci-operator-token
+        run: npm run e2e:auth -- --project=chromium

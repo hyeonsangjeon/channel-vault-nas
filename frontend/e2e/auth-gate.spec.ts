@@ -1,8 +1,28 @@
 import { expect, test } from "@playwright/test";
 
 const token = process.env.CVN_E2E_AUTH_TOKEN ?? "";
+const backendPort = process.env.CVN_E2E_BACKEND_PORT ?? "8011";
+const backendUrl = process.env.CVN_E2E_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`;
 
 test.skip(!token, "Set CVN_E2E_AUTH_TOKEN to run the optional auth gate smoke.");
+
+test("protected API requires the operator token", async ({ request }) => {
+  const health = await request.get(`${backendUrl}/api/health`);
+  await expect(health).toBeOK();
+
+  const missingToken = await request.get(`${backendUrl}/api/dashboard`);
+  expect(missingToken.status()).toBe(401);
+
+  const bearerToken = await request.get(`${backendUrl}/api/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await expect(bearerToken).toBeOK();
+
+  const headerToken = await request.get(`${backendUrl}/api/dashboard`, {
+    headers: { "X-CVN-Token": token },
+  });
+  await expect(headerToken).toBeOK();
+});
 
 test("operator token gate unlocks a protected NAS console", async ({ page }) => {
   await page.addInitScript(() => {

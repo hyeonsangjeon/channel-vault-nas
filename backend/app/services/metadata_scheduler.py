@@ -335,6 +335,7 @@ async def _auto_create_candidates(
         channel_id=channel_id,
         quality=policy.max_quality,
         limit=settings.metadata_sync_auto_candidates_limit,
+        download_dir=settings.download_dir,
     )
     candidates_created = result.candidates_created if result is not None else 0
     sync_job = await session.get(SyncJob, sync_job_id)
