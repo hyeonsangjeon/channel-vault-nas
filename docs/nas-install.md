@@ -101,6 +101,10 @@ and an available command; it is copy-only (safe) by default.
 
 - Verify the stack with [`scripts/compose-smoke.sh`](../scripts/compose-smoke.sh)
   (override ports for collision-free checks).
+- Verify the exposed web/reverse-proxy endpoint with
+  [`scripts/deployment-smoke.sh`](../scripts/deployment-smoke.sh). Pass
+  `CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN` so the script can prove both rejected and
+  accepted API/WebSocket paths.
 - Set up backups before archiving anything real:
   [`docs/backup-restore.md`](backup-restore.md).
 - Real downloads stay disabled until you set `CVN_DOWNLOAD_WORKER_ENABLED=true`

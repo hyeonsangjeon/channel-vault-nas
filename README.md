@@ -253,6 +253,28 @@ The smoke script checks for occupied ports before building. If your normal
 Compose stack is already using the default smoke ports, pass alternate
 `CVN_WEB_PORT` and `CVN_API_PORT` values as shown above.
 
+For an already-running NAS, LAN, or reverse-proxy deployment, run the live
+deployment smoke against the exposed web endpoint. When a token is provided it
+verifies `/api/health`, protected `/api/dashboard` `401`/`200` behavior,
+bearer and `X-CVN-Token` headers, and WebSocket upgrade through the web/proxy
+path:
+
+```bash
+CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \
+CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \
+scripts/deployment-smoke.sh
+```
+
+If you also want to prove the backend API port is not exposed at a public
+address, pass the address that should fail:
+
+```bash
+CVN_DEPLOYMENT_SMOKE_WEB_URL=https://vault.example.test \
+CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN="$CVN_AUTH_TOKEN" \
+CVN_DEPLOYMENT_SMOKE_FORBIDDEN_API_URL=http://vault.example.test:8000 \
+scripts/deployment-smoke.sh
+```
+
 Real downloads remain disabled until you edit `.env`:
 
 ```env

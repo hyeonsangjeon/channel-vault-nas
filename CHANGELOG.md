@@ -45,6 +45,9 @@ The project is in active alpha. Dates use Korea Standard Time.
   rail, backup confidence panel, and a redacted Dashboard proof export.
 - Protected access E2E now verifies API `401`/`200` behavior plus browser unlock
   and runs in CI/public-alpha checks with a non-secret test token.
+- Live deployment smoke script for already-running LAN/NAS/reverse-proxy hosts,
+  including protected API checks, WebSocket upgrade, and optional forbidden raw
+  API exposure checks.
 
 ### Changed
 

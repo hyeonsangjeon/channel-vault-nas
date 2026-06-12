@@ -81,8 +81,10 @@ Focus: NAS deployment confidence.
 - [x] Token-protected E2E coverage — `auth-gate.spec.ts` checks API `401`/`200`
   behavior and browser unlock, and runs in CI/public-alpha checks with a test
   token.
-- [ ] Live reverse-proxy host smoke beyond the Compose proxy contract and
-  runtime guide cookbook.
+- [x] Live deployment/reverse-proxy smoke script —
+  [`scripts/deployment-smoke.sh`](../scripts/deployment-smoke.sh) checks the
+  exposed web endpoint, proxied API, protected access, WebSocket upgrade, and
+  optional forbidden raw API URLs.
 
 ## Later
 
