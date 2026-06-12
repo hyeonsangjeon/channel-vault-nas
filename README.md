@@ -1,20 +1,68 @@
-# Channel Vault NAS
+<p align="center">
+  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive cockpit" width="100%">
+</p>
 
-NAS-first YouTube channel archive console.
+<h1 align="center">Channel Vault NAS</h1>
 
-[![CI](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg)](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml)
-![Status](https://img.shields.io/badge/status-active_alpha-38bdf8)
-![Downloads](https://img.shields.io/badge/downloads-guarded_by_default-22c55e)
-![Archive](https://img.shields.io/badge/archive-sidecar_recoverable-a78bfa)
+<p align="center">
+  <strong>NAS-first YouTube channel archive console.</strong><br>
+  Sync channel metadata, skip videos already on disk, queue only the missing ones, and keep a recoverable local library.
+</p>
 
-Channel Vault NAS turns a simple `archive.txt` idea into an operator console for
-private media archives: register a channel, sync metadata, skip videos already
-stored on disk, queue only missing videos, run bounded download passes, and keep
-the local library searchable from the app.
+<p align="center">
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases"><img alt="Release" src="https://img.shields.io/github/v/release/hyeonsangjeon/channel-vault-nas?include_prereleases&label=release"></a>
+  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api/tags"><img alt="Docker API tag" src="https://img.shields.io/badge/api-0.1.0--alpha.1-2496ED?logo=docker"></a>
+  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-web/tags"><img alt="Docker Web tag" src="https://img.shields.io/badge/web-0.1.0--alpha.1-2496ED?logo=docker"></a>
+  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api"><img alt="Docker API pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-api?logo=docker&label=api%20pulls"></a>
+  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-web"><img alt="Docker Web pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-web?logo=docker&label=web%20pulls"></a>
+  <a href="https://hyeonsangjeon.github.io/channel-vault-nas/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-0ea5e9"></a>
+  <img alt="Guarded by default" src="https://img.shields.io/badge/downloads-guarded%20by%20default-22c55e">
+</p>
+
+Channel Vault NAS turns the classic `archive.txt` idea into a real operator
+console for private media archives: register a channel, sync metadata, compare
+against existing NAS folders, stage only missing videos, run bounded download
+passes, and keep the local library searchable from the app.
 
 The target use case is creator-owned media, user-authorized channel backups,
 `archive.txt` ledgers, and existing NAS folders. You are responsible for
 ensuring you have the rights and permissions to archive any content.
+
+## Start In 60 Seconds
+
+Use the published Docker Hub images when you want the fastest public-alpha path:
+
+```bash
+git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
+cd channel-vault-nas
+cp .env.example .env
+mkdir -p metadata downfolder runtime
+
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+docker compose pull
+docker compose up -d --no-build
+```
+
+Open `http://127.0.0.1:5173/`, load the safe demo workspace, then explore the
+Dashboard, Channels, Queue, Library, Insights, and Settings consoles.
+
+> Guardrail: this alpha is built for localhost, private LAN, VPN, or trusted
+> reverse-proxy use. Do not expose it directly to the public internet.
+
+## Registry Links
+
+- Docker Hub API image:
+  [`modenaf360/channel-vault-nas-api`](https://hub.docker.com/r/modenaf360/channel-vault-nas-api)
+- Docker Hub web image:
+  [`modenaf360/channel-vault-nas-web`](https://hub.docker.com/r/modenaf360/channel-vault-nas-web)
+- GHCR mirror:
+  [`ghcr.io/hyeonsangjeon/channel-vault-nas-api`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-api)
+  and
+  [`ghcr.io/hyeonsangjeon/channel-vault-nas-web`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-web)
+- Static manual:
+  [`hyeonsangjeon.github.io/channel-vault-nas`](https://hyeonsangjeon.github.io/channel-vault-nas/)
 
 ## Why It Exists
 
@@ -31,10 +79,10 @@ archive.
 ## What Makes It Different
 
 - `archive.txt` is treated as an operator ledger, not a hidden downloader flag.
-- Downloads are disabled by default, bounded per pass, and always visible in
-  queue/audit surfaces.
-- The app can rebuild trust from NAS files because media, sidecars, subtitles,
-  thumbnails, and DB indexes are inspected together.
+- Downloads are disabled by default, bounded per pass, and visible in queue and
+  audit surfaces.
+- The app rebuilds trust from disk by reading media, sidecars, subtitles,
+  thumbnails, and DB indexes together.
 - Empty installs can load a safe demo workspace without YouTube calls or real
   downloads.
 - Public issue support bundles are redacted on the server before export.
@@ -174,8 +222,11 @@ restart adapters, tick logs, worker summaries, and runtime audit events.
 
 ## Quickstart: Docker Compose Alpha
 
-This is the easiest public-preview path. It builds local images from this repo
-and stores archive data in bind-mounted folders.
+This section shows the source-build path. For the fastest no-build install, use
+[Start In 60 Seconds](#start-in-60-seconds) or
+[Run a published image](#run-a-published-image-no-build).
+
+Both paths store archive data in bind-mounted folders.
 
 There are three ways to run Channel Vault NAS:
 
@@ -711,12 +762,12 @@ static documentation site from [`docs/index.html`](docs/index.html).
 The goal is a public repo that can earn real adoption, not just a working local
 prototype.
 
-Before a public alpha release:
+For each public alpha release:
 
 - Run `scripts/public-alpha-check.sh`.
 - Validate Docker Compose on macOS, Linux, and one NAS-like host.
-- Publish versioned container images and verify anonymous Docker Hub and GHCR
-  pulls after the packages are set Public.
+- Publish versioned container images and verify Docker Hub anonymous pulls.
+- Verify GHCR anonymous pulls after the GitHub packages are set Public.
 - Keep README screenshot assets current from the Playwright seeded fixture.
 - Record/share a short demo video or GIF with `scripts/capture-public-demo.sh`.
 - Keep the safe first-run demo and runtime error copy polished.
