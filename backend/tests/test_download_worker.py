@@ -395,6 +395,38 @@ async def test_worker_run_history_filters_and_duration() -> None:
                     completed_at=datetime(2026, 5, 31, 12, 0, 5, tzinfo=UTC),
                     created_at=datetime(2026, 5, 31, 12, 0, 5, tzinfo=UTC),
                 ),
+                DownloadWorkerRun(
+                    channel_id=channel.id,
+                    status="skipped",
+                    dry_run=True,
+                    started_count=0,
+                    completed_count=0,
+                    failed_count=0,
+                    planned_job_ids=[],
+                    started_job_ids=[],
+                    completed_job_ids=[],
+                    failed_job_ids=[],
+                    skipped_reason="download worker disabled",
+                    started_at=started_at,
+                    completed_at=datetime(2026, 5, 31, 12, 0, 1, tzinfo=UTC),
+                    created_at=datetime(2026, 5, 31, 12, 0, 1, tzinfo=UTC),
+                ),
+                DownloadWorkerRun(
+                    channel_id=channel.id,
+                    status="completed",
+                    dry_run=False,
+                    started_count=1,
+                    completed_count=1,
+                    failed_count=0,
+                    planned_job_ids=[301],
+                    started_job_ids=[301],
+                    completed_job_ids=[301],
+                    failed_job_ids=[],
+                    skipped_reason=None,
+                    started_at=started_at,
+                    completed_at=datetime(2026, 5, 31, 12, 0, 15, tzinfo=UTC),
+                    created_at=datetime(2026, 5, 31, 12, 0, 15, tzinfo=UTC),
+                ),
             ]
         )
         await session.commit()
@@ -403,6 +435,8 @@ async def test_worker_run_history_filters_and_duration() -> None:
         failed_runs = await list_download_worker_runs(db=session, channel_id=channel.id, failed_only=True)
         dry_runs = await list_download_worker_runs(db=session, channel_id=channel.id, dry_run=True)
         completed_runs = await list_download_worker_runs(db=session, channel_id=channel.id, status="completed")
+        skipped_runs = await list_download_worker_runs(db=session, channel_id=channel.id, status="skipped")
+        slow_runs = await list_download_worker_runs(db=session, channel_id=channel.id, min_duration_seconds=10)
 
     assert [run.status for run in failed_runs] == ["failed"]
     assert failed_runs[0].channel_title == "Worker History Channel"
@@ -410,10 +444,14 @@ async def test_worker_run_history_filters_and_duration() -> None:
     assert failed_runs[0].skipped_reason == "yt-dlp exited with code 1"
     assert failed_runs[0].planned_job_ids == [101]
     assert failed_runs[0].failed_job_ids == [101]
-    assert [run.status for run in dry_runs] == ["dry_run"]
+    assert [run.status for run in dry_runs] == ["dry_run", "skipped"]
     assert dry_runs[0].planned_job_ids == [101, 102]
-    assert [run.completed_count for run in completed_runs] == [2]
-    assert completed_runs[0].completed_job_ids == [201, 202]
+    assert [run.completed_count for run in completed_runs] == [1, 2]
+    assert completed_runs[0].completed_job_ids == [301]
+    assert completed_runs[1].completed_job_ids == [201, 202]
+    assert [run.status for run in skipped_runs] == ["skipped"]
+    assert skipped_runs[0].skipped_reason == "download worker disabled"
+    assert [run.duration_seconds for run in slow_runs] == [15]
 
 
 @pytest.mark.asyncio

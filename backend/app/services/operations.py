@@ -19,6 +19,7 @@ from app.models.archive import (
     Video,
 )
 from app.schemas.operations import OperationMetric, OperationMission, OperationsReadiness
+from app.services.archive_coverage import archived_video_ids_on_disk, resolve_archive_root
 from app.services.storage_scanner import build_storage_scan
 
 
@@ -37,9 +38,10 @@ async def build_operations_readiness(
     indexed_paths = await _indexed_media_paths(db)
     scan = build_storage_scan(download_dir, indexed_media_paths=indexed_paths)
 
+    root = resolve_archive_root(download_dir)
     channel_count = await _count(db, select(func.count(Channel.id)))
     source_count = await _count(db, select(func.count(Video.id)))
-    archived_count = await _count(db, select(func.count(func.distinct(MediaFile.video_id))))
+    archived_count = len(await archived_video_ids_on_disk(db=db, root=root))
     missing_count = max(source_count - archived_count, 0)
     failed_downloads = await _count(db, select(func.count(DownloadJob.id)).where(DownloadJob.status == "failed"))
     candidate_downloads = await _count(db, select(func.count(DownloadJob.id)).where(DownloadJob.status == "candidate"))

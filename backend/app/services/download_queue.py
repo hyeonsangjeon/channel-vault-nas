@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.archive import Channel, DownloadJob, MediaFile, Video
+from app.models.archive import Channel, DownloadJob, Video
 from app.schemas.jobs import (
     DownloadCandidateResult,
     DownloadJobActionResult,
@@ -19,6 +19,7 @@ from app.schemas.jobs import (
     QueuePreflightPlan,
     VideoDownloadResult,
 )
+from app.services.archive_coverage import archived_video_ids_on_disk, resolve_archive_root
 from app.services.archive_paths import video_archive_dir
 from app.services.channel_registration import _to_registered_channel
 from app.services.event_bus import event_bus
@@ -41,13 +42,25 @@ async def create_channel_download_candidates(
     channel_id: int,
     quality: str,
     limit: int,
+    download_dir: str | Path | None = None,
 ) -> DownloadCandidateResult | None:
-    """Create candidate queue rows for missing videos without starting downloads."""
+    """Create candidate queue rows for videos whose media is missing on disk.
+
+    A video is stageable when no indexed media file exists on disk under the
+    archive root, even if a stale ``MediaFile`` DB row still points at a file
+    that is gone. This mirrors the disk-aware truth used by Library, Channel
+    detail, Coverage, and the Dashboard so we never skip a video the operator
+    can still see as "missing". Videos that already have a
+    candidate/queued/running job are skipped so duplicate candidates are never
+    created. With no ``download_dir`` configured the index is trusted, matching
+    the disk-aware coverage fallback.
+    """
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
 
-    media_exists = select(MediaFile.id).where(MediaFile.video_id == Video.id).exists()
+    root = resolve_archive_root(download_dir)
+    archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel_id)
     job_exists = (
         select(DownloadJob.id)
         .where(
@@ -59,16 +72,15 @@ async def create_channel_download_candidates(
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
-        .where(~media_exists)
         .where(~job_exists)
         .order_by(Video.published_at.desc(), Video.discovered_at.desc())
-        .limit(limit)
     )
-    videos = result.scalars().all()
 
     jobs: list[DownloadJob] = []
     now = datetime.now(UTC)
-    for video in videos:
+    for video in result.scalars():
+        if video.id in archived_ids:
+            continue
         job = DownloadJob(
             video_id=video.id,
             status="candidate",
@@ -82,6 +94,8 @@ async def create_channel_download_candidates(
         )
         db.add(job)
         jobs.append(job)
+        if len(jobs) >= limit:
+            break
 
     if jobs:
         await db.flush()

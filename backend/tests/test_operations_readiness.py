@@ -338,6 +338,93 @@ async def test_operations_readiness_surfaces_runtime_restart_failures(
     assert missions_by_id["resolve_runtime_restart"]["target_kind"] == "runtime.restart.failed"
 
 
+@pytest.mark.asyncio
+async def test_operations_readiness_coverage_ignores_stale_media_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_archive_tables()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "download_worker_enabled", True)
+    now = datetime(2026, 6, 3, 9, 0, tzinfo=UTC)
+
+    async with AsyncSessionLocal() as session:
+        channel = Channel(
+            source_type="channel",
+            source_url="https://www.youtube.com/@stale",
+            external_id="UC_STALE",
+            handle="@stale",
+            title="Stale Lab",
+            description=None,
+            thumbnail_url=None,
+            status="active",
+            source_video_count=1,
+            archived_count=1,
+            missing_count=0,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(channel)
+        await session.flush()
+        video = Video(
+            channel_id=channel.id,
+            external_id="stale01",
+            title="Stale clip",
+            description=None,
+            published_at=now,
+            upload_date=None,
+            duration_seconds=60,
+            thumbnail_url=None,
+            view_count=None,
+            source_state="available",
+            tags=None,
+            categories=None,
+            chapters=None,
+            is_short=False,
+            is_live=False,
+            was_livestream=False,
+            info_json_path=None,
+            discovered_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(video)
+        await session.flush()
+        session.add(
+            MediaFile(
+                video_id=video.id,
+                relative_path="channels/@stale [UC_STALE]/2026/Stale clip [stale01]/video.mp4",
+                filename="video.mp4",
+                size_bytes=120_000_000,
+                container="mp4",
+                video_codec="h264",
+                audio_codec="aac",
+                fps=30.0,
+                width=1920,
+                height=1080,
+                duration_seconds=60,
+            )
+        )
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/ops/readiness")
+
+    assert response.status_code == 200
+    data = response.json()
+    coverage_metric = next(metric for metric in data["metrics"] if metric["key"] == "coverage")
+    # The stale MediaFile row points at a file that does not exist on disk, so it
+    # must not be reported as archived/healthy coverage.
+    assert coverage_metric["raw_value"] == 0.0
+    assert coverage_metric["tone"] != "good"
+    mission_ids = {mission["id"] for mission in data["missions"]}
+    assert "queue_missing_videos" in mission_ids
+    assert "all_clear" not in mission_ids
+
+
 async def _clear_archive_tables() -> None:
     async with AsyncSessionLocal() as session:
         await session.execute(delete(ArchiveEventLog))

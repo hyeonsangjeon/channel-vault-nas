@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.archive import Channel, MediaFile, Video
@@ -16,35 +17,44 @@ from app.schemas.archive import (
     MissingVideo,
     RemovedVideo,
 )
+from app.services.archive_coverage import archived_video_ids_on_disk, resolve_archive_root
+from app.services.library_index import media_path_on_disk
 
 REMOVED_SOURCE_STATES = {"removed", "blocked", "deleted", "private"}
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-async def build_channel_coverage_from_db(db: AsyncSession, channel_id: int) -> ChannelCoverage | None:
-    """Return completeness from actual videos/media rows."""
+async def build_channel_coverage_from_db(
+    db: AsyncSession,
+    channel_id: int,
+    *,
+    download_dir: str | Path | None = None,
+) -> ChannelCoverage | None:
+    """Return completeness from media files that actually exist on disk.
+
+    With a configured ``download_dir`` the archived/missing/removed counts trust
+    files on disk (matching the Library). Without one they fall back to trusting
+    the DB index so callers wanting indexed counts keep prior behavior.
+    """
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
-    media_exists = select(MediaFile.id).where(MediaFile.video_id == Video.id).exists()
-    source_count = await _count(db, select(func.count(Video.id)).where(Video.channel_id == channel_id))
-    archived_count = await _count(db, select(func.count(Video.id)).where(Video.channel_id == channel_id, media_exists))
-    missing_count = await _count(
-        db,
-        select(func.count(Video.id)).where(
-            Video.channel_id == channel_id,
-            ~media_exists,
-            Video.source_state.not_in(REMOVED_SOURCE_STATES),
-        ),
-    )
-    removed_saved_count = await _count(
-        db,
-        select(func.count(Video.id)).where(
-            Video.channel_id == channel_id,
-            media_exists,
-            Video.source_state.in_(REMOVED_SOURCE_STATES),
-        ),
-    )
+    root = resolve_archive_root(download_dir)
+    archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel_id)
+    rows = (
+        await db.execute(select(Video.id, Video.source_state).where(Video.channel_id == channel_id))
+    ).all()
+    source_count = len(rows)
+    archived_count = 0
+    missing_count = 0
+    removed_saved_count = 0
+    for video_id, source_state in rows:
+        if video_id in archived_ids:
+            archived_count += 1
+            if source_state in REMOVED_SOURCE_STATES:
+                removed_saved_count += 1
+        elif source_state not in REMOVED_SOURCE_STATES:
+            missing_count += 1
     percent = round((archived_count / source_count) * 100, 1) if source_count else 0.0
     return ChannelCoverage(
         channel_id=str(channel.id),
@@ -57,17 +67,22 @@ async def build_channel_coverage_from_db(db: AsyncSession, channel_id: int) -> C
     )
 
 
-async def list_missing_videos_from_db(db: AsyncSession, channel_id: int) -> list[MissingVideo] | None:
-    """Return videos that still need a local media file."""
+async def list_missing_videos_from_db(
+    db: AsyncSession,
+    channel_id: int,
+    *,
+    download_dir: str | Path | None = None,
+) -> list[MissingVideo] | None:
+    """Return videos that still need a local media file on disk."""
     if await db.get(Channel, channel_id) is None:
         return None
-    media_exists = select(MediaFile.id).where(MediaFile.video_id == Video.id).exists()
+    root = resolve_archive_root(download_dir)
+    archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel_id)
     rows = (
         await db.execute(
             select(Video)
             .where(
                 Video.channel_id == channel_id,
-                ~media_exists,
                 Video.source_state.not_in(REMOVED_SOURCE_STATES),
             )
             .order_by(Video.published_at.desc().nullslast(), Video.discovered_at.desc())
@@ -79,16 +94,23 @@ async def list_missing_videos_from_db(db: AsyncSession, channel_id: int) -> list
             title=video.title,
             published_at=_video_timestamp(video),
             source_state=video.source_state,
-            reason="media file has not been indexed for this source video",
+            reason="media file is not present on disk under the archive root",
         )
         for video in rows
+        if video.id not in archived_ids
     ]
 
 
-async def list_removed_saved_videos_from_db(db: AsyncSession, channel_id: int) -> list[RemovedVideo] | None:
-    """Return removed/private source videos that still have local media."""
+async def list_removed_saved_videos_from_db(
+    db: AsyncSession,
+    channel_id: int,
+    *,
+    download_dir: str | Path | None = None,
+) -> list[RemovedVideo] | None:
+    """Return removed/private source videos whose local media still exists on disk."""
     if await db.get(Channel, channel_id) is None:
         return None
+    root = resolve_archive_root(download_dir)
     rows = (
         await db.execute(
             select(Video, MediaFile)
@@ -97,16 +119,24 @@ async def list_removed_saved_videos_from_db(db: AsyncSession, channel_id: int) -
             .order_by(Video.removed_detected_at.desc().nullslast(), Video.published_at.desc().nullslast())
         )
     ).all()
-    return [
-        RemovedVideo(
-            id=video.external_id,
-            title=video.title,
-            published_at=_video_timestamp(video),
-            removed_detected_at=video.removed_detected_at or video.updated_at,
-            local_relative_path=media.relative_path,
+    seen: set[int] = set()
+    removed: list[RemovedVideo] = []
+    for video, media in rows:
+        if video.id in seen:
+            continue
+        if not media_path_on_disk(root=root, relative_path=media.relative_path):
+            continue
+        seen.add(video.id)
+        removed.append(
+            RemovedVideo(
+                id=video.external_id,
+                title=video.title,
+                published_at=_video_timestamp(video),
+                removed_detected_at=video.removed_detected_at or video.updated_at,
+                local_relative_path=media.relative_path,
+            )
         )
-        for video, media in rows
-    ]
+    return removed
 
 
 async def build_channel_cadence_from_db(db: AsyncSession, channel_id: int) -> ChannelCadence | None:
@@ -141,10 +171,6 @@ async def build_channel_cadence_from_db(db: AsyncSession, channel_id: int) -> Ch
         next_expected_at=latest + timedelta(days=avg_days),
         buckets=buckets,
     )
-
-
-async def _count(db: AsyncSession, query) -> int:
-    return int((await db.scalar(query)) or 0)
 
 
 def _video_timestamp(video: Video) -> datetime:

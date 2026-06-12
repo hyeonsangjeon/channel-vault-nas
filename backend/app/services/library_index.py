@@ -99,6 +99,24 @@ async def first_streamable_file(*, db: AsyncSession, video_id: int, download_dir
     return None
 
 
+async def streamable_file_by_id(
+    *,
+    db: AsyncSession,
+    video_id: int,
+    media_file_id: int,
+    download_dir: str | Path,
+) -> Path | None:
+    """Return one indexed media file by id when it belongs to the video and exists."""
+    media = await db.get(MediaFile, media_file_id)
+    if media is None or media.video_id != video_id:
+        return None
+    root = Path(download_dir).resolve()
+    candidate = _safe_archive_path(root=root, relative_path=media.relative_path)
+    if candidate is not None and candidate.exists() and candidate.is_file():
+        return candidate
+    return None
+
+
 def _video_query(*, channel_id: int | None, query: str | None) -> Select[tuple[Video, Channel]]:
     statement = select(Video, Channel).join(Channel, Video.channel_id == Channel.id)
     if channel_id is not None:
@@ -127,14 +145,18 @@ async def _library_item(*, db: AsyncSession, video: Video, channel: Channel, roo
         .limit(1)
     )
     media_paths = [media.relative_path for media in media_files]
-    media_bytes = sum(media.size_bytes or 0 for media in media_files)
-    primary_media = media_files[0] if media_files else None
-    archived = bool(media_files)
-    thumbnail_available = bool(video.thumbnail_url) or any(media.thumbnail_path for media in media_files)
+    existing_media_files = [media for media in media_files if _media_file_exists(media=media, root=root)]
+    media_bytes = sum(media.size_bytes or 0 for media in existing_media_files)
+    primary_media = existing_media_files[0] if existing_media_files else (media_files[0] if media_files else None)
+    archived = bool(existing_media_files)
+    thumbnail_available = bool(video.thumbnail_url) or any(
+        _relative_file_available(root=root, relative_path=media.thumbnail_path) for media in media_files
+    )
     subtitle_available = any(_has_subtitle_hint(media, root=root) for media in media_files)
-    nfo_available = any(media.nfo_path for media in media_files)
+    nfo_available = any(_relative_file_available(root=root, relative_path=media.nfo_path) for media in media_files)
     fidelity = LibraryFidelity(
-        info_json=bool(video.info_json_path) or any(media.info_json_path for media in media_files),
+        info_json=_relative_file_available(root=root, relative_path=video.info_json_path)
+        or any(_relative_file_available(root=root, relative_path=media.info_json_path) for media in media_files),
         media=archived,
         thumbnail=thumbnail_available,
         subtitles=subtitle_available,
@@ -239,6 +261,32 @@ def _has_subtitle_hint(media: MediaFile, root: Path | None = None) -> bool:
     )
 
 
+def media_path_on_disk(*, root: Path | None, relative_path: str | None) -> bool:
+    """Return True when a media relative path resolves to a real file under root.
+
+    With no archive root configured (``root is None``) we trust the index and
+    treat any recorded relative path as present, mirroring the Library fallback.
+    This is the single disk-truth check shared by the Library, Dashboard,
+    Channel detail, and Coverage surfaces so their archived counts agree.
+    """
+    if root is None:
+        return bool(relative_path)
+    if not relative_path:
+        return False
+    path = _safe_archive_path(root=root, relative_path=relative_path)
+    return bool(path and path.exists() and path.is_file())
+
+
+def _media_file_exists(*, media: MediaFile, root: Path | None) -> bool:
+    return media_path_on_disk(root=root, relative_path=media.relative_path)
+
+
+def _relative_file_available(*, root: Path | None, relative_path: str | None) -> bool:
+    if root is None:
+        return bool(relative_path)
+    return _relative_file_exists(root=root, relative_path=relative_path)
+
+
 def _to_library_file(*, media: MediaFile, root: Path) -> LibraryFile:
     path = _safe_archive_path(root=root, relative_path=media.relative_path)
     exists = bool(path and path.exists() and path.is_file())
@@ -246,6 +294,7 @@ def _to_library_file(*, media: MediaFile, root: Path) -> LibraryFile:
     expected_sidecars = [item for item in sidecars if item.kind != "subtitle"]
     missing_expected = [item for item in expected_sidecars if not item.exists]
     return LibraryFile(
+        id=media.id,
         video_id=media.video_id,
         relative_path=media.relative_path,
         filename=media.filename,
@@ -267,7 +316,7 @@ def _to_library_file(*, media: MediaFile, root: Path) -> LibraryFile:
         thumbnail_exists=_relative_file_exists(root=root, relative_path=media.thumbnail_path),
         nfo_exists=_relative_file_exists(root=root, relative_path=media.nfo_path),
         sidecars=sidecars,
-        stream_url=f"/api/library/{media.video_id}/stream",
+        stream_url=f"/api/library/{media.video_id}/files/{media.id}/stream",
     )
 
 

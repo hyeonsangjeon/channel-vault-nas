@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +15,10 @@ from app.schemas.archive import (
     ArchiveTxtPreviewResult,
     ArchiveTxtStageResult,
 )
+from app.services.archive_coverage import archived_video_ids_on_disk, resolve_archive_root
 from app.services.archive_metrics import build_channel_coverage_from_db
 from app.services.event_bus import event_bus
+from app.services.library_index import media_path_on_disk
 
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 WATCH_RE = re.compile(r"(?:v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})")
@@ -29,8 +32,17 @@ async def preview_archive_txt(
     *,
     content: str,
     channel_id: int | None = None,
+    download_dir: str | Path | None = None,
 ) -> ArchiveTxtPreviewResult:
-    """Parse archive.txt lines and compare them with local DB/media coverage."""
+    """Parse archive.txt lines and compare them with local DB/media coverage.
+
+    Classification is disk-aware: with a configured ``download_dir`` a video is
+    only ``archived`` when an indexed media file actually exists on disk under
+    the archive root. A stale ``MediaFile`` DB row whose file is gone is reported
+    as ``known_missing`` (and therefore stageable), matching Library/Coverage.
+    With no archive root configured the index is trusted, preserving prior
+    behavior.
+    """
     raw_lines = content.splitlines()
     parsed_ids: list[str] = []
     parsed_by_line: list[tuple[int, str, str | None]] = []
@@ -40,7 +52,8 @@ async def preview_archive_txt(
         if video_id:
             parsed_ids.append(video_id)
 
-    video_map = await _video_state_map(db, parsed_ids, channel_id=channel_id)
+    root = resolve_archive_root(download_dir)
+    video_map = await _video_state_map(db, parsed_ids, channel_id=channel_id, root=root)
     seen: set[str] = set()
     items: list[ArchiveTxtPreviewItem] = []
     counts = {
@@ -93,7 +106,7 @@ async def preview_archive_txt(
                 )
             )
             continue
-        status = "archived" if state["media_count"] > 0 else "known_missing"
+        status = "archived" if state["archived"] else "known_missing"
         counts[status] += 1
         items.append(
             ArchiveTxtPreviewItem(
@@ -103,7 +116,9 @@ async def preview_archive_txt(
                 state=status,
                 title=state["title"],
                 channel_title=state["channel_title"],
-                reason="media file already indexed" if status == "archived" else "metadata exists, but no media file is indexed",
+                reason="media file exists on disk under the archive root"
+                if status == "archived"
+                else "metadata exists, but no media file is present on disk",
             )
         )
 
@@ -127,13 +142,20 @@ async def stage_archive_txt(
     quality: str,
     limit: int = 50,
     create_candidates: bool = True,
+    download_dir: str | Path | None = None,
 ) -> ArchiveTxtStageResult | None:
-    """Create placeholder videos and candidate rows from archive.txt preview rows."""
+    """Create placeholder videos and candidate rows from archive.txt preview rows.
+
+    Staging is disk-aware: stale ``MediaFile`` rows whose files are gone count as
+    ``known_missing`` and are staged as candidates, and the refreshed channel
+    counts trust files on disk so coverage agrees with Library/Coverage.
+    """
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
 
-    initial_preview = await preview_archive_txt(db, content=content, channel_id=channel_id)
+    root = resolve_archive_root(download_dir)
+    initial_preview = await preview_archive_txt(db, content=content, channel_id=channel_id, download_dir=download_dir)
     unknown_ids = _unique_actionable_ids(initial_preview, state="unknown")[:limit]
     known_missing_ids = _unique_actionable_ids(initial_preview, state="known_missing")
     now = datetime.now(UTC)
@@ -178,9 +200,10 @@ async def stage_archive_txt(
             external_ids=candidate_ids[:limit],
             quality=quality,
             now=now,
+            root=root,
         )
 
-    await _refresh_channel_counts(db, channel)
+    await _refresh_channel_counts(db, channel, download_dir=download_dir)
     if created_videos or jobs:
         await event_bus.publish(
             "archive_txt.staged",
@@ -203,7 +226,7 @@ async def stage_archive_txt(
             },
         )
 
-    updated_preview = await preview_archive_txt(db, content=content, channel_id=channel_id)
+    updated_preview = await preview_archive_txt(db, content=content, channel_id=channel_id, download_dir=download_dir)
     skipped_count = initial_preview.archived_count + initial_preview.duplicate_count + initial_preview.invalid_count
     warnings: list[str] = []
     if not unknown_ids and not known_missing_ids:
@@ -227,11 +250,12 @@ async def _video_state_map(
     video_ids: list[str],
     *,
     channel_id: int | None,
+    root: Path | None,
 ) -> dict[str, dict[str, object]]:
     if not video_ids:
         return {}
     statement = (
-        select(Video, Channel, MediaFile.id)
+        select(Video.external_id, Video.title, Channel.title, MediaFile.relative_path)
         .join(Channel, Video.channel_id == Channel.id)
         .outerjoin(MediaFile, MediaFile.video_id == Video.id)
         .where(Video.external_id.in_(set(video_ids)))
@@ -240,17 +264,17 @@ async def _video_state_map(
         statement = statement.where(Video.channel_id == channel_id)
     rows = await db.execute(statement)
     result: dict[str, dict[str, object]] = {}
-    for video, channel, media_file_id in rows.all():
+    for external_id, video_title, channel_title, relative_path in rows.all():
         entry = result.setdefault(
-            video.external_id,
+            external_id,
             {
-                "title": video.title,
-                "channel_title": channel.title,
-                "media_count": 0,
+                "title": video_title,
+                "channel_title": channel_title,
+                "archived": False,
             },
         )
-        if media_file_id is not None:
-            entry["media_count"] = int(entry["media_count"]) + 1
+        if not entry["archived"] and media_path_on_disk(root=root, relative_path=relative_path):
+            entry["archived"] = True
     return result
 
 
@@ -288,8 +312,9 @@ async def _create_candidates_for_external_ids(
     external_ids: list[str],
     quality: str,
     now: datetime,
+    root: Path | None,
 ) -> list[DownloadJob]:
-    media_exists = select(MediaFile.id).where(MediaFile.video_id == Video.id).exists()
+    archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel_id)
     job_exists = (
         select(DownloadJob.id)
         .where(
@@ -303,13 +328,14 @@ async def _create_candidates_for_external_ids(
             select(Video)
             .where(Video.channel_id == channel_id)
             .where(Video.external_id.in_(set(external_ids)))
-            .where(~media_exists)
             .where(~job_exists)
             .order_by(Video.discovered_at.desc())
         )
     ).scalars()
     jobs: list[DownloadJob] = []
     for video in rows:
+        if video.id in archived_ids:
+            continue
         job = DownloadJob(
             video_id=video.id,
             status="candidate",
@@ -328,8 +354,13 @@ async def _create_candidates_for_external_ids(
     return jobs
 
 
-async def _refresh_channel_counts(db: AsyncSession, channel: Channel) -> None:
-    coverage = await build_channel_coverage_from_db(db, channel.id)
+async def _refresh_channel_counts(
+    db: AsyncSession,
+    channel: Channel,
+    *,
+    download_dir: str | Path | None = None,
+) -> None:
+    coverage = await build_channel_coverage_from_db(db, channel.id, download_dir=download_dir)
     if coverage is None:
         return
     channel.source_video_count = coverage.source
