@@ -1,11 +1,13 @@
 """Tests for youtube-dl archive.txt preview imports."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
+from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.main import app
 from app.models.archive import (
@@ -29,9 +31,13 @@ from app.services.channel_registration import apply_probe_to_channel
 
 
 @pytest.mark.asyncio
-async def test_archive_txt_preview_splits_archived_missing_unknown_duplicate_and_invalid() -> None:
+async def test_archive_txt_preview_splits_archived_missing_unknown_duplicate_and_invalid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     run_migrations()
     await init_db()
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path))
     async with AsyncSessionLocal() as session:
         await session.execute(delete(DownloadJob))
         await session.execute(delete(DownloadWorkerRun))
@@ -105,10 +111,14 @@ async def test_archive_txt_preview_splits_archived_missing_unknown_duplicate_and
         )
         session.add_all([archived, missing])
         await session.flush()
+        archived_media_relative = "channels/archive/video.mp4"
+        archived_media_path = tmp_path / archived_media_relative
+        archived_media_path.parent.mkdir(parents=True, exist_ok=True)
+        archived_media_path.write_bytes(b"archived-on-disk")
         session.add(
             MediaFile(
                 video_id=archived.id,
-                relative_path="channels/archive/video.mp4",
+                relative_path=archived_media_relative,
                 filename="video.mp4",
                 size_bytes=100,
                 container="mp4",

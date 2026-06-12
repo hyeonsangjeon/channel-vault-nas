@@ -8496,6 +8496,12 @@ button {
   background: rgba(250, 204, 21, 0.06);
 }
 
+.library-fidelity .stale-index-chip {
+  border-color: rgba(251, 146, 60, 0.22);
+  color: #fed7aa;
+  background: rgba(251, 146, 60, 0.08);
+}
+
 .library-fidelity .integrity-chip.complete {
   border-color: rgba(52, 211, 153, 0.2);
   color: #bbf7d0;
