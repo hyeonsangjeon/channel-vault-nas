@@ -87,13 +87,15 @@ Focus: NAS deployment confidence.
   [`scripts/deployment-smoke.sh`](../scripts/deployment-smoke.sh) checks the
   exposed web endpoint, proxied API, protected access, WebSocket upgrade, and
   optional forbidden raw API URLs.
+- [x] Basic in-app library media preview with HTTP `Range` stream support for
+  browser seeking.
 
 ## Later
 
 - Google Takeout importer.
 - Full text subtitle search.
 - Optional source API integrations.
-- Streaming preview surfaces.
+- Advanced streaming preview surfaces, thumbnails, and optional transcode paths.
 - Advanced visual insights: storage treemap, sync timeline, policy simulator,
   and channel health matrix.
 - Multi-user/session auth hardening if the deployment model needs it.

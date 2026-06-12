@@ -8612,6 +8612,56 @@ button {
   font-size: 0.82rem;
 }
 
+.library-preview-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 8px;
+  margin-top: 14px;
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.11), rgba(52, 211, 153, 0.05)),
+    #05070b;
+}
+
+.library-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.library-preview-head div {
+  min-width: 0;
+}
+
+.library-preview-head span,
+.library-preview-head em {
+  color: var(--faint);
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.library-preview-head strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-preview-panel video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  object-fit: contain;
+}
+
 .library-detail-list {
   display: grid;
   gap: 10px;

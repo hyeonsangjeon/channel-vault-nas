@@ -1122,6 +1122,10 @@ function App() {
     () => downloadJobs.filter((job) => archiveTxtSummaryJobIds.has(job.id)),
     [archiveTxtSummaryJobIds, downloadJobs],
   );
+  const selectedLibraryPreviewFile = useMemo(
+    () => selectedLibraryFiles.find((file) => file.exists) ?? null,
+    [selectedLibraryFiles],
+  );
   const latestWorkerRun = workerRuns[0] ?? null;
   const latestWorkerAuditJobIds = useMemo(
     () => {
@@ -11457,8 +11461,8 @@ function App() {
                 <ExternalLink size={14} />
                 {t("library.detail.source")}
               </a>
-              {selectedLibraryFiles.find((file) => file.exists) ? (
-                <a href={apiUrl(selectedLibraryFiles.find((file) => file.exists)?.stream_url ?? "")} rel="noreferrer" target="_blank">
+              {selectedLibraryPreviewFile ? (
+                <a href={apiUrl(selectedLibraryPreviewFile.stream_url)} rel="noreferrer" target="_blank">
                   <Film size={14} />
                   {t("library.detail.stream")}
                 </a>
@@ -11483,6 +11487,21 @@ function App() {
                 <strong>{libraryStateLabel(selectedLibraryItem, t)}</strong>
               </article>
             </div>
+
+            {selectedLibraryPreviewFile ? (
+              <section aria-label={t("library.detail.preview")} className="library-preview-panel">
+                <div className="library-preview-head">
+                  <div>
+                    <span>{t("library.detail.previewSubtitle")}</span>
+                    <strong>{selectedLibraryPreviewFile.filename}</strong>
+                  </div>
+                  <em>{selectedLibraryPreviewFile.size_label}</em>
+                </div>
+                <video controls playsInline preload="metadata" src={apiUrl(selectedLibraryPreviewFile.stream_url)}>
+                  {t("library.detail.previewUnsupported")}
+                </video>
+              </section>
+            ) : null}
 
             <div className="library-detail-list">
               {libraryDetailStatus === "loading" ? <p className="empty-copy">{t("library.detail.loading")}</p> : null}
