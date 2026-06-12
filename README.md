@@ -17,6 +17,7 @@
   <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api"><img alt="Docker API pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-api?logo=docker&label=api%20pulls"></a>
   <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-web"><img alt="Docker Web pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-web?logo=docker&label=web%20pulls"></a>
   <a href="https://hyeonsangjeon.github.io/channel-vault-nas/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-0ea5e9"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-f59e0b"></a>
   <img alt="Guarded by default" src="https://img.shields.io/badge/downloads-guarded%20by%20default-22c55e">
 </p>
 
@@ -521,7 +522,7 @@ channel detail view shows a demo banner and a clear action that removes only the
 Prerequisites:
 
 - Python 3.11+
-- Node.js 20+
+- Node.js 20+ for local development; CI currently verifies with Node.js 24
 - `yt-dlp`
 - `ffmpeg` / `ffprobe`
 
@@ -747,6 +748,7 @@ static documentation site from [`docs/index.html`](docs/index.html).
 - [Public Alpha Roadmap](docs/roadmap.md)
 - [Changelog](CHANGELOG.md)
 - [Public Alpha Demo Runbook](docs/public-alpha-demo.md)
+- [Docker Hub Description Source](docs/dockerhub-description.md)
 - [NAS Install Guide (Synology/QNAP)](docs/nas-install.md)
 - [Deployment Security](docs/deployment-security.md)
 - [Backup &amp; Restore](docs/backup-restore.md)
@@ -756,6 +758,7 @@ static documentation site from [`docs/index.html`](docs/index.html).
 - [Use Boundaries](docs/use-boundaries.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
+- [License](LICENSE)
 
 ## Public Release Checklist
 

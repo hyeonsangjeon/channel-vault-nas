@@ -18,6 +18,7 @@ permissions:
 env:
   GHCR_REGISTRY: ghcr.io
   DOCKERHUB_NAMESPACE: modenaf360
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   images:
