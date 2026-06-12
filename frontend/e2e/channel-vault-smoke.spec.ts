@@ -36,6 +36,10 @@ async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   const opsBoard = page.getByLabel("오늘의 아카이브 미션");
   await expect(opsBoard).toContainText("준비도");
   await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
+  const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
+  await expect(releaseReadiness).toContainText("백업/복구");
+  await expect(releaseReadiness).toContainText("Beta 런치 브리핑");
+  await expect(releaseReadiness).toContainText("다음 unblock");
   const mountDoctor = page.getByLabel("NAS 볼륨 마운트 진단");
   await expect(mountDoctor).toContainText("NAS 마운트 Doctor");
   await expect(mountDoctor).toContainText("DB");
@@ -61,7 +65,32 @@ test("command palette opens operational surfaces and live status is visible", as
   const supportBundleResponse = await supportBundleResponsePromise;
   const supportBundle = await supportBundleResponse.json();
   expect(supportBundle.redaction.safe_for_public_issue).toBe(true);
-  await expect(page.getByText("서버 redacted")).toBeVisible();
+  await expect(page.locator(".support-bundle-source").filter({ hasText: "서버 redacted" })).toBeVisible();
+  const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
+  const betaProof = page.getByLabel("Beta onboarding proof export");
+  await expect(betaProof).toContainText("이 설치가 public-safe인지 증거로 내보내기");
+  await expect(betaProof.getByRole("button", { name: "proof 다운로드" })).toBeVisible();
+  await betaProof.getByRole("button", { name: "proof 복사" }).click();
+  await expect(betaProof.getByRole("button", { name: "proof 복사됨" })).toBeVisible();
+  const betaProofText = await page.evaluate(() => navigator.clipboard.readText());
+  const betaProofPayload = JSON.parse(betaProofText);
+  expect(betaProofPayload.kind).toBe("channel_vault_beta_onboarding_proof");
+  expect(betaProofPayload.privacy.redacted_for_public_issue).toBe(true);
+  expect(betaProofText).not.toContain("Signal Lab");
+  expect(betaProofText).not.toContain("https://");
+  expect(betaProofText).not.toContain("/tmp/");
+  await releaseReadiness.getByRole("button", { name: "브리핑 복사" }).click();
+  await expect(releaseReadiness.getByRole("button", { name: "브리핑 복사됨" })).toBeVisible();
+  await releaseReadiness.getByRole("button", { name: "복구 가이드" }).click();
+  const runtimeGuideFromReadiness = page.getByLabel("런타임 env 매니페스트");
+  await expect(runtimeGuideFromReadiness).toBeVisible();
+  const runtimeRailFromReadiness = runtimeGuideFromReadiness.getByLabel("런타임 가이드 섹션");
+  await expect(runtimeRailFromReadiness).toContainText("보안");
+  await expect(runtimeRailFromReadiness).toContainText("볼륨");
+  await expect(runtimeRailFromReadiness).toContainText("백업");
+  await runtimeRailFromReadiness.getByRole("button").filter({ hasText: "백업" }).click();
+  await expect(runtimeGuideFromReadiness.getByLabel("백업 및 복구 confidence")).toBeVisible();
+  await runtimeGuideFromReadiness.getByRole("button", { name: "닫기" }).click();
 
   await page.getByRole("button", { name: "Command Palette 열기" }).click();
   const palette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
@@ -73,7 +102,12 @@ test("command palette opens operational surfaces and live status is visible", as
 
   const runtimeGuide = page.getByLabel("런타임 env 매니페스트");
   await expect(runtimeGuide).toBeVisible();
+  const runtimeRail = runtimeGuide.getByLabel("런타임 가이드 섹션");
+  await expect(runtimeRail).toContainText("재시작");
+  await expect(runtimeRail).toContainText("Scheduler");
+  await runtimeRail.getByRole("button").filter({ hasText: "볼륨" }).click();
   await expect(runtimeGuide).toContainText("Compose smoke 검증");
+  await expect(runtimeGuide.getByLabel("NAS 볼륨 마운트 cookbook")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("command-palette-runtime-guide.png"), fullPage: true });
   await runtimeGuide.getByRole("button", { name: "닫기" }).click();
 
@@ -356,6 +390,15 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(volumeEnvCopyButton).toBeVisible();
   await volumeEnvCopyButton.click();
   await expect(volumeEnvCopyButton).toContainText("복사됨");
+  const backupRestore = runtimeGuide.getByLabel("백업 및 복구 confidence");
+  await expect(backupRestore).toBeVisible();
+  await expect(backupRestore).toContainText("Metadata DB");
+  await expect(backupRestore).toContainText("Archive + sidecars");
+  await expect(backupRestore).toContainText("Runtime overrides");
+  const backupCopyButton = backupRestore.getByRole("button", { name: "백업 명령 복사" });
+  await expect(backupCopyButton).toBeVisible();
+  await backupCopyButton.click();
+  await expect(backupCopyButton).toContainText("복사됨");
   const restartPresetCopyButton = runtimeGuide.getByRole("button", { name: "env 복사 Docker Compose" });
   await expect(restartPresetCopyButton).toBeVisible();
   await restartPresetCopyButton.click();
