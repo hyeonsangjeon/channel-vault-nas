@@ -25,6 +25,8 @@
 
 ## System Shape
 
+![Channel Vault NAS architecture overview](assets/architecture-overview.svg)
+
 ```text
 React + Vite UI
   |
