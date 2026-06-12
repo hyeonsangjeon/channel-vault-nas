@@ -375,6 +375,12 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(exposureCookbook).toContainText("Nginx");
   await expect(exposureCookbook).toContainText("Caddy");
   await expect(exposureCookbook).toContainText("Cloudflare Tunnel");
+  await expect(exposureCookbook).toContainText("Live 배포 smoke");
+  await expect(exposureCookbook).toContainText("scripts/deployment-smoke.sh");
+  const deploymentSmokeCopyButton = exposureCookbook.getByRole("button", { name: "배포 smoke 복사" });
+  await expect(deploymentSmokeCopyButton).toBeVisible();
+  await deploymentSmokeCopyButton.click();
+  await expect(deploymentSmokeCopyButton).toContainText("복사됨");
   const nginxProxyCopyButton = exposureCookbook.getByRole("button", { name: "프록시 복사 Nginx" });
   await expect(nginxProxyCopyButton).toBeVisible();
   await nginxProxyCopyButton.click();
