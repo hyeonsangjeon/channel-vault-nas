@@ -112,7 +112,6 @@ Not ready yet:
 - Multi-user auth/session hardening for exposed networks
 - Published demo video/GIF assets
 - Anonymous GHCR pull verification on the first public package visibility pass
-- Production install guide for Synology/QNAP/systemd packages
 
 The current release direction and public-alpha gate are tracked in
 [`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md).
@@ -734,8 +733,8 @@ scripts/capture-public-demo.sh
 For guided, screen-by-screen operator walkthroughs, open the
 [`KO manual`](docs/user-manual.html) or
 [`EN manual`](docs/user-manual.en.html).
-When GitHub Pages is enabled from `main` / `docs`, the same manuals render as a
-static documentation site from [`docs/index.html`](docs/index.html).
+GitHub Pages deploys the same manuals from [`docs/index.html`](docs/index.html)
+through the `Docs Pages` workflow.
 
 ## Documentation
 

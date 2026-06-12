@@ -21,6 +21,8 @@ The public alpha is ready when these are true:
 
 - Docker Compose starts cleanly from a fresh clone on macOS and Linux.
 - `scripts/public-alpha-check.sh` passes.
+- GitHub Actions CI and the `Docs Pages` workflow pass without Node runtime
+  deprecation warnings.
 - README screenshots are generated from the Playwright fixture and match the
   current UI.
 - The safe first-run demo can be loaded and cleared from an empty workspace.
@@ -74,6 +76,8 @@ Focus: NAS deployment confidence.
   multi-arch `api`/`web` to Docker Hub and GHCR on `v*` tags
   (`0.1.0-alpha.1` published on Docker Hub and GHCR; Docker Hub pull-based
   Compose smoke verified, GHCR anonymous pull waits on package visibility).
+- [x] Node 24 launch workflows — CI, release-image publishing, and docs Pages
+  workflows use current GitHub/Docker action major versions.
 - [x] Synology/QNAP-oriented install notes — [`docs/nas-install.md`](nas-install.md).
 - [x] Systemd/supervisor package examples — [`deploy/`](../deploy/README.md).
 - [x] More restart adapter validation — `backend/tests/test_restart_adapter.py`
