@@ -48,6 +48,8 @@ The project is in active alpha. Dates use Korea Standard Time.
 - Live deployment smoke script for already-running LAN/NAS/reverse-proxy hosts,
   including protected API checks, WebSocket upgrade, and optional forbidden raw
   API exposure checks.
+- Deterministic public demo recording workflow via
+  `scripts/capture-public-demo.sh` and `frontend/e2e/public-demo-recording.spec.ts`.
 
 ### Changed
 

@@ -215,6 +215,10 @@ downfolder/
 runtime/
 frontend/playwright-report/
 frontend/test-results/
+docs/assets/demo/*.webm
+docs/assets/demo/*.mp4
+docs/assets/demo/*.gif
+!docs/assets/demo/README.md
 
 # Private agent planning / local working notes
 .codex/tasks/
