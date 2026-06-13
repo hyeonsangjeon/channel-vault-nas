@@ -2,6 +2,8 @@
 
 작성일: 2026-05-30
 
+English version: [product-brief.en.md](product-brief.en.md)
+
 ## One-Line Definition
 
 Channel Vault NAS는 개인 NAS에서 동작하는 채널 아카이브 매니저다. 사용자가

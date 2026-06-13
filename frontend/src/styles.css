@@ -568,6 +568,40 @@ button {
   background: rgba(56, 189, 248, 0.09);
 }
 
+.guide-button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 10px;
+  padding: 0 12px;
+  color: #fde68a;
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(14, 165, 233, 0.08)),
+    rgba(17, 22, 32, 0.78);
+  font-weight: 820;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.guide-button.new {
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.08), 0 12px 30px rgba(251, 191, 36, 0.08);
+}
+
+.guide-button.seen {
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #dbeafe;
+  background: rgba(17, 22, 32, 0.78);
+}
+
+.guide-button:hover {
+  border-color: rgba(251, 191, 36, 0.42);
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.16), rgba(20, 184, 166, 0.1)),
+    rgba(17, 22, 32, 0.9);
+}
+
 .command-button,
 .primary-action {
   min-height: 40px;
@@ -793,6 +827,203 @@ button {
   color: var(--faint);
   text-align: center;
   font-size: 0.78rem;
+}
+
+.operator-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 94;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(251, 191, 36, 0.16), transparent 28%),
+    radial-gradient(circle at 80% 78%, rgba(20, 184, 166, 0.14), transparent 30%),
+    rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(12px);
+}
+
+.operator-guide-card {
+  position: relative;
+  width: min(560px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--text);
+  background:
+    linear-gradient(150deg, rgba(15, 23, 42, 0.98), rgba(7, 11, 20, 0.98)),
+    rgba(8, 12, 21, 0.98);
+  box-shadow: 0 28px 100px rgba(0, 0, 0, 0.54);
+}
+
+.operator-guide-card::after {
+  content: "";
+  position: absolute;
+  right: 42px;
+  top: -13px;
+  width: 24px;
+  height: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.98);
+  transform: rotate(45deg);
+}
+
+.operator-guide-head {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.operator-guide-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 10px;
+  color: #fde68a;
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.13), rgba(56, 189, 248, 0.08)),
+    rgba(2, 6, 12, 0.28);
+}
+
+.operator-guide-head h2 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 1.28rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.operator-guide-progress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.operator-guide-progress span {
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 860;
+}
+
+.operator-guide-progress i {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.operator-guide-progress b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #fbbf24, #38bdf8, #34d399);
+}
+
+.operator-guide-copy {
+  margin: 16px 0 0;
+  color: #dbeafe;
+  font-size: 0.92rem;
+  line-height: 1.58;
+}
+
+.operator-guide-outcome {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  border-radius: 8px;
+  padding: 10px;
+  color: #bbf7d0;
+  background: rgba(52, 211, 153, 0.07);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.operator-guide-map {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.operator-guide-map button {
+  min-width: 0;
+  height: 38px;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  place-content: center;
+  gap: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.72);
+  cursor: pointer;
+}
+
+.operator-guide-map button.active {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.operator-guide-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.operator-guide-actions > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.operator-guide-actions button {
+  min-height: 38px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text);
+  background: rgba(15, 23, 42, 0.76);
+  cursor: pointer;
+  font-weight: 820;
+}
+
+.operator-guide-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.operator-guide-skip {
+  color: #cbd5e1 !important;
+}
+
+.operator-guide-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: rgba(56, 189, 248, 0.34) !important;
+  color: #bae6fd !important;
+  background: rgba(56, 189, 248, 0.1) !important;
+}
+
+.operator-guide-next {
+  border-color: rgba(52, 211, 153, 0.34) !important;
+  color: #bbf7d0 !important;
+  background: rgba(52, 211, 153, 0.1) !important;
 }
 
 .metric-grid {
@@ -12116,6 +12347,11 @@ button {
     flex: 1 1 148px;
   }
 
+  .guide-button {
+    flex: 1 1 128px;
+    justify-content: center;
+  }
+
   .channel-switcher,
   .queue-console-state {
     grid-template-columns: auto minmax(0, 1fr);
@@ -12335,6 +12571,38 @@ button {
     grid-column: 2;
     width: fit-content;
     white-space: normal;
+  }
+
+  .operator-guide-backdrop {
+    place-items: end stretch;
+    padding: 12px;
+  }
+
+  .operator-guide-card {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+  }
+
+  .operator-guide-card::after {
+    display: none;
+  }
+
+  .operator-guide-map {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .operator-guide-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .operator-guide-actions > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .operator-guide-actions button {
+    width: 100%;
   }
 
   .runtime-restart-banner,

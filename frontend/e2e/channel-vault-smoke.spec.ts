@@ -78,6 +78,17 @@ test("command palette opens operational surfaces and live status is visible", as
   const livePill = page.getByLabel("실시간 이벤트 연결");
   await expect(livePill).toContainText("Live");
 
+  await page.getByRole("button", { name: "운영 가이드 열기" }).click();
+  const operatorGuide = page.getByLabel("Channel Vault NAS 운영 가이드");
+  await expect(operatorGuide).toBeVisible();
+  await expect(operatorGuide).toContainText("Cockpit에서 시작");
+  await operatorGuide.getByRole("button", { name: "다음" }).click();
+  await expect(operatorGuide).toContainText("소스를 안전하게 등록");
+  await operatorGuide.getByRole("button", { name: "소스 등록 열기" }).click();
+  await expect(page.getByLabel("채널 URL 또는 ID")).toBeVisible();
+  await operatorGuide.getByRole("button", { name: "가이드 건너뛰기" }).click();
+  await page.getByRole("button", { name: "대시보드", exact: true }).click();
+
   await expect(page.getByText("공개 이슈용 안전 진단")).toBeVisible();
   const supportBundleResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/ops/support-bundle") && response.status() === 200,
