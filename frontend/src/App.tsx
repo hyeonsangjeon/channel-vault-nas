@@ -262,6 +262,16 @@ type RuntimeGuideRailItem = {
   selector: string;
   tone: NavStatusTone;
 };
+type OperatorGuideStep = {
+  id: string;
+  icon: typeof Link2;
+  nav: NavId;
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  outcomeKey: TranslationKey;
+  actionKey: TranslationKey;
+  action: () => void;
+};
 type VolumeMountPreset = {
   id: string;
   labelKey: TranslationKey;
@@ -315,6 +325,7 @@ type SavedLibraryView = {
 };
 const savedLibraryViewsStorageKey = "channel-vault-library-views";
 const archiveTxtDraftStorageKey = "channel-vault-archive-txt-draft";
+const operatorGuideSeenStorageKey = "channel-vault-operator-guide-seen";
 const archiveTxtDefaultDraft = "youtube 6lXl1hkEgcA\nhttps://youtu.be/M0IXseVAxw8\nyoutube 6lXl1hkEgcA";
 const archiveTxtPlaceholderPrefix = "archive.txt import ";
 const retentionPresetValues = [100, 200, 500, 1000];
@@ -512,6 +523,9 @@ function App() {
   const [topbarRefreshStatus, setTopbarRefreshStatus] = useState<"idle" | "refreshing" | "done" | "error">("idle");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [operatorGuideOpen, setOperatorGuideOpen] = useState(false);
+  const [operatorGuideStepIndex, setOperatorGuideStepIndex] = useState(0);
+  const [operatorGuideSeen, setOperatorGuideSeen] = useState(() => loadOperatorGuideSeen());
   const [eventStreamStatus, setEventStreamStatus] = useState<EventStreamStatus>("connecting");
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettings | null>(null);
   const [storageScan, setStorageScan] = useState<StorageScan | null>(null);
@@ -4517,6 +4531,41 @@ function App() {
     setCommandPaletteQuery("");
   }
 
+  function markOperatorGuideSeen() {
+    setOperatorGuideSeen(true);
+    try {
+      localStorage.setItem(operatorGuideSeenStorageKey, "true");
+    } catch {
+      // Ignore storage failures; the guide still works for this session.
+    }
+  }
+
+  function openOperatorGuide(startIndex = 0) {
+    setCommandPaletteOpen(false);
+    setOperatorGuideStepIndex(startIndex);
+    setOperatorGuideOpen(true);
+  }
+
+  function closeOperatorGuide() {
+    markOperatorGuideSeen();
+    setOperatorGuideOpen(false);
+  }
+
+  function handleOperatorGuideStep(delta: number) {
+    const nextIndex = operatorGuideStepIndex + delta;
+    if (nextIndex >= operatorGuideSteps.length) {
+      closeOperatorGuide();
+      return;
+    }
+    setOperatorGuideStepIndex(Math.max(0, nextIndex));
+  }
+
+  function handleOperatorGuideJump(step: OperatorGuideStep) {
+    step.action();
+    setWorkflowStatus("idle");
+    setWorkflowMessage(t("operatorGuide.jump").replace("{target}", t(step.titleKey)));
+  }
+
   function runCommandPaletteItem(item: CommandPaletteItem) {
     if (item.disabled) return;
     closeCommandPalette();
@@ -4860,7 +4909,89 @@ function App() {
     window.setTimeout(() => scrollToAppSection(".queue-console-panel"), 0);
   }
 
+  const operatorGuideSteps: OperatorGuideStep[] = [
+    {
+      id: "cockpit",
+      icon: Gauge,
+      nav: "dashboard",
+      titleKey: "operatorGuide.step.cockpit.title",
+      detailKey: "operatorGuide.step.cockpit.detail",
+      outcomeKey: "operatorGuide.step.cockpit.outcome",
+      actionKey: "operatorGuide.step.cockpit.action",
+      action: () => handleSelectNav("dashboard"),
+    },
+    {
+      id: "source",
+      icon: Link2,
+      nav: "channels",
+      titleKey: "operatorGuide.step.source.title",
+      detailKey: "operatorGuide.step.source.detail",
+      outcomeKey: "operatorGuide.step.source.outcome",
+      actionKey: "operatorGuide.step.source.action",
+      action: () => openChannelWorkspace("overview", ".registration-panel"),
+    },
+    {
+      id: "downloads",
+      icon: Download,
+      nav: "channels",
+      titleKey: "operatorGuide.step.downloads.title",
+      detailKey: "operatorGuide.step.downloads.detail",
+      outcomeKey: "operatorGuide.step.downloads.outcome",
+      actionKey: "operatorGuide.step.downloads.action",
+      action: () => openChannelWorkspace("downloads", ".launch-control-panel"),
+    },
+    {
+      id: "queue",
+      icon: Rocket,
+      nav: "queue",
+      titleKey: "operatorGuide.step.queue.title",
+      detailKey: "operatorGuide.step.queue.detail",
+      outcomeKey: "operatorGuide.step.queue.outcome",
+      actionKey: "operatorGuide.step.queue.action",
+      action: openQueueWorkspace,
+    },
+    {
+      id: "library",
+      icon: BookOpen,
+      nav: "library",
+      titleKey: "operatorGuide.step.library.title",
+      detailKey: "operatorGuide.step.library.detail",
+      outcomeKey: "operatorGuide.step.library.outcome",
+      actionKey: "operatorGuide.step.library.action",
+      action: () => handleSelectNav("library"),
+    },
+    {
+      id: "runtime",
+      icon: ShieldCheck,
+      nav: "settings",
+      titleKey: "operatorGuide.step.runtime.title",
+      detailKey: "operatorGuide.step.runtime.detail",
+      outcomeKey: "operatorGuide.step.runtime.outcome",
+      actionKey: "operatorGuide.step.runtime.action",
+      action: () => {
+        setActiveNavId("settings");
+        pushAppRoute({ nav: "settings", runtimeGuide: true });
+        window.setTimeout(() => {
+          scrollToAppSection(".runtime-console");
+          void handleOpenRuntimeGuide();
+        }, 0);
+      },
+    },
+  ];
+  const operatorGuideStep = operatorGuideSteps[Math.min(operatorGuideStepIndex, operatorGuideSteps.length - 1)];
+  const operatorGuideProgress = Math.round(((operatorGuideStepIndex + 1) / operatorGuideSteps.length) * 100);
+  const OperatorGuideIcon = operatorGuideStep?.icon ?? Sparkles;
+
   const commandPaletteItems: CommandPaletteItem[] = [
+    {
+      id: "operator-guide",
+      icon: Sparkles,
+      titleKey: "operatorGuide.command.title",
+      detailKey: "operatorGuide.command.detail",
+      groupKey: "commandPalette.group.navigation",
+      keywords: ["guide", "tour", "onboarding", "help", "가이드", "튜토리얼"],
+      run: () => openOperatorGuide(),
+    },
     {
       id: "dashboard",
       icon: Gauge,
@@ -5532,6 +5663,16 @@ function App() {
             >
               <Sparkles size={18} />
             </button>
+            <button
+              className={`guide-button ${operatorGuideSeen ? "seen" : "new"}`}
+              onClick={() => openOperatorGuide()}
+              title={t("operatorGuide.open")}
+              aria-label={t("operatorGuide.open")}
+              type="button"
+            >
+              <BookOpen size={16} />
+              <span>{t("operatorGuide.openShort")}</span>
+            </button>
             <button className="icon-button" onClick={handleTopbarSearch} title={t("actions.search")} aria-label={t("actions.search")} type="button">
               <Search size={18} />
             </button>
@@ -5630,6 +5771,96 @@ function App() {
                 {!commandPaletteResults.length ? (
                   <p className="command-palette-empty">{t("commandPalette.empty")}</p>
                 ) : null}
+              </div>
+            </aside>
+          </div>
+        ) : null}
+
+        {operatorGuideOpen && operatorGuideStep ? (
+          <div className="operator-guide-backdrop" onClick={closeOperatorGuide} role="presentation">
+            <aside
+              aria-label={t("operatorGuide.title")}
+              className={`operator-guide-card nav-${operatorGuideStep.nav}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="operator-guide-head">
+                <div className="operator-guide-mark">
+                  <OperatorGuideIcon size={20} />
+                </div>
+                <div>
+                  <p className="panel-kicker">{t("operatorGuide.kicker")}</p>
+                  <h2>{t(operatorGuideStep.titleKey)}</h2>
+                </div>
+                <button
+                  aria-label={t("actions.close")}
+                  className="icon-button"
+                  onClick={closeOperatorGuide}
+                  type="button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="operator-guide-progress" aria-label={t("operatorGuide.progress")}>
+                <span>
+                  {operatorGuideStepIndex + 1} / {operatorGuideSteps.length}
+                </span>
+                <i>
+                  <b style={{ width: `${operatorGuideProgress}%` }} />
+                </i>
+              </div>
+
+              <p className="operator-guide-copy">{t(operatorGuideStep.detailKey)}</p>
+              <div className="operator-guide-outcome">
+                <CheckCircle2 size={15} />
+                <span>{t(operatorGuideStep.outcomeKey)}</span>
+              </div>
+
+              <div className="operator-guide-map" aria-label={t("operatorGuide.map")}>
+                {operatorGuideSteps.map((step, index) => {
+                  const StepIcon = step.icon;
+                  const isActive = index === operatorGuideStepIndex;
+                  return (
+                    <button
+                      aria-current={isActive ? "step" : undefined}
+                      className={isActive ? "active" : ""}
+                      key={step.id}
+                      onClick={() => setOperatorGuideStepIndex(index)}
+                      title={t(step.titleKey)}
+                      type="button"
+                    >
+                      <StepIcon size={14} />
+                      <span>{index + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="operator-guide-actions">
+                <button className="operator-guide-skip" onClick={closeOperatorGuide} type="button">
+                  {t("operatorGuide.skip")}
+                </button>
+                <button
+                  className="operator-guide-jump"
+                  onClick={() => handleOperatorGuideJump(operatorGuideStep)}
+                  type="button"
+                >
+                  {t(operatorGuideStep.actionKey)}
+                  <ChevronRight size={14} />
+                </button>
+                <div>
+                  <button
+                    className="operator-guide-secondary"
+                    disabled={operatorGuideStepIndex === 0}
+                    onClick={() => handleOperatorGuideStep(-1)}
+                    type="button"
+                  >
+                    {t("operatorGuide.back")}
+                  </button>
+                  <button className="operator-guide-next" onClick={() => handleOperatorGuideStep(1)} type="button">
+                    {operatorGuideStepIndex === operatorGuideSteps.length - 1 ? t("operatorGuide.done") : t("operatorGuide.next")}
+                  </button>
+                </div>
               </div>
             </aside>
           </div>
@@ -11558,6 +11789,14 @@ function loadSavedLibraryViews(): SavedLibraryView[] {
       .slice(0, 10);
   } catch {
     return [];
+  }
+}
+
+function loadOperatorGuideSeen() {
+  try {
+    return localStorage.getItem(operatorGuideSeenStorageKey) === "true";
+  } catch {
+    return false;
   }
 }
 

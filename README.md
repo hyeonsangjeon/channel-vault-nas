@@ -730,18 +730,20 @@ Public demo recording:
 scripts/capture-public-demo.sh
 ```
 
-For guided, screen-by-screen operator walkthroughs, open the
-[`KO manual`](docs/user-manual.html) or
-[`EN manual`](docs/user-manual.en.html).
-GitHub Pages deploys the same manuals from [`docs/index.html`](docs/index.html)
+For guided, screen-by-screen operator walkthroughs, open the rendered
+[`KO manual`](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.html)
+or
+[`EN manual`](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.en.html).
+GitHub Pages deploys the documentation site from [`docs/index.html`](docs/index.html)
 through the `Docs Pages` workflow.
 
 ## Documentation
 
-- [Documentation Site Entry](docs/index.html)
-- [User Manual (KO)](docs/user-manual.html)
-- [User Manual (EN)](docs/user-manual.en.html)
-- [Product Brief](docs/product-brief.md)
+- [Documentation Site](https://hyeonsangjeon.github.io/channel-vault-nas/) ([source](docs/index.html))
+- [User Manual (KO)](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.html) ([source](docs/user-manual.html))
+- [User Manual (EN)](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.en.html) ([source](docs/user-manual.en.html))
+- [Product Brief (EN)](docs/product-brief.en.md)
+- [Product Brief (KO)](docs/product-brief.md)
 - [Architecture](docs/architecture.md)
 - [Design Direction](docs/design-direction.md)
 - [Public Alpha Roadmap](docs/roadmap.md)
