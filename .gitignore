@@ -220,6 +220,7 @@ docs/assets/demo/*.mp4
 docs/assets/demo/*.gif
 docs/public-launch-posts.md
 !docs/assets/demo/README.md
+!docs/assets/demo/channel-vault-public-alpha.gif
 
 # Private agent planning / local working notes
 .codex/tasks/

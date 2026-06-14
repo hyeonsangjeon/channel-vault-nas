@@ -11,3 +11,7 @@ scripts/capture-public-demo.sh
 The default output is `docs/assets/demo/channel-vault-public-alpha.webm`. Video,
 GIF, and MP4 files in this folder are ignored by default so release reviewers can
 inspect or convert them before deciding what to publish.
+
+The reviewed README tour GIF is the only checked-in animation:
+
+- `channel-vault-public-alpha.gif`
