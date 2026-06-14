@@ -8,6 +8,13 @@
       name="description"
       content="Screen-by-screen Channel Vault NAS operator manuals and public alpha documentation."
     />
+    <meta property="og:title" content="Channel Vault NAS Documentation" />
+    <meta
+      property="og:description"
+      content="Operator manuals for the NAS-first YouTube channel archive console."
+    />
+    <meta property="og:image" content="./assets/producthunt-thumbnail.png" />
+    <link rel="icon" href="./assets/producthunt-thumbnail.png" />
     <style>
       :root {
         color-scheme: dark;
@@ -46,6 +53,35 @@
         width: min(1100px, calc(100% - 36px));
         margin: 0 auto;
         padding: 76px 0 96px;
+      }
+
+      .brand-lockup {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-bottom: 30px;
+      }
+
+      .brand-lockup img {
+        width: 88px;
+        height: 88px;
+        border: 1px solid rgba(56, 189, 248, 0.34);
+        border-radius: 20px;
+        box-shadow: 0 18px 54px rgba(56, 189, 248, 0.2);
+      }
+
+      .brand-lockup strong {
+        display: block;
+        font-size: 22px;
+        line-height: 1.1;
+      }
+
+      .brand-lockup span {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 700;
       }
 
       .eyebrow {
@@ -160,6 +196,16 @@
           padding-top: 48px;
         }
 
+        .brand-lockup {
+          align-items: flex-start;
+        }
+
+        .brand-lockup img {
+          width: 68px;
+          height: 68px;
+          border-radius: 16px;
+        }
+
         .manuals,
         .links {
           grid-template-columns: 1fr;
@@ -169,6 +215,13 @@
   </head>
   <body>
     <main>
+      <div class="brand-lockup" aria-label="Channel Vault NAS">
+        <img src="./assets/producthunt-thumbnail.png" alt="Channel Vault NAS logo" />
+        <div>
+          <strong>Channel Vault NAS</strong>
+          <span>NAS-first YouTube channel archive console</span>
+        </div>
+      </div>
       <div class="eyebrow">Channel Vault NAS documentation</div>
       <h1>Operator manuals that render as real web pages.</h1>
       <p>

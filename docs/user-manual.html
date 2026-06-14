@@ -4,6 +4,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Channel Vault NAS 사용자 매뉴얼</title>
+    <meta
+      name="description"
+      content="Channel Vault NAS의 채널 등록, sync, 큐, 다운로드, 라이브러리, 로그, 정책, 런타임 설정 흐름을 화면별로 설명하는 사용자 매뉴얼."
+    />
+    <meta property="og:title" content="Channel Vault NAS 사용자 매뉴얼" />
+    <meta
+      property="og:description"
+      content="NAS에서 YouTube 채널 백업을 운영하는 화면 중심 매뉴얼."
+    />
+    <meta property="og:image" content="./assets/producthunt-thumbnail.png" />
+    <link rel="icon" href="./assets/producthunt-thumbnail.png" />
     <style>
       :root {
         color-scheme: dark;
@@ -70,15 +81,13 @@
       }
 
       .brand-mark {
-        display: grid;
-        place-items: center;
         width: 42px;
         height: 42px;
         border: 1px solid rgba(56, 189, 248, 0.42);
         border-radius: 12px;
         background: rgba(14, 21, 33, 0.82);
-        color: var(--blue);
-        font-weight: 800;
+        box-shadow: 0 12px 30px rgba(56, 189, 248, 0.18);
+        object-fit: cover;
       }
 
       .brand strong {
@@ -394,7 +403,7 @@
     <div class="shell">
       <aside>
         <div class="brand">
-          <div class="brand-mark">CV</div>
+          <img class="brand-mark" src="./assets/producthunt-thumbnail.png" alt="" />
           <div>
             <strong>Channel Vault NAS</strong>
             <span>사용자 매뉴얼</span>
