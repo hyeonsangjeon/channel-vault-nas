@@ -5,8 +5,8 @@
 <h1 align="center">Channel Vault NAS</h1>
 
 <p align="center">
-  <strong>NAS-first YouTube channel archive console.</strong><br>
-  Sync channel metadata, skip videos already on disk, queue only the missing ones, and keep a recoverable local library.
+  <strong>Back up and manage every video from your own YouTube channels on your NAS.</strong><br>
+  A guarded self-hosted console for yt-dlp metadata sync, archive.txt-style skips, download queues, and disk-aware library recovery.
 </p>
 
 <p align="center">
@@ -33,6 +33,16 @@ passes, and keep the local library searchable from the app.
 The target use case is creator-owned media, user-authorized channel backups,
 `archive.txt` ledgers, and existing NAS folders. You are responsible for
 ensuring you have the rights and permissions to archive any content.
+
+## 15-Second Product Tour
+
+This GIF is recorded from the real demo UI fixture, not from a static mockup.
+
+<p align="center">
+  <a href="docs/assets/demo/channel-vault-public-alpha.gif">
+    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS public alpha product tour showing dashboard, channel workflow, queue, library, insights, and settings" width="100%">
+  </a>
+</p>
 
 ## Start In 60 Seconds
 
@@ -114,8 +124,7 @@ This is an active alpha. The core loop is working locally:
 Not ready yet:
 
 - Multi-user auth/session hardening for exposed networks
-- Published demo video/GIF assets
-- Anonymous GHCR pull verification on the first public package visibility pass
+- Polished install videos for Synology/QNAP-style first-run paths
 
 The current release direction and public-alpha gate are tracked in
 [`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md).
