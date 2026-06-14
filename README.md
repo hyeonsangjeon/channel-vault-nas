@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive cockpit" width="100%">
+  <img src="docs/assets/producthunt-thumbnail.png" alt="Channel Vault NAS logo" width="112" height="112">
 </p>
 
 <h1 align="center">Channel Vault NAS</h1>
@@ -19,6 +19,10 @@
   <a href="https://hyeonsangjeon.github.io/channel-vault-nas/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-0ea5e9"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-f59e0b"></a>
   <img alt="Guarded by default" src="https://img.shields.io/badge/downloads-guarded%20by%20default-22c55e">
+</p>
+
+<p align="center">
+  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive cockpit" width="100%">
 </p>
 
 Channel Vault NAS turns the classic `archive.txt` idea into a real operator
