@@ -6,6 +6,96 @@
 
 ---
 
+# 🔁 2차 피드백 — 1차 수정 검증 + 남은 전환 누수
+
+> **검증 방법(동일하게 직접):** `origin/main` 최신 코드(`84e3972`/`963b30e`)로 백엔드+프론트 **재기동** → 데모 시드 → 6개 화면 + **빈 첫 실행** 직접 캡처. README는 **실제 GitHub 레포 페이지를 브라우저로 렌더링해 스샷으로** 눈으로 확인. PR 로그가 아니라 **코드(en.json / App.tsx / styles.css)와 GIF 커밋 이력까지 대조**.
+> **현재 별: 3 → `4` (+1).** 방향은 맞다. 아래는 awesome 등급으로 가는 "마지막 한 끗".
+
+## ✅ 1차 수정에서 잘 된 것 (전부 직접 검증 완료)
+
+| # | 1차 지적 | 수정 결과 | 검증 방법 |
+| --- | --- | --- | --- |
+| 1 | 커스텀 OG 이미지 없음 (P0-1) | ✅ `usesCustomOpenGraphImage: true`. `social-preview.png` 퀄리티 우수 | `gh repo view` + 이미지 직접 확인 |
+| 2 | README 상단 과중 (P0-2) | ✅ 실제 제품 GIF가 히어로로, 배지 9→4개, "Why It's Different" 상단, SVG는 "Visual Preview"로 강등 | GitHub 페이지 스샷 |
+| 3 | 사회적 증거 묻힘 (P0-3) | ✅ 히어로 바로 아래 `From the maker of youtube-dl-nas · 5 languages · Docker in 60 seconds · guarded downloads by default` | GitHub 페이지 스샷 |
+| 4 | Insights 반쪽 레이아웃 버그 (P1-4) | ✅ **해결됨.** 우측 빈 공간 사라지고 2열로 꽉 참 | 라이브 앱 스샷 직접 확인 |
+| 5 | "Register already regis…" 잘림 (P1-5) | ✅ 앱에선 `Registered`로 수정 | 라이브 Channels 화면 |
+| 6 | 첫 실행 데모 CTA 약함 (P1-6) | ✅ `Load safe demo` 주 버튼 승격, `Add real source` 보조로 강등 | 빈 첫 실행 스샷 |
+| 7 | Library 스샷 오류/경로 노출 (P1-8) | ✅ 올바른 글로벌 Library 화면으로 재생성, 경로 노출 없음 | 바이너리 추출 후 확인 |
+
+**→ 1차 P0 3개 + P1 핵심 모두 반영됨. 사진발(OG/README) 라인은 사실상 합격.**
+
+## 🔴 2차 P0 — 지금 당장 (별에 가장 직접적)
+
+### P0-A. 히어로 GIF가 "수정 전" 화면 — 고친 버그가 대문에 그대로 박제됨
+
+- **근거(코드/이력):** 히어로 `docs/assets/demo/channel-vault-public-alpha.gif`는 커밋 `9d2f00e (6/15)`. 트런케이션 수정 `963b30e (6/21)`보다 **6일 앞섬**, 1차 수정에서 **GIF는 재녹화 안 됨**.
+- **결과(스샷 확인):** 레포에서 눈이 **가장 먼저** 닿는 비주얼에 여전히 **"Register / already regis…" 잘림**이 보인다. 앱은 `Registered`로 고쳤는데 **대문 GIF만 옛날 그대로** → "고쳤다는 걸 방문자는 못 보고, 오히려 버그를 본다."
+- **액션:** 고친 UI로 **GIF 재녹화**(필수). 첫 프레임은 빽빽한 Channels 상세 대신 **더 깔끔하고 한눈에 읽히는 화면**으로. (선택) GIF 대신 30초 무음 mp4/webm이면 용량↓·화질↑.
+
+### P0-B. 빈 첫 실행 화면이 "정보 폭탄" — 별을 결정하는 화면이 가장 무겁다
+
+- **근거(직접 사용):** `docker compose up` 직후 **데이터 0**인 첫 화면에 패널이 **30개+** 쏟아진다 — Clean Install Gate(체크 5), Public Readiness(시그널 8, "still blocking beta"·"3 gaps left"), Beta Proof, NAS Mount Doctor, Source/Security/Sync/Queue/Library/Storage 카드, Mission Control… `Load safe demo`는 승격됐지만 **소음에 묻힌다.**
+- **왜 치명적:** 방문자가 앱을 처음 켜는 바로 그 화면. "멋지다"가 아니라 "복잡하다/아직 미완성이다"가 먼저 든다 → 탭 닫음.
+- **액션(점진적 노출):** 첫 실행엔 딱 3개만 — ①한 줄 가치제안 ②`Load safe demo`(주 CTA) ③`Add your channel`(보조). **Readiness/Beta/Proof/Mount Doctor/Mission Control 운영 점검 패널 전체는 "Operator checks" 토글(접힘 기본) 뒤로.** 데이터가 생기면 그때 펼친다.
+
+## 🟠 2차 P1
+
+### P1-C. "alpha / beta / still shaping / blocking" 문구가 "아직 미완성" 신호를 반복 송출
+
+- README 배지 `v0.1.0-alpha.1`, 인용구 "Guardrail: this alpha…", 인앱 "BETA LAUNCH · Still blocking beta", "5/8 still shaping", "2/5 READY", "setup".
+- 방문자 독해: **"아직 안 끝났네 → 나중에 별 누르지"**. 버전 정직성은 유지하되, **첫인상 표면(히어로/첫 실행)에서 blocking/shaping/gaps 불안 단어를 걷어내고** "오늘 바로 쓸 수 있다"는 톤으로.
+
+### P1-D. 우주 메타포 과부하 (1차 P1-5 미반영 — 이번엔 코드 라인까지 확인)
+
+간단한 개념("내 유튜브 채널을 내 NAS에 백업")에 항공우주 은유가 겹겹이 깔려 10초 안의 이해 비용을 올린다. 코드(`frontend/src/locales/en.json`) 확인:
+
+| 문자열 키 | 현재 값 | 제안 |
+| --- | --- | --- |
+| `brand.subtitle` (L3) | NAS **observatory** | NAS archive console |
+| `topbar.eyebrow` (L24) | Archive **Observatory** | Archive |
+| `dashboard.kicker` (L36) | NAS operating **cockpit** | Overview |
+| `dashboard.title` (L37) | Today's archive **command deck** | Today's archive status |
+| `registration.title` / `commit` (L690/698) | **Ignite** a channel into the vault / **Ignite** | Add a channel / Register |
+| `launch.*` (L788–790) | Archive **launch control** / Dry-run the **download wave** / **arm** the queue | Download planner / Preview the download batch / Stage the queue |
+| `ops.kicker` (L1358) | **Mission control** | Operations |
+| repo description | Self-hosted NAS **cockpit**… | Self-hosted NAS **console**… |
+
+> 은유를 **싹 지우라는 게 아니라**, 첫인상 표면(히어로 GIF·대시보드 제목·등록 버튼·repo 설명)만 **평범한 NAS 단어**로. 내부 디테일에선 톤 유지해도 무방.
+
+## 🟡 2차 P2 (별 직접 영향 작음, awesome 마감용)
+
+- **P2-E. Discussions OFF + 이슈 0개 + good first issue 미시드.** `good first issue`/`help wanted` 라벨은 있는데 **그 라벨이 붙은 이슈가 없다.** awesome 레포는 "살아있고 기여 환영" 신호가 중요 → Discussions 켜고 **good first issue 3~5개** 만들기.
+- **P2-F. 한국어 README 진입점 없음.** 5개국어 **UI**인데 README는 영어뿐. 유입에 Clien 등 **한국 커뮤니티 비중이 큰데** 상단 `README.ko.md` 링크 하나면 한국 오디언스 전환↑.
+- **P2-G. 모놀리스 그대로** (`App.tsx` 13,417줄 / `styles.css` 13,113줄). 별 직접 영향은 작지만, 코드 보러 온 사람의 **기여 장벽**. 최소한 화면 단위 분리 로드맵을 README/이슈로 노출.
+
+## 🎯 2차 우선순위 (impact × effort)
+
+| 액션 | Star 임팩트 | 노력 | 순서 |
+| --- | --- | --- | --- |
+| **P0-A** 히어로 GIF 재녹화(수정된 UI) | ★★★★★ | 낮음 | **1** |
+| **P0-B** 빈 첫 실행 점진적 노출(토글) | ★★★★★ | 중간 | **2** |
+| **P1-C** alpha/blocking 불안 문구 정리 | ★★★★ | 낮음 | **3** |
+| **P1-D** 첫인상 표면 메타포 → 평범한 NAS 단어 | ★★★ | 낮음 | **4** |
+| **P2-F** 한국어 README 링크 | ★★★ | 낮음 | 5 |
+| **P2-E** Discussions + good first issue | ★★ | 낮음 | 6 |
+
+## ⏱️ 2차 10초 체크리스트 (방문자 눈으로)
+
+- [ ] 히어로 GIF가 **현재 UI**와 일치하는가? (지금은 "already regis…" 잘림이 박제됨 ← **불일치**)
+- [ ] 처음 켰을 때 **버튼 3개 이내**로 "뭘 누르면 되는지" 보이는가? (지금은 패널 30+개)
+- [ ] 첫 화면에서 beta/blocking/shaping/gaps 같은 **불안 단어**가 안 보이는가?
+- [ ] repo 설명·대시보드 제목·등록 버튼이 **평범한 말**로 읽히는가? (cockpit/observatory/ignite/mission control ← 아직)
+- [ ] 한국어 사용자가 **모국어 진입점**을 찾는가? (없음)
+
+> **요약:** 사진발(OG/README 구조/Insights/Library)은 1차에서 거의 합격. 남은 별은 **① 대문 GIF를 현재 UI로 다시 찍고 ② 첫 실행 화면을 3버튼으로 다이어트**하면 대부분 풀린다. 그다음이 문구(alpha/메타포)·한국어 진입점.
+
+---
+
+> ⬇️ 아래는 **1차 피드백 원문**(맥락 보관용). 위 2차가 최신 상태다.
+
+---
+
 ## 0. 한 줄 결론 (TL;DR)
 
 **제품은 이미 "잘 만든" 수준이다. 문제는 품질이 아니라 "전환(conversion)"이다.**
