@@ -14,7 +14,7 @@ const outputPath = resolveOutputPath(process.env.CVN_PUBLIC_DEMO_OUTPUT ?? "docs
 test.skip(!captureEnabled, "Set CVN_CAPTURE_PUBLIC_DEMO=true to record the public demo video.");
 test.setTimeout(120_000);
 
-async function openEnglishVault(page: Page, path = "/") {
+async function openEnglishVault(page: Page, path = "/#/dashboard?channel=1") {
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "en");
   });
@@ -68,7 +68,7 @@ async function recordDemo(browser: Browser) {
   await go(page, "/#/queue?channel=1");
   await expect(page.getByLabel("Global queue control")).toContainText("Download operations");
 
-  await go(page, "/#/channels/library?channel=1");
+  await go(page, "/#/library?channel=1");
   await expect(page.getByText("Indexed media shelf")).toBeVisible();
   await hold(page, 1000);
 

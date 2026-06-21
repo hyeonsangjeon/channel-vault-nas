@@ -10,7 +10,7 @@ const screenshotDir = resolve(__dirname, "../../docs/assets/screenshots");
 test.skip(!captureEnabled, "Set CVN_CAPTURE_PUBLIC_SCREENSHOTS=true to refresh public README screenshots.");
 test.setTimeout(90_000);
 
-async function openEnglishVault(page: Page, path = "/") {
+async function openEnglishVault(page: Page, path = "/#/dashboard?channel=1") {
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "en");
   });
@@ -64,10 +64,10 @@ test("capture public alpha screenshots", async ({ page }) => {
   await expect(queueConsole.locator(".queue-console-row").first()).toBeVisible();
   await capture(page, "queue-console.png");
 
-  await page.goto("/#/channels/library?channel=1");
+  await page.goto("/#/library?channel=1");
   await expect(page.getByText("Indexed media shelf")).toBeVisible();
-  await expect(page.getByLabel("Channel NAS footprint")).toBeVisible();
   await expect(page.getByLabel("Library filters")).toBeVisible();
+  await expect(page.getByLabel("Saved views")).toBeVisible();
   await capture(page, "library-shelf.png");
 
   await page.goto("/#/settings?runtime=guide");

@@ -12,37 +12,37 @@
 <p align="center">
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases"><img alt="Release" src="https://img.shields.io/github/v/release/hyeonsangjeon/channel-vault-nas?include_prereleases&label=release"></a>
-  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api/tags"><img alt="Docker API tag" src="https://img.shields.io/badge/api-0.1.0--alpha.1-2496ED?logo=docker"></a>
-  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-web/tags"><img alt="Docker Web tag" src="https://img.shields.io/badge/web-0.1.0--alpha.1-2496ED?logo=docker"></a>
-  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api"><img alt="Docker API pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-api?logo=docker&label=api%20pulls"></a>
-  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-web"><img alt="Docker Web pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-web?logo=docker&label=web%20pulls"></a>
+  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api"><img alt="Docker Hub" src="https://img.shields.io/badge/Docker%20Hub-multi--arch-2496ED?logo=docker"></a>
   <a href="https://hyeonsangjeon.github.io/channel-vault-nas/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-0ea5e9"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-f59e0b"></a>
-  <img alt="Guarded by default" src="https://img.shields.io/badge/downloads-guarded%20by%20default-22c55e">
 </p>
-
-<p align="center">
-  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive cockpit" width="100%">
-</p>
-
-Channel Vault NAS turns the classic `archive.txt` idea into a real operator
-console for private media archives: register a channel, sync metadata, compare
-against existing NAS folders, stage only missing videos, run bounded download
-passes, and keep the local library searchable from the app.
-
-The target use case is creator-owned media, user-authorized channel backups,
-`archive.txt` ledgers, and existing NAS folders. You are responsible for
-ensuring you have the rights and permissions to archive any content.
-
-## 15-Second Product Tour
-
-This GIF is recorded from the real demo UI fixture, not from a static mockup.
 
 <p align="center">
   <a href="docs/assets/demo/channel-vault-public-alpha.gif">
     <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS public alpha product tour showing dashboard, channel workflow, queue, library, insights, and settings" width="100%">
   </a>
 </p>
+
+<p align="center">
+  From the maker of <a href="https://github.com/hyeonsangjeon/youtube-dl-nas"><strong>youtube-dl-nas</strong></a>
+  · <strong>5 languages</strong>
+  · <strong>Docker in 60 seconds</strong>
+  · <strong>guarded downloads by default</strong>
+</p>
+
+## Why It's Different
+
+- **Index existing NAS folders without re-downloading** — read media files,
+  thumbnails, subtitles, and `info.json` sidecars from disk first.
+- **`archive.txt`-native workflow** — already archived, missing, queued, and
+  skipped videos are visible instead of hidden inside downloader flags.
+- **Recoverable by design** — the filesystem stays the durable archive; SQLite
+  is the searchable index you can rebuild.
+- **Safe first run** — load a local demo workspace with no YouTube calls and no
+  downloads, then opt into bounded worker passes when ready.
+
+The target use case is creator-owned media, user-authorized channel backups,
+`archive.txt` ledgers, and existing NAS folders. You are responsible for
+ensuring you have the rights and permissions to archive any content.
 
 ## Start In 60 Seconds
 
@@ -60,11 +60,20 @@ docker compose pull
 docker compose up -d --no-build
 ```
 
-Open `http://127.0.0.1:5173/`, load the safe demo workspace, then explore the
+Open `http://127.0.0.1:5173/` and click **Load safe demo** to see the
 Dashboard, Channels, Queue, Library, Insights, and Settings consoles.
 
 > Guardrail: this alpha is built for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose it directly to the public internet.
+
+## Visual Preview
+
+The GIF above is recorded from the real demo UI fixture, not from a static
+mockup.
+
+<p align="center">
+  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive cockpit" width="100%">
+</p>
 
 ## Registry Links
 
@@ -90,17 +99,6 @@ Channel Vault NAS answers the NAS operator question:
 
 The filesystem remains the durable archive. SQLite is the index over that
 archive.
-
-## What Makes It Different
-
-- `archive.txt` is treated as an operator ledger, not a hidden downloader flag.
-- Downloads are disabled by default, bounded per pass, and visible in queue and
-  audit surfaces.
-- The app rebuilds trust from disk by reading media, sidecars, subtitles,
-  thumbnails, and DB indexes together.
-- Empty installs can load a safe demo workspace without YouTube calls or real
-  downloads.
-- Public issue support bundles are redacted on the server before export.
 
 ## Current Status
 
@@ -168,7 +166,7 @@ static mockups.
 
 | Queue console | Library shelf | Runtime guide |
 | --- | --- | --- |
-| ![Global queue console with candidate and worker detail](docs/assets/screenshots/queue-console.png) | ![Library shelf with saved views, sidecars, and channel NAS footprint](docs/assets/screenshots/library-shelf.png) | ![Runtime env guide with the public access guard token setup, restart adapter, and Compose smoke verification](docs/assets/screenshots/runtime-guide.png) |
+| ![Global queue console with candidate and worker detail](docs/assets/screenshots/queue-console.png) | ![Global library shelf with saved views, sidecar fidelity, and filtered archive coverage](docs/assets/screenshots/library-shelf.png) | ![Runtime env guide with the public access guard token setup, restart adapter, and Compose smoke verification](docs/assets/screenshots/runtime-guide.png) |
 
 Refresh the public screenshot set:
 
