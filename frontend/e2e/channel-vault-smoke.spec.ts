@@ -269,7 +269,7 @@ test("registration command bar can probe and commit without external YouTube cal
   await page.getByRole("button", { name: "미리보기", exact: true }).click();
   await expect(page.getByText("E2E Vault Signal").first()).toBeVisible();
   await page.getByRole("button", { name: "점화하기" }).click();
-  await expect(page.getByRole("button", { name: "등록 완료" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "등록 완료", exact: true })).toBeVisible();
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "다운로드" }).click();
   await expect(page.getByText("다운로드 파동을 드라이런")).toBeVisible();
   expect(errors).toEqual([]);
