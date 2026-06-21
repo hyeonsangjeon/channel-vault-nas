@@ -6007,7 +6007,7 @@ function App() {
                     <h2>{t("firstRun.empty.title")}</h2>
                     <span>{t("firstRun.empty.subtitle")}</span>
                   </div>
-                  <button onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                  <button className="secondary" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
                     <Link2 size={15} />
                     {t("firstRun.empty.primary")}
                   </button>
@@ -6015,6 +6015,19 @@ function App() {
                 {workflowMessage ? (
                   <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
                 ) : null}
+                <article className="first-source-hero demo-seed-card">
+                  <div>
+                    <Database size={20} />
+                    <div>
+                      <strong>{t("firstRun.demo.title")}</strong>
+                      <span>{t("firstRun.demo.detail")}</span>
+                    </div>
+                  </div>
+                  <button disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
+                    {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
+                    <ChevronRight size={15} />
+                  </button>
+                </article>
                 <div className="clean-install-gate" aria-label={t("firstRun.gate.aria")}>
                   <div className="clean-install-head">
                     <div>
@@ -6091,14 +6104,6 @@ function App() {
                       type="button"
                     >
                       {t("firstRun.empty.storageAction")}
-                    </button>
-                  </article>
-                  <article className="demo-seed-card">
-                    <Database size={17} />
-                    <strong>{t("firstRun.demo.title")}</strong>
-                    <span>{t("firstRun.demo.detail")}</span>
-                    <button disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
-                      {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
                     </button>
                   </article>
                 </div>
@@ -6985,7 +6990,7 @@ function App() {
           >
             <Link2 size={16} />
             <span>{t("channel.workbench.register")}</span>
-            <strong>{registeredChannelId ? t("registration.already") : t("registration.probe")}</strong>
+            <strong>{registeredChannelId ? t("registration.registered") : t("registration.probe")}</strong>
             <small>{t("channel.workbench.registerDetail")}</small>
           </button>
           <button
@@ -8410,7 +8415,7 @@ function App() {
         ) : null}
 
         {showLowerGrid ? (
-        <section className={`lower-grid ${showChannelWorkspace ? "channel-lower-grid" : ""}`}>
+        <section className={`lower-grid ${showChannelWorkspace ? "channel-lower-grid" : ""} ${showInsightsWorkspace ? "insights-lower-grid" : ""}`}>
           {showDashboardWorkspace ? (
           <motion.div
             className="panel activity-panel"
