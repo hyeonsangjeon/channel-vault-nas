@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="docs/assets/demo/channel-vault-public-alpha.gif">
-    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS public alpha product tour showing dashboard, channel workflow, queue, library, insights, and settings" width="100%">
+    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS product tour showing dashboard, channel workflow, queue, library, insights, and settings" width="100%">
   </a>
 </p>
 
@@ -46,7 +46,7 @@ ensuring you have the rights and permissions to archive any content.
 
 ## Start In 60 Seconds
 
-Use the published Docker Hub images when you want the fastest public-alpha path:
+Use the published Docker Hub images when you want the fastest Docker path:
 
 ```bash
 git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
@@ -63,7 +63,7 @@ docker compose up -d --no-build
 Open `http://127.0.0.1:5173/` and click **Load safe demo** to see the
 Dashboard, Channels, Queue, Library, Insights, and Settings consoles.
 
-> Guardrail: this alpha is built for localhost, private LAN, VPN, or trusted
+> Guardrail: this self-hosted release is built for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose it directly to the public internet.
 
 ## Visual Preview
@@ -72,7 +72,7 @@ The GIF above is recorded from the real demo UI fixture, not from a static
 mockup.
 
 <p align="center">
-  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive cockpit" width="100%">
+  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive console" width="100%">
 </p>
 
 ## Registry Links
@@ -102,7 +102,7 @@ archive.
 
 ## Current Status
 
-This is an active alpha. The core loop is working locally:
+This is an active self-hosted release. The core loop is working locally:
 
 - Channel registration and source probing
 - Metadata sync and automatic metadata scheduler
@@ -116,7 +116,7 @@ This is an active alpha. The core loop is working locally:
 - Library index with media files, sidecar fidelity, codec/profile filters, in-app preview, and portable saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
-- Versioned Docker Hub and GHCR images for the guarded public alpha prerelease,
+- Versioned Docker Hub and GHCR images for the guarded prerelease,
   with Docker Hub pull-based Compose smoke verified
 
 Not ready yet:
@@ -124,10 +124,10 @@ Not ready yet:
 - Multi-user auth/session hardening for exposed networks
 - Polished install videos for Synology/QNAP-style first-run paths
 
-The current release direction and public-alpha gate are tracked in
+The current release direction and release gate are tracked in
 [`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
-Do not expose this alpha directly to the public internet. For private LAN or
+Do not expose the app directly to the public internet. For private LAN or
 NAS access, enable the optional operator token described below and still prefer
 VPN or a trusted reverse proxy.
 See [`docs/deployment-security.md`](docs/deployment-security.md) for concrete
@@ -135,7 +135,7 @@ Nginx, Caddy, and Cloudflare Tunnel examples.
 
 ## Known Limitations
 
-This is a guarded alpha. Knowing the boundaries up front keeps deployments safe:
+This is a guarded self-hosted release. Knowing the boundaries up front keeps deployments safe:
 
 - Alpha is for localhost, private LAN, VPN, or trusted reverse-proxy use, not
   direct public internet exposure.
@@ -160,9 +160,9 @@ See [`docs/roadmap.md`](docs/roadmap.md) for non-goals and
 These screenshots are generated from the seeded browser smoke fixture, not from
 static mockups.
 
-| Dashboard cockpit | Channel downloads |
+| Dashboard overview | Channel downloads |
 | --- | --- |
-| ![Dashboard cockpit showing readiness, missions, and live archive state](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads tab showing guarded queue staging and worker controls](docs/assets/screenshots/channel-downloads.png) |
+| ![Dashboard overview showing readiness, operations, and live archive state](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads tab showing guarded queue staging and worker controls](docs/assets/screenshots/channel-downloads.png) |
 
 | Queue console | Library shelf | Runtime guide |
 | --- | --- | --- |
@@ -189,9 +189,9 @@ reviewed final asset is ready to publish.
 
 ### Dashboard
 
-The dashboard is an operating cockpit. It shows the current archive score, the
+The dashboard is an archive overview. It shows the current archive score, the
 next useful action, worker/scheduler/storage/library state, recent events, and
-operator missions. It intentionally avoids deep controls.
+operator tasks. It intentionally avoids deep controls.
 
 ### Channels
 
@@ -520,7 +520,7 @@ media item, missing-video candidates, queue history, scheduler ticks, library
 sidecars, storage drift, and orphan sidecars.
 
 The demo path does not call YouTube and does not start downloads. It is intended
-for first impressions, screenshots, public-alpha walkthroughs, and contributor
+for first impressions, screenshots, public walkthroughs, and contributor
 orientation. If the workspace already has real registered channels, the backend
 refuses to seed the demo so existing archives are not mixed with fixture data.
 The clean-install gate says this plainly before seeding. Once loaded, the
@@ -604,13 +604,13 @@ Worker passes are intentionally bounded:
 10. Open Library and confirm completed media/index coverage changed.
 11. Open Insights to inspect storage pressure, drift, and orphan sidecars.
 12. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, backup confidence, and support exports.
-13. Return to Dashboard and copy or download the beta onboarding proof JSON for a redacted readiness snapshot.
+13. Return to Dashboard and copy or download the onboarding proof JSON for a redacted readiness snapshot.
 
 Dashboard support export buttons request a server-generated redacted diagnostic
 bundle first, then fall back to the browser snapshot if the server endpoint is
 not available. The server bundle removes operator tokens, absolute paths,
 source URLs, channel/video titles, and generated download commands.
-The beta onboarding proof export is separate: it summarizes readiness, runtime,
+The onboarding proof export is separate: it summarizes readiness, runtime,
 mount, queue, library, storage, and backup posture from the UI state while
 excluding titles, source URLs, absolute paths, generated commands, and tokens.
 
@@ -717,7 +717,7 @@ This starts the same isolated stack with `CVN_AUTH_TOKEN` enabled, verifies that
 unauthenticated API calls return `401`, verifies bearer and `X-CVN-Token`
 requests, and confirms the browser access gate unlocks the console.
 
-Public-alpha release gate:
+Public release gate:
 
 ```bash
 scripts/public-alpha-check.sh
@@ -757,9 +757,9 @@ through the `Docs Pages` workflow.
 - [Product Brief (KO)](docs/product-brief.md)
 - [Architecture](docs/architecture.md)
 - [Design Direction](docs/design-direction.md)
-- [Public Alpha Roadmap](docs/roadmap.md)
+- [Release Roadmap](docs/roadmap.md)
 - [Changelog](CHANGELOG.md)
-- [Public Alpha Demo Runbook](docs/public-alpha-demo.md)
+- [Public Demo Runbook](docs/public-alpha-demo.md)
 - [Docker Hub Description Source](docs/dockerhub-description.md)
 - [NAS Install Guide (Synology/QNAP)](docs/nas-install.md)
 - [Deployment Security](docs/deployment-security.md)
@@ -777,7 +777,7 @@ through the `Docs Pages` workflow.
 The goal is a public repo that can earn real adoption, not just a working local
 prototype.
 
-For each public alpha release:
+For each guarded public release:
 
 - Run `scripts/public-alpha-check.sh`.
 - Validate Docker Compose on macOS, Linux, and one NAS-like host.

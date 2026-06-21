@@ -54,13 +54,13 @@ async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await page.goto(path);
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
   if (!expectDashboard) return;
-  const opsBoard = page.getByLabel("오늘의 아카이브 미션");
+  const opsBoard = page.getByLabel("오늘의 아카이브 작업");
   await expect(opsBoard).toContainText("준비도");
   await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
   const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
   await expect(releaseReadiness).toContainText("백업/복구");
-  await expect(releaseReadiness).toContainText("Beta 런치 브리핑");
-  await expect(releaseReadiness).toContainText("다음 unblock");
+  await expect(releaseReadiness).toContainText("공개 브리핑");
+  await expect(releaseReadiness).toContainText("다음 확인");
   const mountDoctor = page.getByLabel("NAS 볼륨 마운트 진단");
   await expect(mountDoctor).toContainText("NAS 마운트 Doctor");
   await expect(mountDoctor).toContainText("DB");
@@ -81,7 +81,7 @@ test("command palette opens operational surfaces and live status is visible", as
   await page.getByRole("button", { name: "운영 가이드 열기" }).click();
   const operatorGuide = page.getByLabel("Channel Vault NAS 운영 가이드");
   await expect(operatorGuide).toBeVisible();
-  await expect(operatorGuide).toContainText("Cockpit에서 시작");
+  await expect(operatorGuide).toContainText("개요에서 시작");
   await operatorGuide.getByRole("button", { name: "다음" }).click();
   await expect(operatorGuide).toContainText("소스를 안전하게 등록");
   await operatorGuide.getByRole("button", { name: "소스 등록 열기" }).click();
@@ -99,7 +99,7 @@ test("command palette opens operational surfaces and live status is visible", as
   expect(supportBundle.redaction.safe_for_public_issue).toBe(true);
   await expect(page.locator(".support-bundle-source").filter({ hasText: "서버 redacted" })).toBeVisible();
   const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
-  const betaProof = page.getByLabel("Beta onboarding proof export");
+  const betaProof = page.getByLabel("온보딩 증거 내보내기");
   await expect(betaProof).toContainText("이 설치가 public-safe인지 증거로 내보내기");
   await expect(betaProof.getByRole("button", { name: "proof 다운로드" })).toBeVisible();
   await dispatchButtonClick(betaProof.getByRole("button", { name: "proof 복사" }));
@@ -160,7 +160,7 @@ test("url hash deep links restore nav and channel tabs", async ({ page }) => {
 
   const channelTabs = page.getByLabel("채널 상세 탭");
   await expect(channelTabs.getByRole("button", { name: "다운로드" })).toHaveClass(/active/);
-  await expect(page.getByText("다운로드 파동을 드라이런")).toBeVisible();
+  await expect(page.getByText("다운로드 묶음 미리보기")).toBeVisible();
   await expect(page).toHaveTitle("Signal Lab · 다운로드 · Channel Vault NAS");
   await expect(page).toHaveURL(/#\/channels\/downloads\?channel=1/);
 
@@ -268,10 +268,10 @@ test("registration command bar can probe and commit without external YouTube cal
   await registrationInput.fill("https://www.youtube.com/@e2evault");
   await page.getByRole("button", { name: "미리보기", exact: true }).click();
   await expect(page.getByText("E2E Vault Signal").first()).toBeVisible();
-  await page.getByRole("button", { name: "점화하기" }).click();
+  await page.getByRole("button", { name: "등록", exact: true }).click();
   await expect(page.getByRole("button", { name: "등록 완료", exact: true })).toBeVisible();
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "다운로드" }).click();
-  await expect(page.getByText("다운로드 파동을 드라이런")).toBeVisible();
+  await expect(page.getByText("다운로드 묶음 미리보기")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -330,15 +330,15 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   });
 
   await openKoreanVault(page);
-  const opsStorageAction = page.getByLabel("오늘의 아카이브 미션").getByRole("button", { name: "스캔 열기" }).first();
+  const opsStorageAction = page.getByLabel("오늘의 아카이브 작업").getByRole("button", { name: "스캔 열기" }).first();
   if ((await opsStorageAction.count()) > 0) {
     await opsStorageAction.click();
     await expect(page.locator(".storage-panel")).toBeVisible();
     await page.getByRole("button", { name: "대시보드", exact: true }).click();
   }
-  const growthMission = page.getByLabel("오늘의 아카이브 미션").locator(".ops-mission").filter({ hasText: "급증 채널 점검" });
-  await expect(growthMission).toBeVisible();
-  await growthMission.getByRole("button", { name: "채널 열기" }).click();
+  const growthTask = page.getByLabel("오늘의 아카이브 작업").locator(".ops-mission").filter({ hasText: "급증 채널 점검" });
+  await expect(growthTask).toBeVisible();
+  await growthTask.getByRole("button", { name: "채널 열기" }).click();
   await expect(page.getByLabel("채널 상세 탭").getByRole("button", { name: "라이브러리" })).toBeVisible();
   const growthMissionLens = page.getByLabel("채널 NAS 발자국");
   await expect(growthMissionLens).toBeVisible();
@@ -716,14 +716,14 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(queueFilters).toBeVisible();
   await queueFilters.getByRole("button", { name: "대기" }).click();
   await expect(page.locator(".queue-status-pill.queued").first()).toBeVisible();
-  await queueFilters.getByRole("button", { name: "실행 가능" }).click();
+  await queueFilters.getByRole("button", { name: "준비됨" }).click();
 
   await page.getByRole("button", { name: "프리플라이트" }).click();
   await expect(page.locator(".command-lines code").filter({ hasText: "yt-dlp" }).first()).toBeVisible();
   await dispatchButtonClick(page.getByRole("button", { name: "명령 복사" }));
   await expect(page.getByRole("button", { name: "복사됨" })).toBeVisible();
   await expect(page.locator(".preflight-pill.ready").first()).toBeVisible();
-  await expect(page.getByLabel("프리플라이트 런웨이")).toContainText("DB만 무장");
+  await expect(page.getByLabel("프리플라이트 점검")).toContainText("DB만 무장");
   await expect(page.getByLabel("선택 작업 요약")).toContainText("선택 용량");
   const preflightFilter = page.getByLabel("프리플라이트 필터");
   await expect(preflightFilter).toContainText("미점검");
@@ -772,7 +772,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
 
   const archivePathway = page.getByLabel("새 영상 확인, 기존 영상 스킵, 큐 진행 보기");
   await expect(archivePathway).toContainText("스킵 장부");
-  await expect(archivePathway).toContainText("큐 런웨이");
+  await expect(archivePathway).toContainText("큐 경로");
   const archiveTxtConsole = page.getByLabel("archive.txt 스킵 장부");
   await expect(archiveTxtConsole).toBeVisible();
   await expect(archiveTxtConsole.getByLabel("archive.txt 가져오기 단계")).toContainText("소스 입력");

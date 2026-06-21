@@ -526,6 +526,7 @@ function App() {
   const [operatorGuideOpen, setOperatorGuideOpen] = useState(false);
   const [operatorGuideStepIndex, setOperatorGuideStepIndex] = useState(0);
   const [operatorGuideSeen, setOperatorGuideSeen] = useState(() => loadOperatorGuideSeen());
+  const [operatorChecksOpen, setOperatorChecksOpen] = useState(false);
   const [eventStreamStatus, setEventStreamStatus] = useState<EventStreamStatus>("connecting");
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettings | null>(null);
   const [storageScan, setStorageScan] = useState<StorageScan | null>(null);
@@ -5868,6 +5869,8 @@ function App() {
 
         {showDashboardWorkspace ? (
           <>
+            {hasAnyRegisteredChannel ? (
+              <>
             <section className={`dashboard-cockpit ${cockpitStage}`} aria-label={t("dashboard.cockpit.aria")}>
               <div className="cockpit-hero">
                 <div className="cockpit-copy">
@@ -5998,19 +6001,17 @@ function App() {
                 })}
               </div>
             </section>
+              </>
+            ) : null}
 
             {!hasAnyRegisteredChannel ? (
-              <section className="first-source-panel" aria-label={t("firstRun.empty.aria")}>
+              <section className="first-source-panel first-source-panel-focus" aria-label={t("firstRun.empty.aria")}>
                 <div className="first-source-head">
                   <div>
                     <p className="panel-kicker">{t("firstRun.empty.kicker")}</p>
                     <h2>{t("firstRun.empty.title")}</h2>
                     <span>{t("firstRun.empty.subtitle")}</span>
                   </div>
-                  <button className="secondary" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
-                    <Link2 size={15} />
-                    {t("firstRun.empty.primary")}
-                  </button>
                 </div>
                 {workflowMessage ? (
                   <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
@@ -6028,7 +6029,24 @@ function App() {
                     <ChevronRight size={15} />
                   </button>
                 </article>
-                <div className="clean-install-gate" aria-label={t("firstRun.gate.aria")}>
+                <div className="first-source-action-row">
+                  <button className="first-source-secondary" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                    <Link2 size={15} />
+                    {t("firstRun.empty.primary")}
+                  </button>
+                </div>
+                <section className={`operator-checks-panel ${operatorChecksOpen ? "open" : ""}`} aria-label={t("firstRun.operatorChecks.aria")}>
+                  <button className="operator-checks-toggle" onClick={() => setOperatorChecksOpen((open) => !open)} type="button">
+                    <span>
+                      <ShieldCheck size={15} />
+                      <strong>{t("firstRun.operatorChecks.title")}</strong>
+                    </span>
+                    <small>{t("firstRun.operatorChecks.detail")}</small>
+                    <ChevronRight size={14} />
+                  </button>
+                  {operatorChecksOpen ? (
+                    <div className="operator-checks-content">
+                      <div className="clean-install-gate" aria-label={t("firstRun.gate.aria")}>
                   <div className="clean-install-head">
                     <div>
                       <p className="panel-kicker">{t("firstRun.gate.kicker")}</p>
@@ -6069,47 +6087,46 @@ function App() {
                     })}
                   </div>
                 </div>
-                <div className="first-source-grid">
-                  <article>
-                    <Link2 size={17} />
-                    <strong>{t("firstRun.empty.sourceTitle")}</strong>
-                    <span>{t("firstRun.empty.sourceDetail")}</span>
-                    <button onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
-                      {t("firstRun.empty.sourceAction")}
-                    </button>
-                  </article>
-                  <article>
-                    <FileArchive size={17} />
-                    <strong>{t("firstRun.empty.archiveTitle")}</strong>
-                    <span>{t("firstRun.empty.archiveDetail")}</span>
-                    <button
-                      onClick={() => {
-                        openChannelWorkspace("overview", ".quick-panel");
-                        window.setTimeout(() => scrollToAppSection(".quick-panel"), 0);
-                      }}
-                      type="button"
-                    >
-                      {t("firstRun.empty.archiveAction")}
-                    </button>
-                  </article>
-                  <article>
-                    <FolderTree size={17} />
-                    <strong>{t("firstRun.empty.storageTitle")}</strong>
-                    <span>{t("firstRun.empty.storageDetail")}</span>
-                    <button
-                      onClick={() => {
-                        handleSelectNav("insights");
-                        window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
-                      }}
-                      type="button"
-                    >
-                      {t("firstRun.empty.storageAction")}
-                    </button>
-                  </article>
+                    </div>
+                  ) : null}
+                </section>
+                {operatorChecksOpen ? (
+                  <div className="first-source-grid">
+                    <article>
+                      <FileArchive size={17} />
+                      <strong>{t("firstRun.empty.archiveTitle")}</strong>
+                      <span>{t("firstRun.empty.archiveDetail")}</span>
+                      <button
+                        onClick={() => {
+                          openChannelWorkspace("overview", ".quick-panel");
+                          window.setTimeout(() => scrollToAppSection(".quick-panel"), 0);
+                        }}
+                        type="button"
+                      >
+                        {t("firstRun.empty.archiveAction")}
+                      </button>
+                    </article>
+                    <article>
+                      <FolderTree size={17} />
+                      <strong>{t("firstRun.empty.storageTitle")}</strong>
+                      <span>{t("firstRun.empty.storageDetail")}</span>
+                      <button
+                        onClick={() => {
+                          handleSelectNav("insights");
+                          window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
+                        }}
+                        type="button"
+                      >
+                        {t("firstRun.empty.storageAction")}
+                      </button>
+                    </article>
                 </div>
+                ) : null}
               </section>
             ) : null}
 
+            {hasAnyRegisteredChannel || operatorChecksOpen ? (
+              <>
             <section className={`release-readiness ${releaseReadinessDone === releaseReadinessItems.length ? "ready" : "building"}`} aria-label={t("release.readiness.aria")}>
               <div className="release-readiness-head">
                 <div>
@@ -6392,6 +6409,8 @@ function App() {
                   </div>
                 </div>
               </section>
+            ) : null}
+              </>
             ) : null}
           </>
         ) : null}

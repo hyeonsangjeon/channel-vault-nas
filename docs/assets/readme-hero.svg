@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="520" viewBox="0 0 1400 520" role="img" aria-labelledby="title desc">
-  <title id="title">Channel Vault NAS archive cockpit hero</title>
+  <title id="title">Channel Vault NAS archive console hero</title>
   <desc id="desc">A dark NAS console illustration showing metadata sync, guarded download queue, archive ledger, and library coverage.</desc>
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
@@ -32,7 +32,7 @@
   </g>
 
   <g transform="translate(84 132)">
-    <text x="0" y="0" fill="#38bdf8" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800">NAS-first archive cockpit</text>
+    <text x="0" y="0" fill="#38bdf8" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800">NAS-first archive console</text>
     <text x="0" y="62" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="58" font-weight="900">Sync channels.</text>
     <text x="0" y="128" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="58" font-weight="900">Download only</text>
     <text x="0" y="194" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="58" font-weight="900">missing videos.</text>

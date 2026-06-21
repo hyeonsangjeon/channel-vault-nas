@@ -58,12 +58,12 @@ async function recordDemo(browser: Browser) {
   const page = await context.newPage();
 
   await openEnglishVault(page);
-  await expect(page.getByLabel("Dashboard operating cockpit")).toContainText("Know what needs attention");
+  await expect(page.getByLabel("Dashboard overview")).toContainText("Know what needs attention");
   await hold(page, 1300);
 
   await go(page, "/#/channels/downloads?channel=1");
   await expect(page.getByLabel("Channel detail tabs").getByRole("button", { name: "Downloads" })).toHaveClass(/active/);
-  await expect(page.getByText("Dry-run the download wave")).toBeVisible();
+  await expect(page.getByText("Preview the download batch")).toBeVisible();
 
   await go(page, "/#/queue?channel=1");
   await expect(page.getByLabel("Global queue control")).toContainText("Download operations");
@@ -86,7 +86,7 @@ async function recordDemo(browser: Browser) {
 
   await go(page, "/#/dashboard");
   await expect(page.getByLabel("Release readiness checklist")).toContainText("Public readiness");
-  await expect(page.getByLabel("Beta onboarding proof")).toBeVisible();
+  await expect(page.getByLabel("Onboarding proof export")).toBeVisible();
   await hold(page, 1000);
 
   const video = page.video();
@@ -105,7 +105,7 @@ async function recordDemo(browser: Browser) {
   console.log(`public demo video: ${outputPath} (${size} bytes)`);
 }
 
-test("record public alpha demo video", async ({ browser }) => {
+test("record public demo video", async ({ browser }) => {
   await recordDemo(browser);
 });
 
