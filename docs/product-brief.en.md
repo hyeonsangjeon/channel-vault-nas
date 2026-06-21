@@ -95,9 +95,9 @@ Deferred:
 
 ## Information Architecture
 
-The first screen should be an operating cockpit, not a download form.
+The first screen should be an archive overview, not a download form.
 
-- `Dashboard`: readiness, missions, worker/scheduler state, storage pressure,
+- `Dashboard`: readiness, operations, worker/scheduler state, storage pressure,
   library coverage, and the next useful action.
 - `Channels`: registration, channel detail, sync, downloads, library, logs, and
   policy.
@@ -111,7 +111,7 @@ The first screen should be an operating cockpit, not a download form.
 
 ## UI/UX Direction
 
-The app should feel like an archive observatory and NAS operations console:
+The app should feel like an archive console for NAS operations:
 beautiful, dense, calm, and built for repeated action.
 
 Principles:

@@ -122,7 +122,7 @@ UI 원칙:
 - 다운로드 앱보다 관리 콘솔에 가깝게 설계한다.
 - 첫 화면에서 채널 상태, sync 상태, 실패 작업이 바로 보여야 한다.
 - 카드 남발보다 밀도 있고 스캔하기 쉬운 운영 UI를 우선한다.
-- 단순한 admin panel이 아니라 아름다운 archive observatory처럼 느껴져야 한다.
+- 단순한 admin panel이 아니라 아름다운 NAS archive console처럼 느껴져야 한다.
 - D3.js, Recharts, Framer Motion 등을 적극적으로 써서 동적이고 시각적인
   데이터 화면을 만든다.
 - 저장소, sync, queue, 채널 건강도, 자막/키워드 흐름은 그래프로 이해될 수

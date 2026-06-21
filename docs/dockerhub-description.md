@@ -4,14 +4,14 @@
 [![CI](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg)](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-34d399)](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/LICENSE)
 
-![Channel Vault NAS archive cockpit](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/readme-hero.svg)
+![Channel Vault NAS archive console](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/readme-hero.svg)
 
-Self-hosted NAS cockpit for YouTube channel archiving. Channel Vault NAS turns
+Self-hosted NAS console for YouTube channel archiving. Channel Vault NAS turns
 the classic `archive.txt` idea into a visual operator console: register a
 channel, sync metadata, skip videos already on disk, queue only missing videos,
 run bounded download passes, and keep the local archive searchable from the app.
 
-> Guarded public alpha: designed for localhost, private LAN, VPN, or trusted
+> Guarded self-hosted release: designed for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose the raw API directly to the public internet.
 
 ## Images
@@ -34,9 +34,9 @@ Both images are multi-arch: `linux/amd64` and `linux/arm64`.
 
 ## Screenshots
 
-| Dashboard cockpit | Guarded download queue |
+| Dashboard overview | Guarded download queue |
 | --- | --- |
-| ![Dashboard cockpit](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/channel-downloads.png) |
+| ![Dashboard overview](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/channel-downloads.png) |
 
 | Queue console | Library shelf |
 | --- | --- |

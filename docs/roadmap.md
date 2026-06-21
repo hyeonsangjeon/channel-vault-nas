@@ -1,7 +1,7 @@
-# Public Alpha Roadmap
+# Release Roadmap
 
 This roadmap is intentionally practical. Channel Vault NAS should feel useful
-on day one, but the public alpha must stay honest about safety boundaries and
+on day one, while the release remains honest about safety boundaries and
 unfinished deployment work.
 
 ## North Star
@@ -15,9 +15,9 @@ The app should answer:
 - What is safe to download next?
 - What can be recovered from the filesystem if the database disappears?
 
-## Public Alpha Gate
+## Public Release Gate
 
-The public alpha is ready when these are true:
+The public release is ready when these are true:
 
 - Docker Compose starts cleanly from a fresh clone on macOS and Linux.
 - `scripts/public-alpha-check.sh` passes.
@@ -49,7 +49,7 @@ Focus: prove the core archive loop.
 
 Exit criteria:
 
-- Public alpha gate passes.
+- Public release gate passes.
 - Docker Compose smoke is validated on at least one clean host.
 - Known limitations are explicit in README and SECURITY.
 
@@ -84,7 +84,7 @@ Focus: NAS deployment confidence.
   covers command generation + execute-gating for every adapter.
 - [x] Backup/restore docs for SQLite plus filesystem sidecars —
   [`docs/backup-restore.md`](backup-restore.md).
-- [x] Beta onboarding surfaces — clean-install gate, runtime guide section rail,
+- [x] Onboarding surfaces — clean-install gate, runtime guide section rail,
   backup confidence panel, and redacted Dashboard proof export.
 - [x] Token-protected E2E coverage — `auth-gate.spec.ts` checks API `401`/`200`
   behavior and browser unlock, and runs in CI/public-alpha checks with a test

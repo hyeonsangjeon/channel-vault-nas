@@ -1,4 +1,4 @@
-# Public Alpha Demo Runbook
+# Public Demo Runbook
 
 This runbook is for a short public demo, contributor walkthrough, or release
 candidate check. It keeps real downloads disabled unless the operator explicitly
@@ -89,13 +89,13 @@ curl -X DELETE http://127.0.0.1:8000/api/ops/demo-workspace
 
 ## Live App Demo Path
 
-For a local public-alpha walkthrough:
+For a local public walkthrough:
 
 1. Start the app with Docker Compose or local development commands from the README.
 2. If `CVN_AUTH_TOKEN` is enabled, enter the operator token once. Do not show
    the token in recordings, livestreams, or screenshots.
-3. Open Dashboard and point out readiness, mission control, the clean-install
-   gate, and the beta proof export.
+3. Open Dashboard and point out readiness, operations, the clean-install
+   gate, and the onboarding proof export.
 4. On an empty workspace, load the safe demo to show the full app without external calls.
 5. Open Channels and show registration probing before anything is downloaded.
 6. Open a channel detail and move through Overview, Downloads, Library, Logs, and Policy.
@@ -107,7 +107,7 @@ For a local public-alpha walkthrough:
 12. Open Insights and show real storage scan, drift, pressure trend, orphan sidecars, and quarantine.
 13. Open Settings and show runtime flags, scheduler tick drawers, restart
     adapters, backup confidence, and support exports.
-14. Return to Dashboard and copy/download the beta onboarding proof. Confirm it
+14. Return to Dashboard and copy/download the onboarding proof. Confirm it
     is a redacted readiness snapshot, not an archive export or a secret dump.
 
 ## Real Download Guardrail
@@ -129,7 +129,7 @@ Use two exports in public demos:
 - **Support bundle**: server-generated diagnostics for bug reports. It redacts
   tokens, absolute paths, source URLs, channel/video titles, and generated
   download commands.
-- **Beta onboarding proof**: Dashboard-generated readiness evidence for
+- **Onboarding proof**: Dashboard-generated readiness evidence for
   walkthroughs and release reviews. It summarizes clean-install, runtime,
   backup, storage, queue, library, and audit posture without including secrets
   or operator content.
@@ -137,14 +137,14 @@ Use two exports in public demos:
 ## What To Avoid In Public Demos
 
 - Do not use channels you do not have rights or permission to archive.
-- Do not expose this alpha directly to the public internet.
+- Do not expose local test builds directly to the public internet.
 - Do not present the app as an unrestricted downloader.
 - Do not enable restart adapter execution until the restart command is validated
   on the host.
 
 ## Release Candidate Checks
 
-Before tagging a public alpha, run the unified release gate:
+Before tagging a public release candidate, run the unified release gate:
 
 ```bash
 scripts/public-alpha-check.sh

@@ -4,7 +4,7 @@
 
 ## North Star
 
-Channel Vault NAS should feel like a beautiful archive observatory for a NAS:
+Channel Vault NAS should feel like a beautiful archive console for a NAS:
 dense enough for daily operation, visual enough that the state of the archive is
 understood at a glance.
 
@@ -36,8 +36,8 @@ Channel Vault should borrow the polish, not the exact product layout.
 
 Keywords:
 
-- cinematic control room
-- archive observatory
+- cinematic operations room
+- archive console
 - calm NAS operations
 - luminous data surfaces
 - beautiful but not decorative

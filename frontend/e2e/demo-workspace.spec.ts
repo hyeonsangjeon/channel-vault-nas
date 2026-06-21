@@ -13,7 +13,12 @@ test("empty first run can load the safe demo workspace", async ({ page }) => {
   const firstRun = page.getByLabel("첫 소스 빈 상태");
   await expect(firstRun).toBeVisible();
   await expect(firstRun).toContainText("안전 데모 불러오기");
-  const cleanInstallGate = firstRun.getByLabel("클린 설치 beta gate");
+  await expect(firstRun).toContainText("내 채널 추가");
+  await expect(firstRun).toContainText("운영 점검");
+  await expect(firstRun.getByLabel("클린 설치 점검")).toHaveCount(0);
+
+  await firstRun.getByRole("button", { name: /운영 점검/ }).click();
+  const cleanInstallGate = firstRun.getByLabel("클린 설치 점검");
   await expect(cleanInstallGate).toContainText("첫 실제 아카이브 전에 5가지만 확인");
   await expect(cleanInstallGate).toContainText("접근 보호");
   await expect(cleanInstallGate).toContainText("마운트 확인");
@@ -28,12 +33,13 @@ test("empty first run can load the safe demo workspace", async ({ page }) => {
   const tabs = page.getByLabel("채널 상세 탭");
   await expect(tabs.getByRole("button", { name: "다운로드" })).toHaveClass(/active/);
   await expect(page.getByText("안전 데모 워크스페이스")).toBeVisible();
-  await expect(page.getByText("다운로드 파동을 드라이런")).toBeVisible();
+  await expect(page.getByText("다운로드 묶음 미리보기")).toBeVisible();
   await expect(page.getByText(/Signal Lab 데모를 불러왔습니다/)).toBeVisible();
 
   await page.getByRole("button", { name: "데모 제거" }).click();
 
   await expect(page.getByText(/Signal Lab 데모를 정리했습니다/)).toBeVisible();
-  await expect(page.getByLabel("첫 소스 빈 상태")).toBeVisible();
-  await expect(page.getByText("안전 데모 워크스페이스")).toHaveCount(0);
+  const resetFirstRun = page.getByLabel("첫 소스 빈 상태");
+  await expect(resetFirstRun).toBeVisible();
+  await expect(resetFirstRun).toContainText("안전 데모 워크스페이스 불러오기");
 });

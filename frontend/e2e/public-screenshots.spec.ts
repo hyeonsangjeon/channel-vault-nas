@@ -41,11 +41,11 @@ test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-test("capture public alpha screenshots", async ({ page }) => {
+test("capture public screenshots", async ({ page }) => {
   mkdirSync(screenshotDir, { recursive: true });
 
   await openEnglishVault(page);
-  const cockpit = page.getByLabel("Dashboard operating cockpit");
+  const cockpit = page.getByLabel("Dashboard overview");
   await expect(cockpit).toContainText("Know what needs attention");
   await expect(page.getByLabel("Release readiness checklist")).toContainText("Public readiness");
   await capture(page, "dashboard-cockpit.png");
@@ -53,7 +53,7 @@ test("capture public alpha screenshots", async ({ page }) => {
   await page.goto("/#/channels/downloads?channel=1");
   const channelTabs = page.getByLabel("Channel detail tabs");
   await expect(channelTabs.getByRole("button", { name: "Downloads" })).toHaveClass(/active/);
-  await expect(page.getByText("Dry-run the download wave")).toBeVisible();
+  await expect(page.getByText("Preview the download batch")).toBeVisible();
   await expect(page.getByLabel("Queue radar")).toBeVisible();
   await capture(page, "channel-downloads.png");
 
