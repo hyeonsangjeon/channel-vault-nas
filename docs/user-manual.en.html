@@ -418,8 +418,8 @@
           <div class="status-grid">
             <div class="card">
               <span>Main path</span>
-              <strong>5 steps</strong>
-              <p>Register, sync, stage, download, verify.</p>
+              <strong>6 steps</strong>
+              <p>Analyze, review, register, sync, confirm, verify.</p>
             </div>
             <div class="card">
               <span>Safety limit</span>
@@ -442,46 +442,47 @@
         <section id="start">
           <h2>First 10 minutes: click in this order</h2>
           <p>
-            You do not need to understand every panel first. Follow these five
-            actions to reach the core workflow: download only videos that are
-            missing from the NAS.
+            A fresh install starts with the first channel backup wizard. You can
+            paste a YouTube channel URL, <code>@handle</code>, or <code>UC...</code>
+            channel ID, review the plan, and stop at the download confirmation
+            before any real transfer begins.
           </p>
           <div class="flow-grid">
             <article class="step">
               <div class="step-number">1</div>
               <span>Dashboard</span>
-              <strong>Check the current channel and readiness score.</strong>
-              <p>Start with the dashboard. Read missing count, queue count, worker state, and storage pressure.</p>
+              <strong>Paste a channel URL, handle, or channel ID.</strong>
+              <p>Use the first backup wizard instead of hunting through settings or tabs.</p>
             </article>
             <article class="step">
               <div class="step-number">2</div>
-              <span>Channels</span>
-              <strong>Run New video check.</strong>
-              <p>Open the channel detail screen and run metadata sync before staging downloads.</p>
+              <span>Analyze</span>
+              <strong>Review the channel before registering it.</strong>
+              <p>Check the channel name, video count, estimated size, save folder, first videos, and safety notes.</p>
             </article>
             <article class="step">
               <div class="step-number">3</div>
-              <span>Downloads</span>
-              <strong>Use Download new only.</strong>
-              <p>The app creates candidates only for videos that are missing on disk.</p>
+              <span>Plan</span>
+              <strong>Click Start first backup.</strong>
+              <p>The app registers the channel if needed, syncs metadata, stages missing videos, and opens the confirmation modal.</p>
             </article>
             <article class="step">
               <div class="step-number">4</div>
-              <span>Queue</span>
-              <strong>Watch candidate, queued, running, and failed jobs.</strong>
-              <p>Use filters and preflight before starting a real worker pass.</p>
+              <span>Confirm</span>
+              <strong>Only the modal starts real downloads.</strong>
+              <p>Click <code>Start up to 5</code> only when the download engine is enabled and the bounded pass looks right.</p>
             </article>
             <article class="step">
               <div class="step-number">5</div>
-              <span>Library</span>
-              <strong>Verify archived coverage from files on disk.</strong>
-              <p>After download completion, Library and coverage counters should reflect actual media files.</p>
+              <span>Queue / Library</span>
+              <strong>Watch progress, then verify files on disk.</strong>
+              <p>After completion, Library and coverage counters should reflect actual media files.</p>
             </article>
             <article class="step">
               <div class="step-number">!</div>
               <span>Guardrail</span>
-              <strong>Disabled download buttons can be correct.</strong>
-              <p>If the worker is off or the channel is paused, candidates may be created while claims stay blocked.</p>
+              <strong>Safe demo is still available, but secondary.</strong>
+              <p>Use the folded safe demo and import options when you want a local fixture without YouTube calls.</p>
             </article>
           </div>
 
@@ -497,9 +498,10 @@
         <section id="dashboard">
           <h2>Dashboard: read the next action first</h2>
           <p>
-            The dashboard is an archive overview. It summarizes channel
-            coverage, queue pressure, storage pressure, runtime state, and the
-            next useful action.
+            On an empty workspace, the dashboard starts with the first channel
+            backup wizard. After a channel exists, it becomes an archive cockpit
+            that summarizes coverage, backup queue pressure, storage pressure,
+            runtime state, and the next useful action.
           </p>
           <div class="shot">
             <img src="./assets/user-manual/en/01-dashboard-cockpit.png" alt="Dashboard overview" />
@@ -509,10 +511,10 @@
             </div>
           </div>
           <ol>
-            <li>Select the channel in the <code>Current channel</code> switcher.</li>
-            <li>If <code>New video check</code> is non-zero, run sync first.</li>
-            <li>If <code>View progress</code> is non-zero, inspect the queue.</li>
-            <li>If runtime is off, use Settings before expecting real downloads.</li>
+            <li>If the workspace is empty, paste a channel URL, <code>@handle</code>, or <code>UC...</code> channel ID and click <code>Analyze channel</code>.</li>
+            <li>Review the plan card for video count, estimated size, save folder, preview videos, and safety notes.</li>
+            <li>Click <code>Start first backup</code> to register, sync, stage missing videos, and open the confirmation modal.</li>
+            <li>Only <code>Start up to 5</code> in the modal starts real downloads. If the download engine is off, open Settings first.</li>
           </ol>
         </section>
 
@@ -565,6 +567,7 @@
             <li><code>Worker is paused</code>: channel policy or maintenance mode blocks claims.</li>
             <li><code>Worker off</code>: enable runtime worker settings and complete apply/restart.</li>
             <li><code>0 claimable jobs</code>: there are no staged jobs that the worker can claim.</li>
+            <li><code>Open download settings</code>: use this shortcut from the confirmation modal when the engine is disabled.</li>
           </ul>
           <h3>archive.txt import</h3>
           <p>

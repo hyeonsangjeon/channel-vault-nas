@@ -440,8 +440,8 @@
           <div class="status-grid" aria-label="Manual scope summary">
             <div class="card">
               <span>핵심 흐름</span>
-              <strong>5단계</strong>
-              <p>등록, sync, 후보, 다운로드, 검증</p>
+              <strong>6단계</strong>
+              <p>분석, 검토, 등록, sync, 확인, 검증</p>
             </div>
             <div class="card">
               <span>안전장치</span>
@@ -464,45 +464,46 @@
         <section id="start">
           <h2>처음 10분: 이 순서대로 누르기</h2>
           <p>
-            처음에는 메뉴를 모두 이해하려 하지 않아도 됩니다. 아래 5개만 따라가면
-            “새 영상만 다운로드”라는 원래 목표까지 도달합니다.
+            빈 설치에서는 첫 채널 백업 wizard부터 시작합니다. YouTube 채널 URL,
+            <code>@handle</code>, <code>UC...</code> 채널 ID를 붙여넣고 백업 계획을
+            확인한 뒤, 실제 다운로드 직전의 확인 모달에서 멈출 수 있습니다.
           </p>
           <div class="flow-grid">
             <article class="step">
               <div class="step-number">1</div>
               <span>Dashboard</span>
-              <strong>대시보드에서 현재 채널과 준비도 확인</strong>
-              <p>좌측 메뉴의 대시보드에서 현재 채널, 미보관 수, 워커 상태, 저장소 압박을 먼저 봅니다.</p>
+              <strong>채널 URL, handle, 채널 ID 붙여넣기</strong>
+              <p>처음에는 설정 화면이나 탭을 찾지 말고 첫 채널 백업 wizard에서 시작합니다.</p>
             </article>
             <article class="step">
               <div class="step-number">2</div>
-              <span>Channels</span>
-              <strong>채널 상세에서 새 영상 확인</strong>
-              <p>채널 화면의 <code>새 영상 확인</code>을 눌러 metadata sync를 실행합니다.</p>
+              <span>분석</span>
+              <strong>등록 전에 채널을 먼저 확인</strong>
+              <p>채널명, 영상 수, 예상 용량, 저장 폴더, 첫 영상 목록, 안전 안내를 봅니다.</p>
             </article>
             <article class="step">
               <div class="step-number">3</div>
-              <span>Downloads</span>
-              <strong>새 영상만 다운로드 버튼으로 후보 생성</strong>
-              <p><code>이미 받은 영상은 건너뜀</code> 숫자를 보고, 실다운로드 전에 확인 모달을 검토합니다.</p>
+              <span>계획</span>
+              <strong>첫 채널 백업 시작 클릭</strong>
+              <p>앱이 필요하면 채널을 등록하고, metadata sync 후 미보관 영상만 준비한 다음 확인 모달을 엽니다.</p>
             </article>
             <article class="step">
               <div class="step-number">4</div>
-              <span>Queue</span>
-              <strong>큐에서 진행 상태 보기</strong>
-              <p>후보, 대기, 진행, 실패를 필터링하고 필요한 경우 retry/cancel/preflight를 수행합니다.</p>
+              <span>확인</span>
+              <strong>실제 다운로드는 모달에서만 시작</strong>
+              <p>다운로드 엔진이 켜져 있고 이번 pass가 맞을 때만 <code>최대 5개 시작</code>을 누릅니다.</p>
             </article>
             <article class="step">
               <div class="step-number">5</div>
-              <span>Library</span>
-              <strong>라이브러리에서 보관됨 확인</strong>
+              <span>Queue / Library</span>
+              <strong>진행을 보고 실제 파일 기준으로 확인</strong>
               <p>다운로드가 끝나면 라이브러리와 채널 커버리지의 보관 수가 실제 파일 기준으로 반영됩니다.</p>
             </article>
             <article class="step">
               <div class="step-number">!</div>
               <span>Safety</span>
-              <strong>실다운로드가 비활성이라면 정상일 수 있음</strong>
-              <p>워커가 꺼져 있거나 채널이 maintenance 상태면 후보 생성은 가능하지만 실제 claim은 막힙니다.</p>
+              <strong>safe demo는 보조 경로로 유지</strong>
+              <p>YouTube 호출 없는 로컬 fixture가 필요하면 접힌 safe demo와 가져오기 옵션을 사용합니다.</p>
             </article>
           </div>
 
@@ -516,8 +517,9 @@
         <section id="dashboard">
           <h2>대시보드: 오늘 눌러야 할 것만 보기</h2>
           <p>
-            대시보드는 깊은 설정 화면이 아니라 운영 Cockpit입니다. 현재 채널의 미보관 수,
-            큐 대기, 저장소 압박, 런타임 상태를 한 화면에서 읽습니다.
+            빈 workspace에서는 대시보드가 첫 채널 백업 wizard로 시작합니다. 채널이 등록된
+            뒤에는 운영 Cockpit으로 바뀌며 현재 채널의 커버리지, 백업 큐, 저장소 압박,
+            런타임 상태를 한 화면에서 읽습니다.
           </p>
           <div class="shot">
             <img src="./assets/user-manual/ko/01-dashboard-cockpit.png" alt="대시보드 개요 화면" />
@@ -527,10 +529,10 @@
             </div>
           </div>
           <ol>
-            <li><code>현재 채널</code> 드롭다운에서 운영할 채널을 고릅니다.</li>
-            <li><code>새 영상 확인</code> 카드가 0보다 크면 채널 sync부터 실행합니다.</li>
-            <li><code>진행 보기</code>가 0보다 크면 큐에 남은 작업을 확인합니다.</li>
-            <li><code>런타임 꺼짐</code>이면 Settings에서 워커/스케줄러를 켜야 실다운로드가 가능합니다.</li>
+            <li>비어 있는 workspace라면 채널 URL, <code>@handle</code>, <code>UC...</code> 채널 ID를 붙여넣고 <code>채널 분석</code>을 누릅니다.</li>
+            <li>계획 카드에서 영상 수, 예상 용량, 저장 폴더, 미리보기 영상, 안전 안내를 확인합니다.</li>
+            <li><code>첫 채널 백업 시작</code>을 누르면 등록, sync, 미보관 영상 준비 후 확인 모달이 열립니다.</li>
+            <li>실제 다운로드는 모달의 <code>최대 5개 시작</code>에서만 시작됩니다. 엔진이 꺼져 있으면 Settings를 먼저 엽니다.</li>
           </ol>
         </section>
 
@@ -581,6 +583,7 @@
             <li><code>Worker is paused</code>: 채널 정책이나 런타임 설정에서 worker claim이 막혀 있습니다.</li>
             <li><code>실전 워커 꺼짐</code>: Settings에서 워커를 켜고 apply/restart 흐름을 완료해야 합니다.</li>
             <li><code>잡을 작업 0</code>: 후보가 없거나 이미 보관된 파일로 판정된 상태입니다.</li>
+            <li><code>다운로드 설정 열기</code>: 엔진이 꺼져 있으면 확인 모달의 이 버튼으로 바로 이동합니다.</li>
           </ul>
           <h3>archive.txt 가져오기</h3>
           <p>
