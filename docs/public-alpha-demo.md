@@ -72,10 +72,13 @@ docs/assets/demo/channel-vault-public-alpha.webm
 
 ## In-App Safe Demo Workspace
 
-Fresh empty installs can load the same kind of operator story from the UI.
-Dashboard offers a safe demo action that creates a `Signal Lab` channel, one
-indexed media file, missing-video candidates, queue audit, scheduler ticks,
-library sidecars, storage drift, and orphan sidecars.
+Fresh empty installs now lead with the first channel backup wizard: paste a
+channel URL, `@handle`, or `UC...` channel ID, analyze the source, review the
+backup plan, and stop at the real-download confirmation modal. Public demos can
+still load the same kind of operator story from the secondary safe demo panel.
+That action creates a `Signal Lab` channel, one indexed media file,
+missing-video candidates, queue audit, scheduler ticks, library sidecars,
+storage drift, and orphan sidecars.
 
 This path is safe for screenshots and first-run evaluation:
 
@@ -108,18 +111,24 @@ For a local public walkthrough:
    the token in recordings, livestreams, or screenshots.
 3. Open Dashboard and point out readiness, operations, the clean-install
    gate, and the onboarding proof export.
-4. On an empty workspace, load the safe demo to show the full app without external calls.
-5. Open Channels and show registration probing before anything is downloaded.
-6. Open a channel detail and move through Overview, Downloads, Library, Logs, and Policy.
-7. In Downloads, show the archive.txt-style split between already archived and missing videos.
-8. Run preflight and copy or inspect the exact `yt-dlp` command preview.
-9. Keep live downloads disabled unless this is a controlled operator demo.
-10. Open Queue and show claimable, blocked, failed, retry, and job detail states.
-11. Open Library and show saved views, sidecar fidelity, codec/profile metadata, and media detail.
-12. Open Insights and show real storage scan, drift, pressure trend, orphan sidecars, and quarantine.
-13. Open Settings and show runtime flags, scheduler tick drawers, restart
+4. On an empty workspace, paste a channel URL, `@handle`, or `UC...` channel ID
+   into the first backup wizard and analyze it before anything is registered.
+5. Review the channel name, video count, estimated size, save folder, preview
+   videos, and safety notes.
+6. Click **Start first backup** to register, sync, create candidates, inspect the
+   worker plan, and stop at the confirmation modal.
+7. For a no-network public walkthrough, expand the secondary safe demo panel and
+   load `Signal Lab` without external calls.
+8. Open a channel detail and move through Overview, Downloads, Library, Logs, and Policy.
+9. In Downloads, show the archive.txt-style split between already archived and missing videos.
+10. Run preflight and copy or inspect the exact `yt-dlp` command preview.
+11. Keep live downloads disabled unless this is a controlled operator demo.
+12. Open Queue and show claimable, blocked, failed, retry, and job detail states.
+13. Open Library and show saved views, sidecar fidelity, codec/profile metadata, and media detail.
+14. Open Insights and show real storage scan, drift, pressure trend, orphan sidecars, and quarantine.
+15. Open Settings and show runtime flags, scheduler tick drawers, restart
     adapters, backup confidence, and support exports.
-14. Return to Dashboard and copy/download the onboarding proof. Confirm it
+16. Return to Dashboard and copy/download the onboarding proof. Confirm it
     is a redacted readiness snapshot, not an archive export or a secret dump.
 
 ## Real Download Guardrail

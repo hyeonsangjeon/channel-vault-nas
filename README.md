@@ -60,8 +60,10 @@ docker compose pull
 docker compose up -d --no-build
 ```
 
-Open `http://127.0.0.1:5173/` and click **Load safe demo** to see the
-Dashboard, Channels, Queue, Library, Insights, and Settings consoles.
+Open `http://127.0.0.1:5173/`, paste a YouTube channel URL, `@handle`, or
+`UC...` channel ID into **Start your first channel backup**, then click
+**Analyze channel**. To explore without touching YouTube, expand the secondary
+**Safe demo and advanced import options** panel instead.
 
 > Guardrail: this self-hosted release is built for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose it directly to the public internet.
@@ -512,12 +514,17 @@ outside your private network.
 Deployment examples for private LAN or tunnel access are in
 [`docs/deployment-security.md`](docs/deployment-security.md).
 
-### Safe First-Run Demo
+### First-Run Wizard And Safe Demo
 
-On a fresh empty workspace, the Dashboard first-run panel includes a safe demo
-workspace action. It seeds a deterministic `Signal Lab` channel, one archived
-media item, missing-video candidates, queue history, scheduler ticks, library
-sidecars, storage drift, and orphan sidecars.
+On a fresh empty workspace, the Dashboard first-run panel leads with the first
+channel backup wizard. Paste a channel URL, `@handle`, or `UC...` channel ID,
+analyze the source, review the estimated backup plan, then click **Start first
+backup** to register, sync, stage missing videos, and stop at the real-download
+confirmation modal.
+
+The secondary safe demo workspace action seeds a deterministic `Signal Lab`
+channel, one archived media item, missing-video candidates, queue history,
+scheduler ticks, library sidecars, storage drift, and orphan sidecars.
 
 The demo path does not call YouTube and does not start downloads. It is intended
 for first impressions, screenshots, public walkthroughs, and contributor
@@ -594,12 +601,12 @@ Worker passes are intentionally bounded:
 
 1. Start with Docker Compose or the local development commands above.
 2. Open Dashboard and confirm the release readiness card, live event pill, and clean-install gate.
-3. If the workspace is empty, click the safe demo action to load `Signal Lab` without external calls.
-4. For a live source, go to Channels, paste a channel URL or handle, then probe before registering.
-5. Click Sync to detect source videos and open the channel detail tabs.
-6. Open Downloads and review “already archived” versus “missing” before queueing.
-7. Queue only missing videos and inspect the generated `yt-dlp` command preview.
-8. Run a live worker pass only if `CVN_DOWNLOAD_WORKER_ENABLED=true`.
+3. If the workspace is empty, paste a channel URL, `@handle`, or `UC...` channel ID into the first backup wizard and analyze it before anything is registered.
+4. Review the channel name, video count, estimated size, save folder, first preview videos, and safety notes.
+5. Click **Start first backup** to register, sync, stage missing videos, and open the confirmation modal.
+6. Run a live worker pass only if `CVN_DOWNLOAD_WORKER_ENABLED=true` and the modal button is enabled.
+7. For a no-network walkthrough, expand the secondary safe demo panel and load `Signal Lab` without external calls.
+8. Open Downloads and review “already archived” versus “missing” before queueing more work.
 9. Open Queue to watch progress, failures, retries, and worker audit detail.
 10. Open Library and confirm completed media/index coverage changed.
 11. Open Insights to inspect storage pressure, drift, and orphan sidecars.

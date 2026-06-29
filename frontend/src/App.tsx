@@ -191,6 +191,7 @@ const qualityOptions = ["720p", "1080p", "best"];
 const DEMO_WORKSPACE_EXTERNAL_ID = "UC_CVN_DEMO_SIGNAL";
 const workerSlowRunThresholdSeconds = 10;
 type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
+type FirstBackupWizardStatus = "idle" | "analyzing" | "ready" | "planning" | "planned" | "error";
 type NavId = "dashboard" | "channels" | "library" | "queue" | "insights" | "settings";
 
 const navItems: { key: TranslationKey; id: NavId }[] = [
@@ -478,13 +479,14 @@ function App() {
   const { language, setLanguage, t } = useI18n();
   const initialRoute = useMemo(() => readAppRouteFromHash(), []);
   const [activeNavId, setActiveNavId] = useState<NavId>(initialRoute?.nav ?? "dashboard");
-  const [sourceValue, setSourceValue] = useState("https://www.youtube.com/@wingnut987s4");
+  const [sourceValue, setSourceValue] = useState("");
   const [maxQuality, setMaxQuality] = useState("1080p");
   const [audioOnly, setAudioOnly] = useState(false);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [probe, setProbe] = useState<ChannelProbeResult | null>(null);
   const [registration, setRegistration] = useState<ChannelRegistrationResult | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<"idle" | "probing" | "ready" | "committing" | "registered" | "error">("idle");
+  const [firstBackupStatus, setFirstBackupStatus] = useState<FirstBackupWizardStatus>("idle");
   const [registrationError, setRegistrationError] = useState("");
   const [channelDetail, setChannelDetail] = useState<ChannelDetail | null>(null);
   const [channelPolicy, setChannelPolicy] = useState<ChannelPolicy | null>(null);
@@ -699,6 +701,7 @@ function App() {
     window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
   }, [commandPaletteOpen]);
 
+  const sourceValueTrimmed = sourceValue.trim();
   const activeProbe = registration?.probe ?? probe;
   const registeredChannelId = registration?.channel.id ?? activeProbe?.existing_channel_id ?? selectedChannelId;
   const activeTitle = channelDetail?.title ?? activeProbe?.title ?? "wingnut987S";
@@ -1100,8 +1103,25 @@ function App() {
   const archiveTxtRunBlocked =
     !workerPlan?.enabled || Boolean(workerPlan?.locked_reason) || archiveTxtRunLimit === 0 || archiveTxtRunStatus === "running";
   const liveRunLimit = Math.min(5, Math.max(workerPlan?.claimable_count ?? 0, nextDownloadJobs.length, activeMissingCount));
+  const liveDownloadEngineBlocked = workerPlan ? !workerPlan.enabled || Boolean(workerPlan.locked_reason) : false;
   const liveDownloadBlocked =
-    !workerPlan?.enabled || Boolean(workerPlan?.locked_reason) || liveRunLimit === 0 || liveDownloadStatus === "running";
+    !workerPlan || liveDownloadEngineBlocked || liveRunLimit === 0 || liveDownloadStatus === "running";
+  const firstBackupStepIndex =
+    firstBackupStatus === "planned"
+      ? 3
+      : firstBackupStatus === "planning"
+        ? 2
+        : activeProbe
+          ? 1
+          : firstBackupStatus === "analyzing"
+            ? 0
+            : 0;
+  const firstBackupAnalyzeDisabled =
+    !sourceValueTrimmed || firstBackupStatus === "analyzing" || firstBackupStatus === "planning";
+  const firstBackupPlanDisabled =
+    !activeProbe || firstBackupStatus === "analyzing" || firstBackupStatus === "planning";
+  const firstBackupPreviewVideos = activeProbe?.videos.slice(0, 3) ?? [];
+  const firstBackupFolderLabel = activeProbe ? `/downfolder/${activeProbe.folder_preview.channel_dir}` : t("firstBackup.folder.pending");
   const actionableQueueJobs = useMemo(() => downloadJobs.filter(isSelectableQueueJob), [downloadJobs]);
   const preflightPlanStatusByJobId = useMemo(() => {
     const statuses = new Map<number, string>();
@@ -1615,7 +1635,7 @@ function App() {
     .replace("{bytes}", library?.total_label ?? "0 MB");
 
   const registrationPayload: ChannelRegistrationPayload = {
-    value: sourceValue,
+    value: sourceValueTrimmed,
     max_quality: maxQuality,
     audio_only: audioOnly,
     subtitles_enabled: subtitlesEnabled,
@@ -1907,10 +1927,7 @@ function App() {
     };
   }, [registeredChannelId, t]);
 
-  async function handleProbe(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setRegistrationStatus("probing");
-    setRegistrationError("");
+  function resetChannelDraftState() {
     setRegistration(null);
     setSelectedChannelId(null);
     setChannelDetail(null);
@@ -1927,14 +1944,41 @@ function App() {
     setLibrary(null);
     setWorkerPlan(null);
     setWorkflowMessage("");
+  }
+
+  async function runChannelProbe(mode: "registration" | "first-backup") {
+    if (!sourceValueTrimmed) {
+      setRegistrationError(t("firstBackup.error.empty"));
+      setRegistrationStatus("error");
+      if (mode === "first-backup") setFirstBackupStatus("error");
+      return null;
+    }
+    setRegistrationStatus("probing");
+    if (mode === "first-backup") setFirstBackupStatus("analyzing");
+    setRegistrationError("");
+    resetChannelDraftState();
     try {
       const result = await probeChannel(registrationPayload);
       setProbe(result);
       setRegistrationStatus("ready");
+      if (mode === "first-backup") setFirstBackupStatus("ready");
+      return result;
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : t("registration.error.generic"));
       setRegistrationStatus("error");
+      if (mode === "first-backup") setFirstBackupStatus("error");
+      return null;
     }
+  }
+
+  async function handleProbe(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runChannelProbe("registration");
+  }
+
+  async function handleFirstBackupAnalyze(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runChannelProbe("first-backup");
   }
 
   async function handleCommit() {
@@ -1950,6 +1994,69 @@ function App() {
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : t("registration.error.generic"));
       setRegistrationStatus("error");
+    }
+  }
+
+  async function handleStartFirstBackupPlan() {
+    let probeResult = activeProbe;
+    if (!probeResult) {
+      probeResult = await runChannelProbe("first-backup");
+      if (!probeResult) return;
+    }
+
+    setFirstBackupStatus("planning");
+    setRegistrationError("");
+    setWorkflowStatus("syncing");
+    setWorkflowMessage("");
+    setLiveDownloadStatus("idle");
+    try {
+      let channelId = registration?.channel.id ?? probeResult.existing_channel_id ?? null;
+      let registrationResult: ChannelRegistrationResult | null = null;
+      if (!channelId) {
+        setRegistrationStatus("committing");
+        registrationResult = await registerChannel(registrationPayload);
+        channelId = registrationResult.channel.id;
+        setRegistrationStatus("registered");
+      }
+
+      await syncChannel(channelId, {
+        max_quality: maxQuality,
+        audio_only: audioOnly,
+        subtitles_enabled: subtitlesEnabled,
+      });
+      const candidateResult = await createDownloadCandidates(channelId, maxQuality);
+      applyDownloadJobs(candidateResult.jobs);
+      setPreflightPlan(null);
+      setSelectedJobIds(candidateResult.jobs.filter(isLaunchableJob).map((job) => job.id));
+      const workerSnapshot = await getDownloadWorkerPlan(channelId, 5);
+      setWorkerPlan(workerSnapshot);
+      if (registrationResult) {
+        setRegistration(registrationResult);
+        setProbe(registrationResult.probe);
+      } else {
+        setRegistrationStatus("registered");
+      }
+      setSelectedChannelId(channelId);
+      await loadChannelState(channelId);
+      setWorkerPlan(workerSnapshot);
+      setActiveNavId("channels");
+      setActiveChannelTab("downloads");
+      writeAppHash({ nav: "channels", channelTab: "downloads", channelId }, "push");
+      setFirstBackupStatus("planned");
+      setWorkflowStatus("idle");
+      setWorkflowMessage(
+        t("firstBackup.planned").replace(
+          "{count}",
+          String(candidateResult.total_candidates || candidateResult.candidates_created || candidateResult.jobs.length),
+        ),
+      );
+      setLiveDownloadConfirmOpen(true);
+    } catch (error) {
+      if (handleAuthFailure(error)) return;
+      setFirstBackupStatus("error");
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+      setRegistrationError(error instanceof Error ? error.message : t("registration.error.generic"));
     }
   }
 
@@ -2733,6 +2840,17 @@ function App() {
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
     }
+  }
+
+  function handleOpenDownloadSettings() {
+    setLiveDownloadConfirmOpen(false);
+    setArchiveTxtRunConfirmOpen(false);
+    setActiveNavId("settings");
+    writeAppHash({ nav: "settings", runtimeGuide: true }, "push");
+    window.setTimeout(() => {
+      scrollToAppSection(".runtime-console");
+      void handleOpenRuntimeGuide();
+    }, 0);
   }
 
   function handleOpenLiveDownloadConfirm() {
@@ -6005,36 +6123,200 @@ function App() {
             ) : null}
 
             {!hasAnyRegisteredChannel ? (
-              <section className="first-source-panel first-source-panel-focus" aria-label={t("firstRun.empty.aria")}>
-                <div className="first-source-head">
+              <section className="first-source-panel first-source-panel-focus first-backup-wizard" aria-label={t("firstBackup.aria")}>
+                <div className="first-backup-head">
                   <div>
-                    <p className="panel-kicker">{t("firstRun.empty.kicker")}</p>
-                    <h2>{t("firstRun.empty.title")}</h2>
-                    <span>{t("firstRun.empty.subtitle")}</span>
+                    <p className="panel-kicker">{t("firstBackup.kicker")}</p>
+                    <h2>{t("firstBackup.title")}</h2>
+                    <span>{t("firstBackup.subtitle")}</span>
+                  </div>
+                  <div className="first-backup-stepper" aria-label={t("firstBackup.steps.aria")}>
+                    {[0, 1, 2].map((step) => (
+                      <span className={firstBackupStepIndex >= step ? "active" : ""} key={step}>
+                        {step + 1}
+                      </span>
+                    ))}
                   </div>
                 </div>
+                <form className="first-backup-command" onSubmit={handleFirstBackupAnalyze}>
+                  <label className="source-input-shell" aria-label={t("firstBackup.input.aria")}>
+                    <Link2 size={18} />
+                    <input
+                      onChange={(event) => {
+                        setSourceValue(event.target.value);
+                        if (firstBackupStatus === "error") setFirstBackupStatus("idle");
+                      }}
+                      placeholder={t("firstBackup.input.placeholder")}
+                      value={sourceValue}
+                    />
+                  </label>
+                  <button className="primary-action" disabled={firstBackupAnalyzeDisabled} type="submit">
+                    <Search size={16} />
+                    {firstBackupStatus === "analyzing" ? t("firstBackup.analyzing") : t("firstBackup.analyze")}
+                  </button>
+                </form>
+                <div className="first-backup-hints">
+                  <span>
+                    <CheckCircle2 size={13} />
+                    {t("firstBackup.sample")}
+                  </span>
+                  <span>
+                    <ShieldCheck size={13} />
+                    {t("firstBackup.noAutoDownload")}
+                  </span>
+                </div>
+                <details className="first-backup-advanced">
+                  <summary>
+                    <SlidersHorizontal size={14} />
+                    {t("firstBackup.advanced")}
+                  </summary>
+                  <div className="first-backup-options">
+                    <span>{t("registration.quality")}</span>
+                    <div className="quality-segment">
+                      {qualityOptions.map((quality) => (
+                        <button
+                          className={quality === maxQuality ? "active" : ""}
+                          key={quality}
+                          onClick={() => setMaxQuality(quality)}
+                          type="button"
+                        >
+                          {quality}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      className={`registration-toggle ${audioOnly ? "active" : ""}`}
+                      onClick={() => setAudioOnly((value) => !value)}
+                      type="button"
+                    >
+                      <Waves size={15} />
+                      {t("registration.audioOnly")}
+                    </button>
+                    <button
+                      className={`registration-toggle ${subtitlesEnabled ? "active" : ""}`}
+                      onClick={() => setSubtitlesEnabled((value) => !value)}
+                      type="button"
+                    >
+                      <FileText size={15} />
+                      {t("registration.subtitles")}
+                    </button>
+                  </div>
+                </details>
                 {workflowMessage ? (
                   <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
                 ) : null}
-                <article className="first-source-hero demo-seed-card">
-                  <div>
-                    <Database size={20} />
-                    <div>
-                      <strong>{t("firstRun.demo.title")}</strong>
-                      <span>{t("firstRun.demo.detail")}</span>
-                    </div>
-                  </div>
-                  <button disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
-                    {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
-                    <ChevronRight size={15} />
-                  </button>
-                </article>
-                <div className="first-source-action-row">
-                  <button className="first-source-secondary" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
-                    <Link2 size={15} />
-                    {t("firstRun.empty.primary")}
-                  </button>
+                {registrationError ? <span className="workflow-message first-source-message error">{registrationError}</span> : null}
+                <div className={`first-backup-plan ${activeProbe ? "ready" : "idle"}`} aria-live="polite">
+                  {activeProbe ? (
+                    <>
+                      <div className="first-backup-channel-card">
+                        <div className="channel-avatar">{activeInitials}</div>
+                        <div>
+                          <p className="panel-kicker">{t("firstBackup.plan.kicker")}</p>
+                          <h3>{activeProbe.title}</h3>
+                          <span>
+                            {activeProbe.handle ?? activeProbe.external_id ?? activeProbe.normalized.identifier} · {activeProbe.normalized.identifier_type}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="first-backup-metrics">
+                        <article>
+                          <span>{t("firstBackup.metric.videos")}</span>
+                          <strong>{activeProbe.video_count}</strong>
+                        </article>
+                        <article>
+                          <span>{t("firstBackup.metric.toBackUp")}</span>
+                          <strong>{activeProbe.video_count}</strong>
+                        </article>
+                        <article>
+                          <span>{t("firstBackup.metric.storage")}</span>
+                          <strong>{activeProbe.storage_forecast.estimated_label}</strong>
+                        </article>
+                        <article>
+                          <span>{t("firstBackup.metric.folder")}</span>
+                          <strong>{firstBackupFolderLabel}</strong>
+                        </article>
+                      </div>
+                      <div className="first-backup-safety">
+                        <ShieldCheck size={16} />
+                        <div>
+                          <strong>{t("firstBackup.safety.title")}</strong>
+                          <span>{t("firstBackup.safety.detail")}</span>
+                        </div>
+                      </div>
+                      <div className="first-backup-video-list" aria-label={t("firstBackup.preview.aria")}>
+                        {firstBackupPreviewVideos.map((video) => (
+                          <span key={video.external_id}>
+                            <Film size={13} />
+                            {video.title}
+                          </span>
+                        ))}
+                        {firstBackupPreviewVideos.length === 0 ? <p className="empty-copy">{t("firstBackup.preview.empty")}</p> : null}
+                      </div>
+                      <button
+                        className="primary-action first-backup-start"
+                        disabled={firstBackupPlanDisabled}
+                        onClick={() => void handleStartFirstBackupPlan()}
+                        type="button"
+                      >
+                        <Rocket size={16} />
+                        {firstBackupStatus === "planning" ? t("firstBackup.planning") : t("firstBackup.start")}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="first-backup-idle-copy">
+                        <Sparkles size={18} />
+                        <div>
+                          <strong>{t("firstBackup.idle.title")}</strong>
+                          <span>{t("firstBackup.idle.detail")}</span>
+                        </div>
+                      </div>
+                      <div className="first-backup-idle-steps">
+                        <article>
+                          <Search size={15} />
+                          <strong>{t("firstBackup.step.analyze")}</strong>
+                          <span>{t("firstBackup.step.analyzeDetail")}</span>
+                        </article>
+                        <article>
+                          <ShieldCheck size={15} />
+                          <strong>{t("firstBackup.step.review")}</strong>
+                          <span>{t("firstBackup.step.reviewDetail")}</span>
+                        </article>
+                        <article>
+                          <Rocket size={15} />
+                          <strong>{t("firstBackup.step.confirm")}</strong>
+                          <span>{t("firstBackup.step.confirmDetail")}</span>
+                        </article>
+                      </div>
+                    </>
+                  )}
                 </div>
+                <details className="first-backup-secondary">
+                  <summary>
+                    <ChevronRight size={14} />
+                    {t("firstBackup.secondary")}
+                  </summary>
+                  <article className="first-source-hero demo-seed-card">
+                    <div>
+                      <Database size={20} />
+                      <div>
+                        <strong>{t("firstRun.demo.title")}</strong>
+                        <span>{t("firstRun.demo.detail")}</span>
+                      </div>
+                    </div>
+                    <button disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
+                      {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
+                      <ChevronRight size={15} />
+                    </button>
+                  </article>
+                  <div className="first-source-action-row">
+                    <button className="first-source-secondary" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                      <Link2 size={15} />
+                      {t("firstRun.empty.primary")}
+                    </button>
+                  </div>
+                </details>
                 <section className={`operator-checks-panel ${operatorChecksOpen ? "open" : ""}`} aria-label={t("firstRun.operatorChecks.aria")}>
                   <button className="operator-checks-toggle" onClick={() => setOperatorChecksOpen((open) => !open)} type="button">
                     <span>
@@ -9850,11 +10132,21 @@ function App() {
               ))}
               {nextDownloadJobs.length === 0 ? <p className="empty-copy">{t("worker.liveConfirm.empty")}</p> : null}
             </div>
-            {workerPlan?.locked_reason ? <code className="worker-lock">{workerPlan.locked_reason}</code> : null}
+            {workerPlan?.locked_reason ? (
+              <code className="worker-lock">{workerPlan.locked_reason}</code>
+            ) : workerPlan && !workerPlan.enabled ? (
+              <code className="worker-lock">{t("firstBackup.engine.disabled")}</code>
+            ) : null}
             <div className="download-confirm-actions">
               <button className="command-button" onClick={() => setLiveDownloadConfirmOpen(false)} type="button">
                 {t("worker.liveCancel")}
               </button>
+              {liveDownloadEngineBlocked ? (
+                <button className="command-button" onClick={handleOpenDownloadSettings} type="button">
+                  <Settings size={14} />
+                  {t("firstBackup.openSettings")}
+                </button>
+              ) : null}
               <button
                 className="primary-action"
                 disabled={liveDownloadBlocked}
