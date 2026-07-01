@@ -1,5 +1,5 @@
 {
-  "total": 309,
+  "total": 314,
   "leadIn": 1,
   "segments": [
     {
@@ -24,42 +24,42 @@
       "id": "03-firstrun",
       "route": "firstrun",
       "start": 46,
-      "dur": 22,
-      "maxNarr": 12.05,
+      "dur": 27,
+      "maxNarr": 25.0,
       "leadIn": 1,
       "fits": true
     },
     {
       "id": "03b-overview",
       "route": "overview",
-      "start": 68,
+      "start": 73,
       "dur": 27,
-      "maxNarr": 17.34,
+      "maxNarr": 17.06,
       "leadIn": 1,
       "fits": true
     },
     {
       "id": "04-register",
       "route": "register",
-      "start": 95,
+      "start": 100,
       "dur": 44,
-      "maxNarr": 22.21,
+      "maxNarr": 26.97,
       "leadIn": 1,
       "fits": true
     },
     {
       "id": "05-progress",
       "route": "progress",
-      "start": 139,
+      "start": 144,
       "dur": 56,
-      "maxNarr": 18.57,
+      "maxNarr": 20.16,
       "leadIn": 1,
       "fits": true
     },
     {
       "id": "06-library",
       "route": "library",
-      "start": 195,
+      "start": 200,
       "dur": 36,
       "maxNarr": 16.94,
       "leadIn": 1,
@@ -68,7 +68,7 @@
     {
       "id": "07-insights",
       "route": "insights",
-      "start": 231,
+      "start": 236,
       "dur": 34,
       "maxNarr": 15.31,
       "leadIn": 1,
@@ -77,7 +77,7 @@
     {
       "id": "08-settings",
       "route": "settings",
-      "start": 265,
+      "start": 270,
       "dur": 26,
       "maxNarr": 14.78,
       "leadIn": 1,
@@ -86,7 +86,7 @@
     {
       "id": "09-outro",
       "route": "outro",
-      "start": 291,
+      "start": 296,
       "dur": 18,
       "maxNarr": 15.69,
       "leadIn": 1,

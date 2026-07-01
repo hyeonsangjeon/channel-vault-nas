@@ -23,6 +23,7 @@ const fontFor = {
   ko: `"Apple SD Gothic Neo", "Helvetica Neue", sans-serif`,
   ja: `"Hiragino Sans", "Hiragino Kaku Gothic Pro", sans-serif`,
   zh: `"PingFang SC", "Hiragino Sans GB", sans-serif`,
+  hi: `"Kohinoor Devanagari", "Devanagari MT", "Helvetica Neue", sans-serif`,
 };
 const fallbackFont = `-apple-system, "Apple SD Gothic Neo", "Hiragino Sans", "PingFang SC", sans-serif`;
 

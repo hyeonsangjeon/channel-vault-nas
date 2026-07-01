@@ -6,13 +6,15 @@
       "en",
       "ko",
       "ja",
-      "zh"
+      "zh",
+      "hi"
     ],
     "voices": {
       "en": "Samantha",
       "ko": "Yuna",
       "ja": "Kyoko",
-      "zh": "Tingting"
+      "zh": "Tingting",
+      "hi": "Lekha"
     }
   },
   "segments": [
@@ -24,13 +26,15 @@
         "en": "Channel Vault NAS — archive your own YouTube channel to your NAS",
         "ko": "Channel Vault NAS — 내 유튜브 채널을 우리집 NAS에 백업",
         "ja": "Channel Vault NAS — 自分の YouTube チャンネルを NAS に保存",
-        "zh": "Channel Vault NAS — 把你的 YouTube 频道备份到自己的 NAS"
+        "zh": "Channel Vault NAS — 把你的 YouTube 频道备份到自己的 NAS",
+        "hi": "Channel Vault NAS — अपने YouTube चैनल को अपने NAS पर बैकअप करें"
       },
       "narration": {
         "en": "Channel Vault NAS archives your own YouTube channels to your NAS. In about five minutes, you will install it, add a channel, and watch a backup run.",
         "ko": "Channel Vault NAS는 내 유튜브 채널을 집에 있는 NAS에 백업하는 도구예요. 약 오 분 안에 설치하고, 채널을 추가하고, 백업이 도는 것까지 보여드릴게요.",
         "ja": "Channel Vault NAS は、自分の YouTube チャンネルを NAS に保存するツールです。約五分で、インストールし、チャンネルを追加し、バックアップの実行までご覧いただきます。",
-        "zh": "Channel Vault NAS 可以把你自己的 YouTube 频道备份到家里的 NAS。大约五分钟，你就能完成安装、添加频道，并看到备份运行。"
+        "zh": "Channel Vault NAS 可以把你自己的 YouTube 频道备份到家里的 NAS。大约五分钟，你就能完成安装、添加频道，并看到备份运行。",
+        "hi": "Channel Vault NAS आपके अपने YouTube चैनलों को आपके NAS पर बैकअप करता है। लगभग पाँच मिनट में, आप इसे इंस्टॉल करेंगे, एक चैनल जोड़ेंगे, और बैकअप चलते हुए देखेंगे।"
       }
     },
     {
@@ -41,13 +45,15 @@
         "en": "Step 1 — Install: git clone, cd, docker compose up -d. Open http://127.0.0.1:5173",
         "ko": "1단계 — 설치: git clone, cd, docker compose up -d. http://127.0.0.1:5173 접속",
         "ja": "ステップ1 — インストール: git clone、cd、docker compose up -d。http://127.0.0.1:5173 を開く",
-        "zh": "第 1 步 — 安装：git clone、cd、docker compose up -d。打开 http://127.0.0.1:5173"
+        "zh": "第 1 步 — 安装：git clone、cd、docker compose up -d。打开 http://127.0.0.1:5173",
+        "hi": "चरण 1 — इंस्टॉल: git clone, cd, docker compose up -d। http://127.0.0.1:5173 खोलें"
       },
       "narration": {
         "en": "First, install it. Clone the repository, change into the folder, then run docker compose up. The whole console runs inside Docker, so there is nothing else to set up. When it finishes, open the web console in your browser at the address shown here.",
         "ko": "먼저 설치합니다. 저장소를 clone 하고, 폴더로 이동한 뒤, docker compose up 을 실행하세요. 콘솔 전체가 Docker 안에서 돌기 때문에 따로 설정할 게 없어요. 끝나면 화면에 나온 주소로 브라우저에서 웹 콘솔을 여세요.",
         "ja": "まずインストールします。リポジトリをクローンし、フォルダに移動して、docker compose up を実行します。コンソール全体が Docker の中で動くので、ほかに設定は要りません。完了したら、画面に表示されたアドレスをブラウザで開きます。",
-        "zh": "首先安装。克隆仓库，进入文件夹，然后运行 docker compose up。整个控制台都在 Docker 里运行，不需要额外配置。完成后，在浏览器打开屏幕上显示的地址。"
+        "zh": "首先安装。克隆仓库，进入文件夹，然后运行 docker compose up。整个控制台都在 Docker 里运行，不需要额外配置。完成后，在浏览器打开屏幕上显示的地址。",
+        "hi": "सबसे पहले, इसे इंस्टॉल करें। रिपॉज़िटरी clone करें, फ़ोल्डर में जाएँ, फिर docker compose up चलाएँ। पूरा console, Docker के अंदर चलता है, इसलिए और कुछ सेट करने की ज़रूरत नहीं है। पूरा होने पर, स्क्रीन पर दिखाए गए पते पर ब्राउज़र में web console खोलें।"
       }
     },
     {
@@ -55,16 +61,18 @@
       "route": "firstrun",
       "min": 22,
       "caption": {
-        "en": "Step 2 — First run is empty. Click “Load safe demo” to explore with sample data (no downloads)",
-        "ko": "2단계 — 첫 실행은 비어 있어요. “Load safe demo”를 눌러 샘플 데이터로 둘러보기 (다운로드 없음)",
-        "ja": "ステップ2 — 初回は空です。“Load safe demo” を押してサンプルで確認（ダウンロードなし）",
-        "zh": "第 2 步 — 首次运行是空的。点击 “Load safe demo” 用示例数据体验（无下载）"
+        "en": "Step 2 — Start your first channel backup: paste your channel URL or @handle, then click Analyze channel",
+        "ko": "2단계 — 첫 채널 백업 시작: 채널 주소나 @핸들을 붙여넣고 “Analyze channel”을 누르세요",
+        "ja": "ステップ2 — 最初のチャンネルバックアップ: URL か @ハンドルを貼り付け、“Analyze channel” を押す",
+        "zh": "第 2 步 — 开始首次频道备份：粘贴频道网址或 @用户名，然后点击 “Analyze channel”",
+        "hi": "चरण 2 — पहला channel backup शुरू करें: चैनल URL या @handle पेस्ट करें, फिर “Analyze channel” दबाएँ"
       },
       "narration": {
-        "en": "On the first run, the console is empty. That is normal. Click Load safe demo to explore with sample data first. No downloads happen, so it is completely safe to click around.",
-        "ko": "처음 실행하면 콘솔이 비어 있어요. 정상이에요. Load safe demo 를 눌러 샘플 데이터로 먼저 둘러보세요. 다운로드는 전혀 일어나지 않으니 마음껏 눌러봐도 안전해요.",
-        "ja": "初回起動時、コンソールは空です。正常です。Load safe demo を押して、まずサンプルデータで確認しましょう。ダウンロードは起きないので、安心して触れます。",
-        "zh": "首次运行时，控制台是空的，这很正常。点击 Load safe demo，先用示例数据体验。不会有任何下载，可以放心随意点击。"
+        "en": "On the first run, the console opens the first backup wizard. Paste your own channel — a URL, an at-handle, or a UC channel ID — then click Analyze channel. Nothing downloads yet; Channel Vault only inspects the source. A safe demo is tucked below if you would rather explore with sample data first.",
+        "ko": "처음 실행하면 콘솔이 첫 백업 위저드를 열어요. 내 채널을 붙여넣으세요. 주소나 @핸들, 또는 UC 채널 아이디면 돼요. 그리고 Analyze channel 을 누르세요. 아직 아무것도 다운로드되지 않고, 소스만 확인해요. 샘플로 먼저 둘러보고 싶으면 아래에 안전한 데모가 숨어 있어요.",
+        "ja": "初回起動では、コンソールが最初のバックアップウィザードを開きます。自分のチャンネルを貼り付けます。URL でも、@ハンドルでも、UC チャンネル ID でも構いません。そして Analyze channel を押します。まだ何もダウンロードされず、ソースを確認するだけです。まずサンプルで試したい場合は、下に安全なデモがあります。",
+        "zh": "首次运行时，控制台会打开首次备份向导。粘贴你自己的频道——网址、@用户名，或 UC 频道 ID 都可以，然后点击 Analyze channel。此时不会下载任何东西，Channel Vault 只是检查来源。如果你想先用示例数据体验，下方还藏着一个安全演示。",
+        "hi": "पहली बार चलाने पर, console, first backup wizard खोलता है। अपना चैनल पेस्ट करें — URL, @handle, या UC channel ID। फिर Analyze channel दबाएँ। अभी कुछ भी download नहीं होता; Channel Vault सिर्फ़ source की जाँच करता है। अगर आप पहले sample data के साथ देखना चाहें, तो नीचे एक safe demo भी छिपा है।"
       }
     },
     {
@@ -72,16 +80,18 @@
       "route": "overview",
       "min": 26,
       "caption": {
-        "en": "The Dashboard is your command deck — the runway shows 5 steps from source to archived media",
-        "ko": "Dashboard는 관제 데스크예요 — 런웨이가 소스부터 백업까지 5단계를 보여줘요",
-        "ja": "Dashboard は司令デッキ — ランウェイがソースから保存までの5ステップを示します",
-        "zh": "仪表盘是你的指挥台 — 跑道展示从来源到归档的 5 个步骤"
+        "en": "Channel Vault shows the full plan first — videos to back up, estimated storage, save folder, and a safety check",
+        "ko": "Channel Vault가 전체 계획을 먼저 보여줘요 — 백업할 영상, 예상 용량, 저장 폴더, 안전 확인",
+        "ja": "Channel Vault はまず全体プランを表示 — 保存する動画、推定容量、保存フォルダ、安全確認",
+        "zh": "Channel Vault 先展示完整计划 — 待备份视频、预计存储、保存文件夹和安全检查",
+        "hi": "Channel Vault पहले पूरी plan दिखाता है — backup होने वाले videos, अनुमानित storage, save folder, और safety check"
       },
       "narration": {
-        "en": "This is the Dashboard, your command deck. The first run runway lays out the five steps from source to archived media: add a source, check for new videos, stage only what is missing, run a guarded pass, then verify the library.",
-        "ko": "여기가 Dashboard, 관제 데스크예요. 첫 실행 런웨이가 소스부터 백업까지 다섯 단계를 보여줘요. 소스 추가, 새 영상 확인, 빠진 것만 준비, 안전한 다운로드 실행, 그리고 라이브러리 확인이에요.",
-        "ja": "ここが Dashboard、司令デッキです。初回ランウェイが、ソースから保存までの五つのステップを示します。ソースを追加し、新着を確認し、欠けている分だけ準備し、安全なパスを実行し、ライブラリを確認します。",
-        "zh": "这是仪表盘，你的指挥台。首次运行跑道列出从来源到归档的五个步骤：添加来源、检查新视频、只准备缺失的、运行受控下载、然后核对媒体库。"
+        "en": "Before anything downloads, the wizard lays out the whole plan: how many videos it found, how much storage they will need, the exact save folder, and a safety check. You can review every video in the preview list, so there are no surprises.",
+        "ko": "다운로드 전에 위저드가 전체 계획을 펼쳐 보여줘요. 찾은 영상 수, 필요한 저장 용량, 정확한 저장 폴더, 그리고 안전 확인이에요. 미리보기 목록에서 모든 영상을 확인할 수 있어서 놀랄 일이 없어요.",
+        "ja": "ダウンロードの前に、ウィザードが全体プランを示します。見つかった動画数、必要な容量、正確な保存フォルダ、そして安全確認です。プレビュー一覧で各動画を確認できるので、驚くことはありません。",
+        "zh": "在下载之前，向导会展开完整计划：找到多少视频、需要多少存储、确切的保存文件夹，以及一次安全检查。你可以在预览列表中逐一查看每个视频，不会有意外。",
+        "hi": "कुछ भी download होने से पहले, wizard पूरी plan दिखाता है: कितने videos मिले, कितना storage चाहिए, सटीक save folder, और एक safety check। आप preview list में हर video देख सकते हैं, इसलिए कोई surprise नहीं होता।"
       }
     },
     {
@@ -89,16 +99,18 @@
       "route": "register",
       "min": 40,
       "caption": {
-        "en": "Step 3 — Add your channel: paste a URL or @handle, choose quality, keep subtitles on, press Register",
-        "ko": "3단계 — 채널 추가: 주소나 @핸들 붙여넣기, 화질 선택, 자막 켜고, Register 누르기",
-        "ja": "ステップ3 — チャンネル追加: URL か @ハンドルを貼り付け、画質を選び、字幕をオンに、Register を押す",
-        "zh": "第 3 步 — 添加频道：粘贴网址或 @用户名，选择画质，保持字幕开启，点击 Register"
+        "en": "Step 3 — Click Start first backup. A confirmation dialog opens — nothing downloads until you press Start up to 5",
+        "ko": "3단계 — Start first backup 을 누르면 확인 창이 떠요. Start up to 5 를 누르기 전엔 아무것도 다운로드되지 않아요",
+        "ja": "ステップ3 — Start first backup を押すと確認ダイアログが開く。Start up to 5 を押すまで何もダウンロードされません",
+        "zh": "第 3 步 — 点击 Start first backup，弹出确认对话框 — 在你按下 Start up to 5 之前不会下载任何东西",
+        "hi": "चरण 3 — Start first backup दबाएँ। एक confirmation dialog खुलता है — जब तक आप Start up to 5 न दबाएँ, कुछ भी download नहीं होता"
       },
       "narration": {
-        "en": "Now add a real channel. Open the Channels workbench and find the registration box. Paste your channel URL or handle, pick a quality such as ten eighty p, keep subtitles on, then press Register. Channel Vault probes the source safely before anything downloads.",
-        "ko": "이제 실제 채널을 추가해요. Channels 작업대를 열고 등록창을 찾으세요. 채널 주소나 핸들을 붙여넣고, 화질은 천팔십피 처럼 골라주세요. 자막은 켠 채로 두고 Register 를 누르면 돼요. Channel Vault가 다운로드 전에 소스를 안전하게 확인해요.",
-        "ja": "次に実際のチャンネルを追加します。Channels ワークベンチを開き、登録ボックスを探します。チャンネルの URL かハンドルを貼り付け、画質は千八十ピー などから選びます。字幕はオンのままにして Register を押します。Channel Vault はダウンロード前にソースを安全に確認します。",
-        "zh": "现在添加一个真实频道。打开 Channels 工作台，找到注册框。粘贴你的频道网址或用户名，选择像 1080p 这样的画质，保持字幕开启，然后点击 Register。Channel Vault 会在下载前安全地探测来源。"
+        "en": "When the plan looks right, click Start first backup. Channel Vault registers the channel and opens a confirmation dialog. This is the guardrail: the worker stays off until you arm it, and each pass downloads at most five videos. Real transfers begin only when you press Start up to five, so you are always in control.",
+        "ko": "계획이 괜찮으면 Start first backup 을 누르세요. Channel Vault가 채널을 등록하고 확인 창을 열어요. 이게 안전장치예요. 워커는 여러분이 켜기 전까진 꺼져 있고, 한 번에 최대 다섯 개만 다운로드해요. 실제 다운로드는 Start up to five 를 눌러야 시작되니, 항상 여러분이 주도권을 쥐고 있어요.",
+        "ja": "プランで良ければ Start first backup を押します。Channel Vault がチャンネルを登録し、確認ダイアログを開きます。これが安全装置です。ワーカーはあなたが有効にするまでオフのままで、一回のパスで最大五本だけダウンロードします。実際の転送は Start up to five を押したときにだけ始まるので、常にあなたが主導権を握っています。",
+        "zh": "计划无误后，点击 Start first backup。Channel Vault 会注册频道并打开确认对话框。这就是安全阀：工作器在你启用之前始终关闭，每一轮最多只下载五个视频。只有当你按下 Start up to five 时，真正的传输才会开始，主动权始终在你手中。",
+        "hi": "जब plan सही लगे, Start first backup दबाएँ। Channel Vault चैनल register करता है और एक confirmation dialog खोलता है। यही guardrail है: worker तब तक बंद रहता है जब तक आप उसे चालू न करें, और हर pass में ज़्यादा से ज़्यादा पाँच videos download होते हैं। असली download तभी शुरू होता है जब आप Start up to five दबाते हैं, इसलिए नियंत्रण हमेशा आपके हाथ में रहता है।"
       }
     },
     {
@@ -106,16 +118,18 @@
       "route": "progress",
       "min": 48,
       "caption": {
-        "en": "Step 4 — Watch the backup: the Queue shows each job’s progress, speed and time left, live",
-        "ko": "4단계 — 백업 지켜보기: Queue에서 각 작업의 진행률·속도·남은 시간을 실시간 확인",
-        "ja": "ステップ4 — バックアップを確認: Queue で各ジョブの進捗・速度・残り時間をリアルタイム表示",
-        "zh": "第 4 步 — 观看备份：队列实时显示每个任务的进度、速度和剩余时间"
+        "en": "Step 4 — After you confirm, the guarded pass runs. The Queue shows each job’s progress, speed and time left",
+        "ko": "4단계 — 확인하면 안전한 백업이 실행돼요. Queue에서 각 작업의 진행률·속도·남은 시간을 볼 수 있어요",
+        "ja": "ステップ4 — 確認するとガードされたパスが実行。Queue で各ジョブの進捗・速度・残り時間を表示",
+        "zh": "第 4 步 — 确认后，受控备份开始运行。队列显示每个任务的进度、速度和剩余时间",
+        "hi": "चरण 4 — पुष्टि करते ही guarded pass चलता है। Queue हर job की progress, speed और बचा समय दिखाता है"
       },
       "narration": {
-        "en": "Open the Queue. This is your backup control room. When the worker is on, missing videos download here, and you can watch each job's progress, speed, and time remaining in real time. If a job fails, retry it with a single click.",
-        "ko": "Queue를 열어요. 여기가 백업 관제실이에요. 워커가 켜지면 빠진 영상들이 여기서 다운로드되고, 각 작업의 진행률과 속도, 남은 시간을 실시간으로 볼 수 있어요. 작업이 실패하면 클릭 한 번으로 다시 시도하면 돼요.",
-        "ja": "Queue を開きます。ここがバックアップの管制室です。ワーカーがオンになると、欠けている動画がここでダウンロードされ、各ジョブの進捗、速度、残り時間をリアルタイムで確認できます。失敗しても、ワンクリックで再試行できます。",
-        "zh": "打开队列。这是你的备份控制室。当工作器开启时，缺失的视频会在这里下载，你可以实时查看每个任务的进度、速度和剩余时间。如果任务失败，点一下即可重试。"
+        "en": "Once you confirm, the guarded pass runs and the Queue becomes your control room. The live worker is on, downloading up to five videos at a time, and you can watch each job's progress, speed, and time remaining. If a job fails, retry it with a single click.",
+        "ko": "확인하면 안전한 백업이 실행되고 Queue가 관제실이 돼요. 라이브 워커가 켜져서 한 번에 최대 다섯 개까지 다운로드하고, 각 작업의 진행률과 속도, 남은 시간을 실시간으로 볼 수 있어요. 작업이 실패하면 클릭 한 번으로 다시 시도하면 돼요.",
+        "ja": "確認すると、ガードされたパスが実行され、Queue が管制室になります。ライブワーカーがオンになり、一度に最大五本までダウンロードし、各ジョブの進捗、速度、残り時間をリアルタイムで確認できます。失敗しても、ワンクリックで再試行できます。",
+        "zh": "确认之后，受控备份开始运行，队列成为你的控制室。实时工作器已开启，一次最多下载五个视频，你可以实时查看每个任务的进度、速度和剩余时间。如果任务失败，点一下即可重试。",
+        "hi": "पुष्टि करते ही guarded pass चलता है और Queue आपका control room बन जाता है। live worker चालू है, एक बार में पाँच videos तक download करता है, और आप हर job की progress, speed और बचा हुआ समय live देख सकते हैं। अगर कोई job fail हो, एक click में फिर से try करें।"
       }
     },
     {
@@ -126,13 +140,15 @@
         "en": "Step 5 — The Library holds everything archived, with quality, subtitles and integrity checks",
         "ko": "5단계 — Library에는 백업된 모든 것이 화질·자막·무결성 표시와 함께 모여요",
         "ja": "ステップ5 — Library に、画質・字幕・整合性チェック付きで保存物がすべて集まります",
-        "zh": "第 5 步 — 媒体库汇集所有已归档内容，带有画质、字幕和完整性检查"
+        "zh": "第 5 步 — 媒体库汇集所有已归档内容，带有画质、字幕和完整性检查",
+        "hi": "चरण 5 — Library में हर archived चीज़ रहती है, quality, subtitles और integrity checks के साथ"
       },
       "narration": {
         "en": "Everything archived lands in the Library. Each item shows its quality, subtitles, and integrity, so you can confirm the backup is complete. Filter by missing media or missing subtitles to spot any gaps instantly.",
         "ko": "백업된 모든 건 Library에 모여요. 항목마다 화질과 자막, 무결성이 표시돼서 백업이 완전한지 확인할 수 있어요. 빠진 미디어나 빠진 자막으로 필터링하면 빈 곳을 바로 찾을 수 있어요.",
         "ja": "保存されたものはすべて Library に集まります。項目ごとに画質、字幕、整合性が表示され、バックアップが完全かどうか確認できます。欠けているメディアや字幕で絞り込めば、抜けをすぐに見つけられます。",
-        "zh": "所有已归档的内容都会进入媒体库。每个条目都显示画质、字幕和完整性，让你确认备份是否完整。按缺失媒体或缺失字幕筛选，就能立即发现遗漏。"
+        "zh": "所有已归档的内容都会进入媒体库。每个条目都显示画质、字幕和完整性，让你确认备份是否完整。按缺失媒体或缺失字幕筛选，就能立即发现遗漏。",
+        "hi": "जो कुछ भी archive होता है वह Library में आता है। हर item अपनी quality, subtitles और integrity दिखाता है, ताकि आप पुष्टि कर सकें कि backup पूरा है। missing media या missing subtitles से filter करें और किसी भी कमी को तुरंत पकड़ें।"
       }
     },
     {
@@ -143,13 +159,15 @@
         "en": "Step 6 — Insights shows storage by channel and warns you before the disk fills up",
         "ko": "6단계 — Insights는 채널별 저장 용량을 보여주고 디스크가 차기 전에 알려줘요",
         "ja": "ステップ6 — Insights はチャンネル別の使用量を表示し、ディスクが一杯になる前に警告します",
-        "zh": "第 6 步 — Insights 按频道显示存储占用，并在磁盘写满前提醒你"
+        "zh": "第 6 步 — Insights 按频道显示存储占用，并在磁盘写满前提醒你",
+        "hi": "चरण 6 — Insights चैनल के हिसाब से storage दिखाता है और disk भरने से पहले चेतावनी देता है"
       },
       "narration": {
         "en": "Insights shows how your storage is filling up. The Volume Map breaks space down by channel, and the pressure trend warns you before the disk gets full, so you are never caught by surprise.",
         "ko": "Insights는 저장 공간이 어떻게 차오르는지 보여줘요. Volume Map은 채널별로 용량을 나눠 보여주고, 압력 추세는 디스크가 가득 차기 전에 미리 알려줘서 갑자기 당황할 일이 없어요.",
         "ja": "Insights は、ストレージがどのように埋まっていくかを表示します。Volume Map はチャンネルごとに容量を分解し、圧力トレンドはディスクが一杯になる前に警告するので、不意を突かれることはありません。",
-        "zh": "Insights 显示存储是如何被占用的。Volume Map 按频道分解空间占用，压力趋势会在磁盘写满前提醒你，让你不会措手不及。"
+        "zh": "Insights 显示存储是如何被占用的。Volume Map 按频道分解空间占用，压力趋势会在磁盘写满前提醒你，让你不会措手不及。",
+        "hi": "Insights दिखाता है कि आपका storage कैसे भर रहा है। Volume Map हर channel के हिसाब से जगह बाँटकर दिखाता है, और pressure trend, disk भरने से पहले चेतावनी देता है, ताकि आप कभी अचानक न फँसें।"
       }
     },
     {
@@ -160,13 +178,15 @@
         "en": "Step 7 — In Settings, turn on the scheduler so new videos are archived automatically",
         "ko": "7단계 — Settings에서 스케줄러를 켜면 새 영상이 자동으로 백업돼요",
         "ja": "ステップ7 — Settings でスケジューラをオンにすると、新着動画が自動で保存されます",
-        "zh": "第 7 步 — 在设置中开启调度器，新视频就会被自动归档"
+        "zh": "第 7 步 — 在设置中开启调度器，新视频就会被自动归档",
+        "hi": "चरण 7 — Settings में scheduler चालू करें ताकि नए videos अपने आप archive हों"
       },
       "narration": {
         "en": "Finally, open Settings for the runtime controls. Turn on the scheduler, and Channel Vault checks for new videos and backs them up automatically, around the clock, with no manual work.",
         "ko": "마지막으로 Settings를 열어 런타임 설정을 보세요. 스케줄러를 켜면 Channel Vault가 새 영상을 확인하고 자동으로, 하루 종일, 손 안 대도 알아서 백업해줘요.",
         "ja": "最後に Settings を開いて、ランタイム設定を確認します。スケジューラをオンにすると、Channel Vault が新着動画を確認し、二十四時間、手作業なしで自動的にバックアップします。",
-        "zh": "最后，打开设置查看运行时控制。开启调度器后，Channel Vault 会自动检查新视频并全天候备份，无需任何手动操作。"
+        "zh": "最后，打开设置查看运行时控制。开启调度器后，Channel Vault 会自动检查新视频并全天候备份，无需任何手动操作。",
+        "hi": "आख़िर में, runtime controls के लिए Settings खोलें। scheduler चालू करें, और Channel Vault नए videos की जाँच करके उन्हें अपने आप, चौबीसों घंटे, बिना किसी manual काम के backup कर देता है।"
       }
     },
     {
@@ -177,13 +197,15 @@
         "en": "Install → add channel → archive. If this helps, please ⭐ the repo on GitHub!",
         "ko": "설치 → 채널 추가 → 백업. 도움이 되셨다면 GitHub에서 ⭐ 눌러주세요!",
         "ja": "インストール → チャンネル追加 → 保存。役に立ったら GitHub で ⭐ をお願いします！",
-        "zh": "安装 → 添加频道 → 归档。如果有帮助，请在 GitHub 点个 ⭐！"
+        "zh": "安装 → 添加频道 → 归档。如果有帮助，请在 GitHub 点个 ⭐！",
+        "hi": "इंस्टॉल → चैनल जोड़ें → archive। अगर यह मददगार लगे, तो GitHub पर ⭐ ज़रूर दें!"
       },
       "narration": {
         "en": "That is the whole flow: install, add a channel, and let it archive. If this helps you protect your channel, please star the project on GitHub. Thanks for watching.",
         "ko": "이게 전체 흐름이에요. 설치하고, 채널을 추가하고, 백업을 맡기면 끝이에요. 내 채널을 지키는 데 도움이 되셨다면 GitHub에서 프로젝트에 스타를 눌러주세요. 시청해주셔서 감사합니다.",
         "ja": "これが全体の流れです。インストールして、チャンネルを追加して、あとは保存に任せるだけ。あなたのチャンネルを守るのに役立ったら、GitHub でプロジェクトにスターをお願いします。ご視聴ありがとうございました。",
-        "zh": "这就是完整流程：安装、添加频道、然后交给它归档。如果这能帮你保护自己的频道，请在 GitHub 上给项目点个星。感谢观看。"
+        "zh": "这就是完整流程：安装、添加频道、然后交给它归档。如果这能帮你保护自己的频道，请在 GitHub 上给项目点个星。感谢观看。",
+        "hi": "यही पूरा flow है: install करें, एक channel जोड़ें, और उसे archive करने दें। अगर यह आपके channel को सुरक्षित रखने में मदद करता है, तो कृपया GitHub पर project को star करें। देखने के लिए धन्यवाद।"
       }
     }
   ]

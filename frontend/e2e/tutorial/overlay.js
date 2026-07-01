@@ -289,6 +289,7 @@ window.__cvnInstallOverlay = function installOverlay() {
     const totalMB = opts.totalMB || 715;
     const title = opts.title || "Queue calibration pass";
     const sub = opts.sub || "Signal Lab · 1080p · h264/aac";
+    const tag = opts.tag || "";
     const card = document.createElement("div");
     Object.assign(card.style, {
       position: "absolute",
@@ -316,6 +317,7 @@ window.__cvnInstallOverlay = function installOverlay() {
         </div>
         <div id="cvn-pc-state" style="font:800 13px system-ui;letter-spacing:.08em;color:#38bdf8;padding:5px 12px;border-radius:999px;background:rgba(56,189,248,.12)">DOWNLOADING</div>
       </div>
+      ${tag ? `<div style="display:flex;align-items:center;gap:7px;margin:-4px 0 12px;font:700 12px system-ui;letter-spacing:.05em;color:#7dd3fc"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${tag}</div>` : ""}
       <div style="height:12px;border-radius:8px;background:#0f1c30;overflow:hidden;border:1px solid #16233b">
         <div id="cvn-pc-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#0ea5e9,#22d3ee);box-shadow:0 0 14px rgba(34,211,238,.6)"></div>
       </div>
