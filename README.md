@@ -287,6 +287,11 @@ Open:
 http://127.0.0.1:5173/
 ```
 
+If you see only `{"detail":"Not Found"}`, you opened the raw API port instead
+of the web console. Open the `web` port (`CVN_WEB_PORT`, default `5173`) or point
+your reverse proxy at the web service. The API port is only for paths such as
+`/api/health`.
+
 The compose stack runs:
 
 - `api`: FastAPI backend with `yt-dlp`, `ffmpeg`, and `ffprobe`

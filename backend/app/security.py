@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.config import settings
 
-AUTH_EXEMPT_PATHS = {"/api/health"}
+AUTH_EXEMPT_PATHS = {"/", "/api/health"}
 TOKEN_QUERY_PARAM = "cvn_token"
 
 
