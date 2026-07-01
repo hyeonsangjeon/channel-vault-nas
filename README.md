@@ -29,6 +29,11 @@
   · <strong>guarded downloads by default</strong>
 </p>
 
+<p align="center">
+  <a href="#watch-the-5-minute-guide"><strong>▶&nbsp; Watch the 5-minute getting-started guide</strong></a>
+  &nbsp;·&nbsp; EN · KO · JA · ZH
+</p>
+
 ## Why It's Different
 
 - **Index existing NAS folders without re-downloading** — read media files,
@@ -67,6 +72,28 @@ Open `http://127.0.0.1:5173/`, paste a YouTube channel URL, `@handle`, or
 
 > Guardrail: this self-hosted release is built for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose it directly to the public internet.
+
+## Watch The 5-Minute Guide
+
+New here? This click-by-click screencast takes you from a fresh Docker install to
+a completed channel backup — recorded on the real UI, no edits, with on-screen
+step markers the whole way.
+
+<p align="center">
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4">
+    <img src="docs/assets/demo/tutorial-poster.png" alt="Watch the 5-minute Channel Vault NAS getting-started guide: install, register a channel, and watch the backup reach 100%" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <strong>▶ Watch / download:</strong>
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4">English</a> ·
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ko.mp4">한국어</a> ·
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ja.mp4">日本語</a> ·
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-zh.mp4">中文</a>
+</p>
+
+<sub>Chapters: install → safe first-run demo → dashboard tour → register your channel → watch the download queue reach 100% → library, insights, and settings. Same walkthrough in every language, hosted on the <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1">v0.1.0-alpha.1 release</a>. ~5 min · 1440×1000.</sub>
 
 ## Visual Preview
 
@@ -120,11 +147,13 @@ This is an active self-hosted release. The core loop is working locally:
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
 - Versioned Docker Hub and GHCR images for the guarded prerelease,
   with Docker Hub pull-based Compose smoke verified
+- Guided 5-minute getting-started video (install → register a channel → watch the
+  backup), narrated in English, Korean, Japanese, and Chinese
 
 Not ready yet:
 
 - Multi-user auth/session hardening for exposed networks
-- Polished install videos for Synology/QNAP-style first-run paths
+- NAS-vendor-specific (Synology/QNAP) first-run install videos
 
 The current release direction and release gate are tracked in
 [`docs/roadmap.md`](docs/roadmap.md) and [`CHANGELOG.md`](CHANGELOG.md).
