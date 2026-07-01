@@ -1,0 +1,96 @@
+{
+  "total": 309,
+  "leadIn": 1,
+  "segments": [
+    {
+      "id": "01-intro",
+      "route": "intro",
+      "start": 0,
+      "dur": 16,
+      "maxNarr": 12.57,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "02-install",
+      "route": "install",
+      "start": 16,
+      "dur": 30,
+      "maxNarr": 18.32,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "03-firstrun",
+      "route": "firstrun",
+      "start": 46,
+      "dur": 22,
+      "maxNarr": 12.05,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "03b-overview",
+      "route": "overview",
+      "start": 68,
+      "dur": 27,
+      "maxNarr": 17.34,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "04-register",
+      "route": "register",
+      "start": 95,
+      "dur": 44,
+      "maxNarr": 22.21,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "05-progress",
+      "route": "progress",
+      "start": 139,
+      "dur": 56,
+      "maxNarr": 18.57,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "06-library",
+      "route": "library",
+      "start": 195,
+      "dur": 36,
+      "maxNarr": 16.94,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "07-insights",
+      "route": "insights",
+      "start": 231,
+      "dur": 34,
+      "maxNarr": 15.31,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "08-settings",
+      "route": "settings",
+      "start": 265,
+      "dur": 26,
+      "maxNarr": 14.78,
+      "leadIn": 1,
+      "fits": true
+    },
+    {
+      "id": "09-outro",
+      "route": "outro",
+      "start": 291,
+      "dur": 18,
+      "maxNarr": 15.69,
+      "leadIn": 1,
+      "fits": true
+    }
+  ]
+}
