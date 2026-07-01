@@ -31,7 +31,7 @@
 
 <p align="center">
   <a href="#watch-the-5-minute-guide"><strong>▶&nbsp; Watch the 5-minute getting-started guide</strong></a>
-  &nbsp;·&nbsp; EN · KO · JA · ZH
+  &nbsp;·&nbsp; EN · KO · JA · ZH · HI
 </p>
 
 ## Why It's Different
@@ -76,7 +76,7 @@ Open `http://127.0.0.1:5173/`, paste a YouTube channel URL, `@handle`, or
 ## Watch The 5-Minute Guide
 
 New here? This click-by-click screencast takes you from a fresh Docker install to
-a completed channel backup — recorded on the real UI, no edits, with on-screen
+a completed channel backup — recorded on the real UI, with on-screen
 step markers the whole way.
 
 <p align="center">
@@ -90,10 +90,11 @@ step markers the whole way.
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4">English</a> ·
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ko.mp4">한국어</a> ·
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ja.mp4">日本語</a> ·
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-zh.mp4">中文</a>
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-zh.mp4">中文</a> ·
+  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-hi.mp4">हिन्दी</a>
 </p>
 
-<sub>Chapters: install → safe first-run demo → dashboard tour → register your channel → watch the download queue reach 100% → library, insights, and settings. Same walkthrough in every language, hosted on the <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1">v0.1.0-alpha.1 release</a>. ~5 min · 1440×1000.</sub>
+<sub>Chapters: install → first backup wizard → plan review → confirm &amp; start the backup → watch the download queue reach 100% → library, insights, and settings. Same walkthrough in every language, hosted on the <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1">v0.1.0-alpha.1 release</a>. ~5 min · 1440×1000.</sub>
 
 ## Visual Preview
 
