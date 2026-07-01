@@ -69,6 +69,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/", include_in_schema=False)
+async def api_root() -> dict[str, str]:
+    """Help operators who accidentally open the raw API port."""
+    return {
+        "app": settings.app_name,
+        "role": "api",
+        "status": "ok",
+        "message": (
+            "This is the Channel Vault NAS API. Open the web UI on the web "
+            "service port, default 5173, or point your reverse proxy at the "
+            "web container. API health is available at /api/health."
+        ),
+        "web_port_hint": "default web mapping: 5173 -> container 80",
+        "api_health": "/api/health",
+    }
+
+
 app.include_router(health.router)
 app.include_router(dashboard.router)
 app.include_router(channels.router)

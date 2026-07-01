@@ -60,6 +60,40 @@ token is active before you expose the console.
    `CVN_RESTART_SERVICE_NAME=<package>` to surface `synopkg restart <package>`.
    It stays copy-only until `CVN_RESTART_ADAPTER_EXECUTE=true`.
 
+### Synology troubleshooting: `{"detail":"Not Found"}`
+
+If the browser shows only:
+
+```json
+{"detail":"Not Found"}
+```
+
+you are opening the raw FastAPI backend, not the React web console. In the
+Compose stack, the two published ports have different jobs:
+
+| Port | Service | What to open |
+| --- | --- | --- |
+| `CVN_WEB_PORT`, default `5173` | `web` / nginx | Browser UI, e.g. `http://<nas-ip>:5173/` |
+| `CVN_API_PORT`, default `8000` | `api` / FastAPI | API only, e.g. `/api/health` |
+
+What to check in Container Manager:
+
+1. The project should create **two containers**: `api` and `web`.
+2. Open the mapped **web** port, not the API port.
+3. If using DSM Reverse Proxy, point the proxy target to the web port
+   `127.0.0.1:5173`, not `127.0.0.1:8000`.
+4. API health can be checked separately at `http://<nas-ip>:8000/api/health`
+   if you intentionally published the API port.
+
+For LAN or reverse-proxy installs, the safer setting is:
+
+```env
+CVN_API_PORT=127.0.0.1:8000
+CVN_WEB_PORT=5173
+```
+
+Then expose only the web port or the reverse-proxy hostname.
+
 ## QNAP (Container Station)
 
 1. **Create shared folders** for `metadata`, `archive`, and `runtime`.

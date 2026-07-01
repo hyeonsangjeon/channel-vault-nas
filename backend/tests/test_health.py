@@ -35,15 +35,31 @@ async def test_health_endpoint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_root_explains_web_port_hint() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["role"] == "api"
+    assert data["api_health"] == "/api/health"
+    assert "5173" in data["message"]
+
+
+@pytest.mark.asyncio
 async def test_optional_auth_token_protects_api(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "auth_token", "test-secret")
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        root = await client.get("/")
         health = await client.get("/api/health")
         locked = await client.get("/api/dashboard")
         bearer = await client.get("/api/dashboard", headers={"Authorization": "Bearer test-secret"})
         header = await client.get("/api/dashboard", headers={"X-CVN-Token": "test-secret"})
 
+    assert root.status_code == 200
+    assert root.json()["role"] == "api"
     assert health.status_code == 200
     assert locked.status_code == 401
     assert locked.json()["detail"] == "Channel Vault NAS auth token required"
