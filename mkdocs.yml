@@ -1,0 +1,163 @@
+site_name: Channel Vault NAS
+site_url: https://hyeonsangjeon.github.io/channel-vault-nas/
+site_description: >-
+  Self-hosted NAS console that archives your own YouTube channels with yt-dlp.
+  Install guide and screen-by-screen usage manual.
+site_author: Hyeon Sang Jeon
+copyright: Copyright &copy; 2026 Hyeon Sang Jeon
+
+repo_name: hyeonsangjeon/channel-vault-nas
+repo_url: https://github.com/hyeonsangjeon/channel-vault-nas
+edit_uri: ""
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  logo: assets/producthunt-thumbnail.png
+  favicon: assets/producthunt-thumbnail.png
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: light blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: ko
+          name: 한국어
+          build: true
+          site_name: Channel Vault NAS
+          nav_translations:
+            Home: 홈
+            Install: 설치
+            Overview: 개요
+            Docker: Docker
+            NAS (Synology / QNAP): NAS (Synology / QNAP)
+            Local development: 로컬 개발
+            Access token: 액세스 토큰
+            Usage: 사용법
+            First backup wizard: 첫 백업 마법사
+            Enable real downloads: 실제 다운로드 켜기
+            Product tour: 화면 둘러보기
+            archive.txt import: archive.txt 가져오기
+            Reference: 레퍼런스
+            Runtime flags: 런타임 플래그
+            Filesystem contract: 파일시스템 규칙
+            About: 소개
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/hyeonsangjeon/channel-vault-nas
+      name: GitHub repository
+    - icon: fontawesome/brands/docker
+      link: https://hub.docker.com/r/modenaf360/channel-vault-nas-api
+      name: Docker Hub image
+
+# Legacy hand-crafted pages and deep reference docs stay in the repo (README
+# links to them on github.com) but are excluded from the generated site so the
+# strict build stays clean. They are surfaced from the About page instead.
+exclude_docs: |
+  *.html
+  architecture.md
+  archive-priorities.md
+  backup-restore.md
+  channel-registration-recommendations.md
+  deployment-security.md
+  design-direction.md
+  dockerhub-description.md
+  nas-install.md
+  product-brief.en.md
+  product-brief.md
+  public-alpha-demo.md
+  roadmap.md
+  storage-recovery.md
+  use-boundaries.md
+  assets/demo/README.md
+
+nav:
+  - Home: index.md
+  - Install:
+      - Overview: install/index.md
+      - Docker: install/docker.md
+      - NAS (Synology / QNAP): install/nas.md
+      - Local development: install/local-dev.md
+      - Access token: install/access-token.md
+  - Usage:
+      - Overview: usage/index.md
+      - First backup wizard: usage/first-backup.md
+      - Enable real downloads: usage/enable-downloads.md
+      - Product tour: usage/product-tour.md
+      - archive.txt import: usage/archive-txt.md
+  - Reference:
+      - Overview: reference/index.md
+      - Runtime flags: reference/runtime-flags.md
+      - Filesystem contract: reference/filesystem.md
+  - About: about/index.md
