@@ -115,7 +115,7 @@ mockup.
   [`ghcr.io/hyeonsangjeon/channel-vault-nas-api`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-api)
   and
   [`ghcr.io/hyeonsangjeon/channel-vault-nas-web`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-web)
-- Static manual:
+- Documentation (install + usage manual, EN/KO):
   [`hyeonsangjeon.github.io/channel-vault-nas`](https://hyeonsangjeon.github.io/channel-vault-nas/)
 
 ## Why It Exists
@@ -784,17 +784,16 @@ scripts/capture-public-demo.sh
 ```
 
 For guided, screen-by-screen operator walkthroughs, open the rendered
-[`KO manual`](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.html)
-or
-[`EN manual`](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.en.html).
-GitHub Pages deploys the documentation site from [`docs/index.html`](docs/index.html)
+[usage manual](https://hyeonsangjeon.github.io/channel-vault-nas/usage/)
+([한국어](https://hyeonsangjeon.github.io/channel-vault-nas/ko/usage/)).
+GitHub Pages builds the MkDocs documentation site from `docs/` and `mkdocs.yml`
 through the `Docs Pages` workflow.
 
 ## Documentation
 
-- [Documentation Site](https://hyeonsangjeon.github.io/channel-vault-nas/) ([source](docs/index.html))
-- [User Manual (KO)](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.html) ([source](docs/user-manual.html))
-- [User Manual (EN)](https://hyeonsangjeon.github.io/channel-vault-nas/user-manual.en.html) ([source](docs/user-manual.en.html))
+- [Documentation site](https://hyeonsangjeon.github.io/channel-vault-nas/)
+- [Install guide](https://hyeonsangjeon.github.io/channel-vault-nas/install/) ([한국어](https://hyeonsangjeon.github.io/channel-vault-nas/ko/install/))
+- [Usage manual](https://hyeonsangjeon.github.io/channel-vault-nas/usage/) ([한국어](https://hyeonsangjeon.github.io/channel-vault-nas/ko/usage/))
 - [Product Brief (EN)](docs/product-brief.en.md)
 - [Product Brief (KO)](docs/product-brief.md)
 - [Architecture](docs/architecture.md)
