@@ -9,6 +9,7 @@ const base = process.env.CVN_TUT_FRONTEND_URL ?? `http://127.0.0.1:${frontendPor
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outDir = resolve(process.env.CVN_TUT_OUT ?? resolve(__dirname, "../../test-results/tutorial"));
 const overlaySrc = readFileSync(resolve(__dirname, "tutorial/overlay.js"), "utf8");
+const friendlyChipSrc = readFileSync(resolve(__dirname, "tutorial/friendly-worker-chip.js"), "utf8");
 
 const W = 1440;
 const H = 1000;
@@ -38,6 +39,7 @@ async function newRec(browser: Browser, lang: string) {
   });
   await context.addInitScript((l) => localStorage.setItem("channel-vault-language", l), lang);
   await context.addInitScript({ content: overlaySrc });
+  await context.addInitScript({ content: friendlyChipSrc });
   const page = await context.newPage();
   return { context, page };
 }
@@ -437,7 +439,7 @@ test("record tutorial segments", async ({ browser }) => {
         seconds: 34,
         totalMB: 715,
         title: "Guarded backup pass",
-        sub: "1080p · h264/aac · worker armed",
+        sub: "1080p · h264/aac · download engine armed",
         tag: "Guarded pass · capped at 5 per run · you confirmed this",
         x: 316,
         y: 636,
