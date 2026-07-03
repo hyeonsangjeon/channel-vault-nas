@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="780" viewBox="0 0 1400 780" role="img" aria-labelledby="title desc">
+  <title id="title">Channel Vault NAS architecture overview</title>
+  <desc id="desc">System architecture showing React UI, FastAPI backend, SQLite metadata, NAS media volume, schedulers, download worker, yt-dlp, ffmpeg, runtime settings, and audit logs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#05070c"/>
+      <stop offset="0.55" stop-color="#0b111a"/>
+      <stop offset="1" stop-color="#07151a"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#12345a"/>
+      <stop offset="1" stop-color="#0d1a2b"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#0f3a2c"/>
+      <stop offset="1" stop-color="#0c2019"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#402912"/>
+      <stop offset="1" stop-color="#20160c"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#2d2255"/>
+      <stop offset="1" stop-color="#151425"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.5" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10Z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10Z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-gold" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10Z" fill="#f59e0b"/>
+    </marker>
+    <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+      <path d="M44 0H0V44" fill="none" stroke="#162234" stroke-width="1" opacity="0.36"/>
+    </pattern>
+  </defs>
+
+  <rect width="1400" height="780" fill="url(#bg)"/>
+  <rect width="1400" height="780" fill="url(#grid)" opacity="0.55"/>
+
+  <g transform="translate(70 56)">
+    <rect width="236" height="46" rx="14" fill="#111a24" stroke="#2b3f58"/>
+    <path d="M28 18h34v18H28z" fill="#0a1018" stroke="#38bdf8" stroke-width="3"/>
+    <path d="M33 11h21l8 7H28z" fill="#34d399"/>
+    <circle cx="38" cy="28" r="3" fill="#f59e0b"/>
+    <circle cx="51" cy="28" r="3" fill="#a78bfa"/>
+    <text x="80" y="30" fill="#e5edf7" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="19" font-weight="800">Channel Vault NAS</text>
+  </g>
+
+  <text x="70" y="154" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="46" font-weight="900">Architecture overview</text>
+  <text x="72" y="194" fill="#aab6c7" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="19" font-weight="700">The filesystem is the archive. SQLite is the searchable index. Workers are guarded by runtime policy.</text>
+
+  <g transform="translate(70 252)">
+    <rect width="280" height="132" rx="22" fill="url(#blue)" stroke="#2f85b9"/>
+    <text x="28" y="40" fill="#bdefff" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">OPERATOR SURFACE</text>
+    <text x="28" y="76" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="900">React + Vite UI</text>
+    <text x="28" y="108" fill="#c9d8e8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">Dashboard, workbench, library</text>
+  </g>
+
+  <g transform="translate(430 252)">
+    <rect width="280" height="132" rx="22" fill="#101927" stroke="#38bdf8"/>
+    <text x="28" y="40" fill="#9bdaf6" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">API CORE</text>
+    <text x="28" y="76" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="900">FastAPI backend</text>
+    <text x="28" y="108" fill="#c9d8e8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">JSON API, WebSocket, lifespan</text>
+  </g>
+
+  <g transform="translate(790 252)">
+    <rect width="260" height="132" rx="22" fill="url(#green)" stroke="#34d399"/>
+    <text x="28" y="40" fill="#bfffe0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">SEARCHABLE INDEX</text>
+    <text x="28" y="76" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="900">SQLite</text>
+    <text x="28" y="108" fill="#cceedd" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">Channels, videos, jobs, media</text>
+  </g>
+
+  <g transform="translate(1090 252)">
+    <rect width="240" height="132" rx="22" fill="url(#gold)" stroke="#f59e0b"/>
+    <text x="28" y="40" fill="#ffe4aa" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">DURABLE ARCHIVE</text>
+    <text x="28" y="76" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="900">NAS volume</text>
+    <text x="28" y="108" fill="#f2dfbd" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">media, sidecars, subtitles</text>
+  </g>
+
+  <path d="M360 318H420" stroke="#38bdf8" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <text x="365" y="296" fill="#9fdcf6" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" font-weight="700">HTTP / WS</text>
+  <path d="M720 318H780" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <text x="716" y="296" fill="#bfffe0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" font-weight="700">SQLAlchemy</text>
+  <path d="M1060 318H1080" stroke="#f59e0b" stroke-width="4" marker-end="url(#arrow-gold)"/>
+  <text x="1050" y="296" fill="#ffe4aa" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" font-weight="700">paths</text>
+
+  <g transform="translate(430 462)">
+    <rect width="280" height="98" rx="18" fill="#102033" stroke="#28506c"/>
+    <text x="24" y="36" fill="#bdefff" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">METADATA SCHEDULER</text>
+    <text x="24" y="68" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="900">due channels -> sync</text>
+  </g>
+
+  <g transform="translate(750 462)">
+    <rect width="280" height="98" rx="18" fill="#10241c" stroke="#266044"/>
+    <text x="24" y="36" fill="#bfffe0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">DOWNLOAD WORKER</text>
+    <text x="24" y="68" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="900">queue -> yt-dlp</text>
+  </g>
+
+  <g transform="translate(1070 462)">
+    <rect width="260" height="98" rx="18" fill="#251d13" stroke="#7a5122"/>
+    <text x="24" y="36" fill="#ffedc0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">MEDIA TOOLCHAIN</text>
+    <text x="24" y="68" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="900">yt-dlp + ffprobe</text>
+  </g>
+
+  <path d="M570 394V452" stroke="#38bdf8" stroke-width="3" marker-end="url(#arrow-blue)"/>
+  <path d="M710 511H740" stroke="#34d399" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <path d="M1030 511H1060" stroke="#f59e0b" stroke-width="3" marker-end="url(#arrow-gold)"/>
+  <path d="M1200 452V394" stroke="#f59e0b" stroke-width="3" marker-end="url(#arrow-gold)"/>
+
+  <g transform="translate(70 462)">
+    <rect width="300" height="98" rx="18" fill="url(#violet)" stroke="#6850b8"/>
+    <text x="24" y="36" fill="#ddd6fe" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="800">RUNTIME CONSOLE</text>
+    <text x="24" y="68" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="900">env guide + restart adapter</text>
+  </g>
+
+  <path d="M370 511H420" stroke="#a78bfa" stroke-width="3" marker-end="url(#arrow-blue)"/>
+
+  <g transform="translate(70 622)">
+    <rect width="1260" height="88" rx="22" fill="#0c1420" stroke="#26364a"/>
+    <path d="M40 58C142 18 238 70 342 42C465 8 555 66 682 38C842 2 939 71 1072 36C1164 12 1218 28 1220 28" fill="none" stroke="url(#line)" stroke-width="5" stroke-linecap="round"/>
+    <text x="40" y="36" fill="#e5edf7" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="900">audit trail</text>
+    <text x="154" y="36" fill="#9fb0c5" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="16" font-weight="700">runtime.restart.*, scheduler ticks, worker runs, sync outcomes, queue events</text>
+  </g>
+</svg>

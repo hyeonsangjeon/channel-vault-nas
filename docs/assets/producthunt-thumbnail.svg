@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-labelledby="title desc">
+  <title id="title">Channel Vault NAS Product Hunt thumbnail</title>
+  <desc id="desc">A compact Channel Vault NAS app icon with a vault mark, video archive signal, and NAS storage bars.</desc>
+  <defs>
+    <linearGradient id="bg" x1="24" x2="216" y1="14" y2="226">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.52" stop-color="#0b1726"/>
+      <stop offset="1" stop-color="#071a18"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="54" x2="186" y1="52" y2="188">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.48" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="70" x2="170" y1="76" y2="164">
+      <stop offset="0" stop-color="#13253a"/>
+      <stop offset="1" stop-color="#0b1422"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.15 0 0 0 0 0.84 0 0 0 0 0.74 0 0 0 0.55 0" result="colored"/>
+      <feMerge>
+        <feMergeNode in="colored"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#1b2a3c" stroke-width="1" opacity="0.52"/>
+    </pattern>
+  </defs>
+
+  <rect width="240" height="240" rx="48" fill="url(#bg)"/>
+  <rect width="240" height="240" rx="48" fill="url(#grid)" opacity="0.52"/>
+  <path d="M-16 182C29 155 63 190 107 164C153 137 186 158 257 112" fill="none" stroke="#123f53" stroke-width="3" opacity="0.9"/>
+  <path d="M-8 204C42 180 77 209 123 184C165 160 199 181 249 150" fill="none" stroke="#164532" stroke-width="3" opacity="0.82"/>
+
+  <g filter="url(#glow)">
+    <circle cx="120" cy="112" r="65" fill="#07111f" stroke="url(#ring)" stroke-width="5"/>
+    <circle cx="120" cy="112" r="49" fill="url(#panel)" stroke="#233c55" stroke-width="2"/>
+    <path d="M88 91h31l10 10h23c8 0 14 6 14 14v32c0 8-6 14-14 14H88c-8 0-14-6-14-14v-42c0-8 6-14 14-14z" fill="#0d1c2f" stroke="#38bdf8" stroke-width="3"/>
+    <path d="M106 119l30 17-30 17z" fill="#34d399"/>
+    <circle cx="151" cy="119" r="6" fill="#f59e0b"/>
+    <circle cx="151" cy="143" r="6" fill="#38bdf8"/>
+  </g>
+
+  <text x="120" y="66" text-anchor="middle" fill="#eef8ff" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="34" font-weight="900" letter-spacing="0">CV</text>
+  <text x="120" y="202" text-anchor="middle" fill="#d8f7ee" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="900" letter-spacing="0">NAS</text>
+
+  <g transform="translate(78 178)">
+    <rect width="84" height="8" rx="4" fill="#13253a" stroke="#2b405a"/>
+    <rect x="8" y="2" width="32" height="4" rx="2" fill="#38bdf8"/>
+    <rect x="46" y="2" width="22" height="4" rx="2" fill="#34d399"/>
+    <circle cx="76" cy="4" r="2.5" fill="#f59e0b"/>
+  </g>
+</svg>
