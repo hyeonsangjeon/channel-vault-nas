@@ -39,7 +39,7 @@ channel** to add it to the vault.
 
 <figure markdown="span">
   ![Channel management and registration](../assets/user-manual/en/03-download-launch-control.png){ loading=lazy }
-  <figcaption>Channels — the Channel management card (Channel admin, Add another channel) is informational; registration is the paste → Preview → Register channel flow, and the channel detail below drives the backup.</figcaption>
+  <figcaption>Channels — the Channel management card's **Add another channel** button opens the registration composer; registration is the paste → Preview → Register channel flow, and the channel detail below drives the backup.</figcaption>
 </figure>
 
 !!! note "What to click"
@@ -71,7 +71,7 @@ is left.
 
 ---
 
-## Step 4 — Start the automatic download schedule
+## Step 4 — Register the automatic download schedule { #step-4-start-the-automatic-download-schedule }
 
 This is the main backup flow. Click **Configure automatic downloads** to open the
 **Automatic download schedule**, then choose:
@@ -79,11 +79,15 @@ This is the main backup flow. Click **Configure automatic downloads** to open th
 - **Run every N minutes** — how often the scheduler wakes up.
 - **Downloads per pass** — how many videos each pass claims.
 
-Click **Start schedule** to begin. Starting the schedule automatically enables
-real downloads and the scheduler, and it queues **only the remaining videos** at
-the interval you chose — already-downloaded videos are skipped. Prefer to set it
-up without starting yet? Use **Save only**, and **Stop schedule** halts future
-passes.
+Click **Register schedule** to turn it on. Registering enables real downloads and
+the scheduler in one step, then queues **only the remaining videos** at the
+interval you chose — already-downloaded videos are skipped. It is set-and-forget:
+you don't need to press anything else.
+
+Changed the interval or batch size later? Adjust the fields and click **Update
+schedule** to apply the new settings to the running schedule, and **Stop
+schedule** halts future passes. When every video is already archived the button
+reads **Fully archived** and there is no remaining work to schedule.
 
 <figure markdown="span">
   ![Automatic download schedule](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
@@ -91,9 +95,9 @@ passes.
 </figure>
 
 !!! warning "Safe by default"
-    Nothing transfers until you start the schedule (or run the advanced manual
-    test below). Registering and previewing never download anything. See
-    [Enable real downloads](enable-downloads.md).
+    Registering the *channel* and previewing never download anything. Nothing
+    transfers until you **Register schedule** (or run the advanced manual test
+    below). See [Enable real downloads](enable-downloads.md).
 
 ---
 
@@ -105,7 +109,7 @@ for videos that are already archived are hidden so you see only real, current
 work.
 
 <figure markdown="span">
-  ![Global queue control](../assets/user-manual/en/05-queue-console.png){ loading=lazy }
+  ![Download queue](../assets/user-manual/en/05-queue-console.png){ loading=lazy }
   <figcaption>Queue — counters, filters, and per-job cards, with the Worker control room on the right. When the schedule is running the worker reads “armed” and jobs move to Running.</figcaption>
 </figure>
 
@@ -125,7 +129,7 @@ state, and path integrity.
 </figure>
 
 !!! success "Done"
-    You've registered a channel, reviewed the remaining videos, and started the
+    You've registered a channel, reviewed the remaining videos, and registered the
     automatic download schedule that keeps the archive current. Next: explore
     [Insights](product-tour.md#insights) and lock down
     [Settings](product-tour.md#settings).

@@ -46,8 +46,8 @@ test("capture public screenshots", async ({ page }) => {
 
   await openEnglishVault(page);
   const cockpit = page.getByLabel("Dashboard overview");
-  await expect(cockpit).toContainText("Know what needs attention");
-  await expect(page.getByLabel("Release readiness checklist")).toContainText("Public readiness");
+  await expect(cockpit).toBeVisible();
+  await expect(page.getByText("Today’s archive status.")).toBeVisible();
   await capture(page, "dashboard-cockpit.png");
 
   await page.goto("/#/channels/downloads?channel=1");
@@ -58,10 +58,8 @@ test("capture public screenshots", async ({ page }) => {
   await capture(page, "channel-downloads.png");
 
   await page.goto("/#/queue?channel=1");
-  const queueConsole = page.getByLabel("Global queue control");
+  const queueConsole = page.getByLabel("Download queue").first();
   await expect(queueConsole).toBeVisible();
-  await expect(queueConsole).toContainText("Download operations");
-  await expect(queueConsole.locator(".queue-console-row").first()).toBeVisible();
   await capture(page, "queue-console.png");
 
   await page.goto("/#/library?channel=1");

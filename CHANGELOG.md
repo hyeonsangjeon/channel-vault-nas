@@ -4,10 +4,24 @@ All notable changes to Channel Vault NAS will be tracked here.
 
 The project is in active alpha. Dates use Korea Standard Time.
 
-## Unreleased
+## 0.1.0-alpha.2 - 2026-07-06
+
+Simplified-UX refresh focused on star-ready first impressions: a set-and-forget
+scheduler, an archive-health dashboard, and refreshed docs, manual, and
+screenshots. Republishes the Docker Hub / GHCR images.
 
 ### Added
 
+- Set-and-forget automatic download scheduler: **Register schedule** turns on the
+  auto-download policy and scheduler and queues only the remaining videos in one
+  step; **Update schedule** applies interval / batch changes to a running
+  schedule; **Stop schedule** halts future passes; a fully-archived channel shows
+  **Fully archived** instead of an error.
+- Clickable **Add another channel** / channel-registration entry points that open
+  the registration composer even after a channel already exists (previously a
+  dead informational card).
+- Docker Hub `0.1.0-alpha.2` image refresh for
+  `modenaf360/channel-vault-nas-api` and `modenaf360/channel-vault-nas-web`.
 - NAS-first archive cockpit with Dashboard, Channels, Queue, Library, Insights,
   and Settings workspaces.
 - Channel registration, source probing, metadata sync, scheduler ticks, and
@@ -67,6 +81,18 @@ The project is in active alpha. Dates use Korea Standard Time.
 
 ### Changed
 
+- Dashboard redesigned around archive health ("Today's archive status" — backed
+  up vs. remaining) instead of a release-readiness score. Release-engineering
+  surfaces (readiness, install proof, support bundle, briefing, storage check)
+  now sit behind a single **Operator checks** advanced toggle, so a fully-mounted,
+  100%-archived home NAS no longer shows a false "action needed" alarm.
+- Renamed developer-flavored labels across all five locales for operator clarity
+  (Volume Map → Storage, Global queue control → Download queue, guarded pass →
+  download safely, Stage missing → Find new videos, Mount Doctor → Storage check).
+- The Queue console now hides stale failed / cancelled jobs for videos that are
+  already archived, so it shows only real, current work.
+- Refreshed the README, GitHub Pages user manual (English + Korean), and every
+  captured screenshot to match the simplified scheduler and dashboard UX.
 - Split the frontend into release-friendly chunks for React, motion, D3, icons,
   lazy-loaded locale files, and app code.
 - Reframed Docker Compose quickstart around safe LAN defaults, optional token
@@ -82,6 +108,9 @@ The project is in active alpha. Dates use Korea Standard Time.
 
 ### Fixed
 
+- The operator guide "Open channel registration" and command-palette registration
+  entry now open the registration composer instead of doing nothing once a channel
+  is already registered.
 - The optional access-gate notice now re-translates after the lazy locale chunk
   loads, so a non-English console no longer freezes on the English fallback
   string when the API returns 401 during initial load.

@@ -1,18 +1,30 @@
 import { expect, type Page, test } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const captureEnabled = process.env.CVN_CAPTURE_USER_MANUAL_SCREENSHOTS === "true";
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const screenshotDir = resolve(__dirname, "../../docs/assets/user-manual/en");
+const lang = process.env.CVN_MANUAL_LANG === "ko" ? "ko" : "en";
+const screenshotDir = resolve(__dirname, `../../docs/assets/user-manual/${lang}`);
+const locale: Record<string, string> = JSON.parse(
+  readFileSync(resolve(__dirname, `../src/locales/${lang}.json`), "utf8"),
+);
 
-test.skip(!captureEnabled, "Set CVN_CAPTURE_USER_MANUAL_SCREENSHOTS=true to refresh English user-manual screenshots.");
+function t(key: string): string {
+  const value = locale[key];
+  if (!value) {
+    throw new Error(`Missing locale key "${key}" for language "${lang}"`);
+  }
+  return value;
+}
+
+test.skip(!captureEnabled, "Set CVN_CAPTURE_USER_MANUAL_SCREENSHOTS=true to refresh user-manual screenshots.");
 test.setTimeout(120_000);
 
 async function installEnglishSession(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem("channel-vault-language", "en");
+  await page.addInitScript((language) => {
+    localStorage.setItem("channel-vault-language", language);
     let clipboardText = "";
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -23,7 +35,7 @@ async function installEnglishSession(page: Page) {
         },
       },
     });
-  });
+  }, lang);
   await page.route("**/api/dashboard", async (route) => {
     try {
       const response = await route.fetch();
@@ -67,52 +79,56 @@ test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-test("capture English user-manual screenshots", async ({ page }) => {
+test("capture user-manual screenshots", async ({ page }) => {
   mkdirSync(screenshotDir, { recursive: true });
 
-  await openEnglishVault(page, "/#/dashboard?channel=1", "Know what needs attention");
-  await expect(page.getByLabel("Dashboard overview")).toBeVisible();
+  await openEnglishVault(page, "/#/dashboard?channel=1", t("dashboard.title"));
+  await expect(page.getByLabel(t("dashboard.cockpit.aria"))).toBeVisible();
   await capture(page, "01-dashboard-cockpit.png");
 
-  await openEnglishVault(page, "/#/channels/overview?channel=1", "Next sync due");
-  await expect(page.getByLabel("Channel detail tabs").getByRole("button", { name: "Overview" })).toHaveClass(/active/);
+  await openEnglishVault(page, "/#/channels/overview?channel=1", t("detail.syncOps.next"));
+  await expect(page.getByLabel(t("detail.tabs.aria")).getByRole("button", { name: t("detail.tabs.overview") })).toHaveClass(/active/);
   await capture(page, "02-channel-overview.png");
 
-  await openEnglishVault(page, "/#/channels/downloads?channel=1", "Preview the download batch");
-  await expect(page.getByLabel("Queue radar")).toBeVisible();
+  await openEnglishVault(page, "/#/channels/downloads?channel=1", t("launch.title"));
+  await expect(page.getByLabel(t("launch.signal.title"))).toBeVisible();
   await capture(page, "03-download-launch-control.png");
 
-  await page.getByRole("button", { name: "Start new-video download" }).first().click();
-  await expect(page.getByLabel("Start new-video download")).toBeVisible();
-  await capture(page, "04-download-confirm-modal.png");
-  await page.getByLabel("Start new-video download").getByRole("button", { name: "Cancel" }).click();
+  const schedulePanel = page.locator(".channel-automation-panel");
+  await schedulePanel.scrollIntoViewIfNeeded();
+  await expect(page.getByText(t("detail.automation.title")).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: t("detail.automation.register") })).toBeVisible();
+  await schedulePanel.screenshot({
+    animations: "disabled",
+    path: resolve(screenshotDir, "04-download-confirm-modal.png"),
+  });
 
-  await openEnglishVault(page, "/#/queue?channel=1", "Global queue control");
-  await expect(page.getByLabel("Global queue control")).toBeVisible();
+  await openEnglishVault(page, "/#/queue?channel=1", t("queue.console.title"));
+  await expect(page.getByLabel(t("queue.console.title")).first()).toBeVisible();
   await capture(page, "05-queue-console.png");
 
-  await openEnglishVault(page, "/#/library?channel=1", "Indexed media shelf");
-  await expect(page.getByLabel("Library filters")).toBeVisible();
+  await openEnglishVault(page, "/#/library?channel=1", t("library.title"));
+  await expect(page.getByLabel(t("library.filter.title"))).toBeVisible();
   await capture(page, "06-library-coverage.png");
 
-  await openEnglishVault(page, "/#/channels/logs?channel=1", "Sync job ledger");
-  await expect(page.getByLabel("Sync job ledger")).toBeVisible();
+  await openEnglishVault(page, "/#/channels/logs?channel=1", t("detail.syncJobs.title"));
+  await expect(page.getByLabel(t("detail.syncJobs.title"))).toBeVisible();
   await capture(page, "07-channel-logs.png");
 
-  await openEnglishVault(page, "/#/channels/policy?channel=1", "Policy console");
-  await expect(page.getByText("Policy console").first()).toBeVisible();
+  await openEnglishVault(page, "/#/channels/policy?channel=1", t("policy.console"));
+  await expect(page.getByText(t("policy.console")).first()).toBeVisible();
   await capture(page, "08-channel-policy.png");
 
-  await openEnglishVault(page, "/#/insights?channel=1", "archive root");
-  await expect(page.getByLabel("Storage trend", { exact: true })).toBeVisible();
+  await openEnglishVault(page, "/#/insights?channel=1", t("storage.scan.root"));
+  await expect(page.getByLabel(t("storage.pressure.title"), { exact: true })).toBeVisible();
   await capture(page, "09-insights-storage.png");
 
-  await openEnglishVault(page, "/#/settings?runtime=guide", "Runtime env manifest");
-  await expect(page.getByLabel("Runtime env manifest")).toBeVisible();
+  await openEnglishVault(page, "/#/settings?runtime=guide", t("runtime.guide.title"));
+  await expect(page.getByLabel(t("runtime.guide.title"))).toBeVisible();
   await capture(page, "10-settings-runtime.png");
 
   await page.setViewportSize({ width: 390, height: 900 });
-  await openEnglishVault(page, "/#/dashboard?channel=1", "Know what needs attention");
-  await expect(page.getByLabel("Dashboard overview")).toBeVisible();
+  await openEnglishVault(page, "/#/dashboard?channel=1", t("dashboard.title"));
+  await expect(page.getByLabel(t("dashboard.cockpit.aria"))).toBeVisible();
   await capture(page, "11-mobile-dashboard.png");
 });

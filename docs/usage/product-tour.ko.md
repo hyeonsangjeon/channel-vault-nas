@@ -11,7 +11,7 @@
 
 <figure markdown="span">
   ![대시보드 개요](../assets/user-manual/ko/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>대시보드 — “탭을 열기 전에 무엇이 주의를 요하는지 알기”, 그리고 다음에 할 유용한 작업과 공개 준비 체크리스트.</figcaption>
+  <figcaption>대시보드 — 한눈에 보는 “오늘의 아카이브 상태”(백업됨 vs 남음), 다음에 할 유용한 작업, 그리고 안내형 첫 보관 경로. 운영 점검(마운트, 접근 토큰, 준비도)은 고급 토글 하나 뒤로 접혀 있습니다.</figcaption>
 </figure>
 
 ## Channels
@@ -27,7 +27,7 @@ Channels 탭이 시작점입니다. 상단 **채널 관리** 카드는 정보용
 
 <figure markdown="span">
   ![채널 개요](../assets/user-manual/ko/02-channel-overview.png){ loading=lazy }
-  <figcaption>채널 상세 — 채널 백업 안내, 총 영상 / 다운받음 / 남은 영상 수, 그리고 자동 다운로드 스케줄(간격, 받을 개수, 스케줄 시작 / 설정만 저장 / 스케줄 정지). 고급 작업에는 수동 1회 테스트가 있습니다.</figcaption>
+  <figcaption>채널 상세 — 채널 백업 안내, 총 영상 / 다운받음 / 남은 영상 수, 그리고 자동 다운로드 스케줄(간격, 받을 개수, 스케줄러 등록 / 스케줄 업데이트 / 스케줄 정지). 고급 작업에는 수동 1회 테스트가 있습니다.</figcaption>
 </figure>
 
 ### 채널 로그
@@ -56,7 +56,7 @@ Channels 탭이 시작점입니다. 상단 **채널 관리** 카드는 정보용
 합니다. 실제 다운로드는 확인 흐름과 설정한 **한 번에 받을 개수**로 보호됩니다.
 
 <figure markdown="span">
-  ![글로벌 큐 컨트롤](../assets/user-manual/ko/05-queue-console.png){ loading=lazy }
+  ![다운로드 큐](../assets/user-manual/ko/05-queue-console.png){ loading=lazy }
   <figcaption>큐 — 모든 채널의 다운로드 상태, 실패, claim 가능한 작업을 한 화면에.</figcaption>
 </figure>
 
@@ -82,7 +82,7 @@ DB 행은 파일이 여전히 NAS에 있는 척하지 않고 누락 미디어로
 
 <figure markdown="span">
   ![인사이트 스토리지](../assets/user-manual/ko/09-insights-storage.png){ loading=lazy }
-  <figcaption>인사이트 — 볼륨 맵, 스토리지 추세, 채널별 트리맵, 드리프트 대응, 스토리지 트리아지 콘솔.</figcaption>
+  <figcaption>인사이트 — 저장소 맵, 스토리지 추세, 채널별 트리맵, 드리프트 대응, 스토리지 트리아지 콘솔.</figcaption>
 </figure>
 
 ## Settings { #settings }

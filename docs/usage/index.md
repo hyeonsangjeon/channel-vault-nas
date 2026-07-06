@@ -6,7 +6,7 @@ Channel Vault NAS has one archive path, from source to verified media:
 flowchart LR
   A[Register a channel] --> B[Preview and Register]
   B --> C[Review remaining videos]
-  C --> D[Start the automatic download schedule]
+  C --> D[Register the automatic download schedule]
   D --> E[Verify in Library]
 ```
 
@@ -24,7 +24,7 @@ flowchart LR
     ---
 
     The click-by-click walkthrough: paste a channel, preview it, register it,
-    then start the automatic download schedule that archives the remaining
+    then register the automatic download schedule that archives the remaining
     videos for you.
 
     [:octicons-arrow-right-24: First backup](first-backup.md)
@@ -64,7 +64,7 @@ flowchart LR
 | Tab | What it's for |
 | --- | --- |
 | **Dashboard** | Archive overview and the next useful action. No deep controls. |
-| **Channels** | The start point: register a channel (Preview → Register channel), review remaining videos, and start the automatic download schedule. |
+| **Channels** | The start point: register a channel (Preview → Register channel), review remaining videos, and register the automatic download schedule. |
 | **Queue** | Every candidate, queued, running, completed, failed, and cancelled job. Stale failures for already-archived videos are hidden from current work. |
 | **Library** | Archived and missing videos together, with codec/sidecar/path integrity. |
 | **Insights** | Storage pressure, folder structure, drift, orphan sidecars — read from the real archive root. |

@@ -18,8 +18,8 @@ run bounded download passes, and keep the local archive searchable from the app.
 
 This app is published as two images that run together with Docker Compose:
 
-- `modenaf360/channel-vault-nas-api:0.1.0-alpha.1`
-- `modenaf360/channel-vault-nas-web:0.1.0-alpha.1`
+- `modenaf360/channel-vault-nas-api:0.1.0-alpha.2`
+- `modenaf360/channel-vault-nas-web:0.1.0-alpha.2`
 
 Both images are multi-arch: `linux/amd64` and `linux/arm64`.
 
@@ -54,8 +54,8 @@ cd channel-vault-nas
 cp .env.example .env
 mkdir -p metadata downfolder runtime
 
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
 docker compose pull
 docker compose up -d --no-build
 ```
