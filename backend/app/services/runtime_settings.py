@@ -29,7 +29,10 @@ from app.schemas.settings import (
     SchedulerTickPruneResult,
     SchedulerTickRead,
 )
-from app.services.download_scheduler import download_worker_scheduler, get_download_worker_scheduler_status
+from app.services.download_scheduler import (
+    download_worker_scheduler,
+    get_download_worker_scheduler_status,
+)
 from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import (
     get_metadata_sync_scheduler_status,

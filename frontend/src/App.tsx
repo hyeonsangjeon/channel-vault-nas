@@ -5479,7 +5479,6 @@ function App() {
   const showLowerGrid = showChannelWorkspace || showInsightsWorkspace;
   const hasAnyRegisteredChannel = Boolean(registeredChannelId || dashboard?.channels.length);
   const cockpitStage = operationsReadiness?.stage ?? "setup";
-  const cockpitScore = operationsReadiness?.score ?? 0;
   const cockpitMissions = operationsReadiness?.missions.filter((mission) => mission.action_kind !== "none").slice(0, 3) ?? [];
   const cockpitQueueWork = queueConsoleCounts.candidate + queueConsoleCounts.queued + queueConsoleCounts.running;
   const cockpitStorageIssues = storageDriftTotal + (storageScan?.orphan_sidecars.length ?? 0);
@@ -5508,9 +5507,12 @@ function App() {
   const sidebarNavBadges = useMemo<Record<NavId, NavStatusBadge>>(
     () => ({
       dashboard: {
-        value: String(cockpitScore),
-        tone: cockpitScore >= 80 ? "good" : cockpitScore >= 50 ? "warn" : "active",
-        label: `${t("ops.score")} ${cockpitScore}`,
+        value: `${activeArchivedCount}/${activeCounts?.video_count ?? activeTimeline.length}`,
+        tone: activeMissingCount > 0 ? "active" : "good",
+        label:
+          activeMissingCount > 0
+            ? t("dashboard.cockpit.protectedFresh").replace("{fresh}", String(activeMissingCount))
+            : t("dashboard.cockpit.protectedAll"),
       },
       channels: {
         value: String(activeChannels.length),
@@ -5546,7 +5548,6 @@ function App() {
       activeTimeline.length,
       activeTitle,
       cockpitQueueWork,
-      cockpitScore,
       cockpitStorageIssues,
       queueConsoleCounts.failed,
       queueConsoleCounts.queued,
@@ -6203,9 +6204,13 @@ function App() {
                 <div className="cockpit-score-card">
                   <Gauge size={22} />
                   <div>
-                    <span>{t("ops.score")}</span>
-                    <strong>{operationsReadiness ? cockpitScore : "..."}</strong>
-                    <em>{operationsReadiness ? operationStageLabel(cockpitStage, t) : t("runtime.checking")}</em>
+                    <span>{t("dashboard.cockpit.protectedLabel")}</span>
+                    <strong>{activeArchivedCount}/{activeCounts?.video_count ?? activeTimeline.length}</strong>
+                    <em>
+                      {activeMissingCount > 0
+                        ? t("dashboard.cockpit.protectedFresh").replace("{fresh}", String(activeMissingCount))
+                        : t("dashboard.cockpit.protectedAll")}
+                    </em>
                   </div>
                 </div>
               </div>
@@ -6611,7 +6616,22 @@ function App() {
               </section>
             ) : null}
 
-            {hasAnyRegisteredChannel || operatorChecksOpen ? (
+            {hasAnyRegisteredChannel ? (
+              <button
+                className={`operator-checks-toggle dashboard-advanced-toggle ${operatorChecksOpen ? "open" : ""}`}
+                onClick={() => setOperatorChecksOpen((open) => !open)}
+                type="button"
+              >
+                <span>
+                  <ShieldCheck size={15} />
+                  <strong>{t("firstRun.operatorChecks.title")}</strong>
+                </span>
+                <small>{t("firstRun.operatorChecks.detail")}</small>
+                <ChevronRight size={14} />
+              </button>
+            ) : null}
+
+            {operatorChecksOpen ? (
               <>
             <section className={`release-readiness ${releaseReadinessDone === releaseReadinessItems.length ? "ready" : "building"}`} aria-label={t("release.readiness.aria")}>
               <div className="release-readiness-head">
@@ -6831,7 +6851,7 @@ function App() {
               </button>
             </section>
 
-            {operationsReadiness ? (
+            {operationsReadiness && operatorChecksOpen ? (
               <section className={`ops-readiness ${operationsReadiness.stage}`} aria-label={t("ops.title")}>
                 <div className="ops-readiness-score">
                   <Gauge size={22} />

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 QUALITY_FORMATS = {
     "720p": "bv*[height<=720]+ba/b[height<=720]/b",
     "1080p": "bv*[height<=1080]+ba/b[height<=1080]/b",
