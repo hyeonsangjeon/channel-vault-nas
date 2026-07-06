@@ -52,6 +52,7 @@ RUNTIME_FIELD_TO_ENV_KEY = {
     "ytdlp_binary": "CVN_YTDLP_BINARY",
     "ffprobe_binary": "CVN_FFPROBE_BINARY",
 }
+ENV_KEY_TO_RUNTIME_FIELD = {env_key: field_name for field_name, env_key in RUNTIME_FIELD_TO_ENV_KEY.items()}
 
 
 async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
@@ -521,6 +522,42 @@ async def _apply_active_runtime_settings(updates: dict[str, object]) -> None:
         metadata_sync_scheduler.start()
     else:
         await metadata_sync_scheduler.stop()
+
+
+def _coerce_runtime_value(field_name: str, raw: object) -> object:
+    """Coerce a managed env string to the type of the live settings field."""
+    current = getattr(settings, field_name)
+    if isinstance(current, bool):
+        if isinstance(raw, bool):
+            return raw
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(current, int):
+        try:
+            return int(str(raw).strip())
+        except (TypeError, ValueError):
+            return current
+    return str(raw)
+
+
+def apply_managed_runtime_overrides() -> list[str]:
+    """Overlay saved managed env values onto the live settings at startup.
+
+    Values saved from the operator UI live in the managed env file and must win
+    over process env defaults (for example a docker-compose ``${VAR:-default}``
+    injection) so an operator's saved auto-download schedule keeps applying
+    across restarts instead of silently reverting to the deployment default.
+    """
+    managed = _read_managed_env()
+    applied: list[str] = []
+    for env_key, raw in managed.items():
+        field_name = ENV_KEY_TO_RUNTIME_FIELD.get(env_key)
+        if field_name is None:
+            continue
+        coerced = _coerce_runtime_value(field_name, raw)
+        if getattr(settings, field_name) != coerced:
+            setattr(settings, field_name, coerced)
+            applied.append(field_name)
+    return applied
 
 
 async def list_scheduler_ticks(
