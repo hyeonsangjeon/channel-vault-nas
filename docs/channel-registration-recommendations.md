@@ -8,6 +8,12 @@
 전제 문서: `archive-priorities.md`(데이터/폴더 계약), `design-direction.md`(비주얼),
 `architecture.md`(플랫폼).
 
+> **참고 (2026 업데이트):** 이 문서는 초기 등록 UX의 **디자인 비전/권고**이며 현재
+> 출시된 UI를 그대로 설명하지 않습니다. 실제 출시된 흐름은 단순합니다 —
+> **채널 URL/handle/ID 붙여넣기 → 미리보기(Preview) → 검토 → 채널 등록(Register
+> channel)**. 아래의 "점화(ignite)/constellation" 같은 표현은 지향점 언어이며,
+> 사용자용 설치·사용 안내는 `usage/first-backup.md`를 따르세요.
+
 ## 현재 코드 기준 (이 위에서 올린다)
 
 이미 있는 발판 — 새로 만들지 말고 **진짜로 연결**할 것:
