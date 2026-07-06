@@ -66,10 +66,11 @@ and metadata live on disk — not inside a container layer.
 ## After install
 
 1. Open the web console at `http://127.0.0.1:5173/`.
-2. Follow the [First backup wizard](../usage/first-backup.md) to archive your
+2. Follow [Your first channel backup](../usage/first-backup.md) to archive your
    first channel.
-3. Real downloads stay disabled until you
-   [enable the worker](../usage/enable-downloads.md) and confirm the guarded pass.
+3. Real downloads stay disabled until you start the automatic download schedule
+   (which [enables the worker](../usage/enable-downloads.md) for you) or run the
+   advanced manual test.
 
 !!! question "You only see `{\"detail\":\"Not Found\"}`?"
     You opened the raw **API** port instead of the **web** console. Open the web

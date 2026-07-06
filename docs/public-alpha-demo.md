@@ -72,13 +72,13 @@ docs/assets/demo/channel-vault-public-alpha.webm
 
 ## In-App Safe Demo Workspace
 
-Fresh empty installs now lead with the first channel backup wizard: paste a
-channel URL, `@handle`, or `UC...` channel ID, analyze the source, review the
-backup plan, and stop at the real-download confirmation modal. Public demos can
-still load the same kind of operator story from the secondary safe demo panel.
-That action creates a `Signal Lab` channel, one indexed media file,
-missing-video candidates, queue audit, scheduler ticks, library sidecars,
-storage drift, and orphan sidecars.
+Fresh empty installs lead with the Channels tab: paste a channel URL, `@handle`,
+or `UC...` channel ID, click **Preview**, review the source, then **Register
+channel**. Open the channel and start the automatic download schedule to archive
+the remaining videos. Public demos can still load the same kind of operator story
+from the secondary safe demo panel. That action creates a `Signal Lab` channel,
+one indexed media file, missing-video candidates, queue audit, scheduler ticks,
+library sidecars, storage drift, and orphan sidecars.
 
 This path is safe for screenshots and first-run evaluation:
 
@@ -86,7 +86,7 @@ This path is safe for screenshots and first-run evaluation:
 - It does not start downloads.
 - It refuses to run when the workspace already has registered real channels.
 - The clean-install gate explains the safety boundary before sample data is seeded.
-- It routes the operator straight to the channel Downloads tab after seeding.
+- It routes the operator straight to the seeded channel detail after seeding.
 - It shows a demo banner with a clear action so sample data can be removed
   without touching real channels.
 
@@ -111,12 +111,13 @@ For a local public walkthrough:
    the token in recordings, livestreams, or screenshots.
 3. Open Dashboard and point out readiness, operations, the clean-install
    gate, and the onboarding proof export.
-4. On an empty workspace, paste a channel URL, `@handle`, or `UC...` channel ID
-   into the first backup wizard and analyze it before anything is registered.
+4. On an empty workspace, go to the Channels tab, paste a channel URL, `@handle`,
+   or `UC...` channel ID, and click **Preview** before anything is registered.
 5. Review the channel name, video count, estimated size, save folder, preview
-   videos, and safety notes.
-6. Click **Start first backup** to register, sync, create candidates, inspect the
-   worker plan, and stop at the confirmation modal.
+   videos, and safety notes, then click **Register channel**.
+6. Open the channel, review Total / Downloaded / Remaining, and start the
+   automatic download schedule (interval + downloads per pass) to archive the
+   remaining videos.
 7. For a no-network public walkthrough, expand the secondary safe demo panel and
    load `Signal Lab` without external calls.
 8. Open a channel detail and move through Overview, Downloads, Library, Logs, and Policy.

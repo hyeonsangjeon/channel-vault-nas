@@ -32,4 +32,5 @@ In Channel Vault NAS, that same `archive.txt` becomes a guided reconciliation:
 
 !!! note "Safe by default"
     Importing a ledger never starts real transfers on its own. Downloads still go
-    through the [guarded confirmation](enable-downloads.md) and the 5-per-pass cap.
+    through the [guarded confirmation](enable-downloads.md) and the configured
+    per-pass batch size.

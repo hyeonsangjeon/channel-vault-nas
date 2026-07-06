@@ -36,7 +36,7 @@ Both images are multi-arch: `linux/amd64` and `linux/arm64`.
 
 | Dashboard overview | Guarded download queue |
 | --- | --- |
-| ![Dashboard overview](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/channel-downloads.png) |
+| ![Dashboard overview](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/dashboard-cockpit.png) | ![Channel backup schedule](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/channel-downloads.png) |
 
 | Queue console | Library shelf |
 | --- | --- |

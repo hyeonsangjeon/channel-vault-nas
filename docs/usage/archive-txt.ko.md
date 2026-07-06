@@ -32,4 +32,4 @@ Channel Vault NAS에서 그 `archive.txt`는 안내식 대조가 됩니다:
 
 !!! note "기본은 안전"
     장부를 가져와도 스스로 실제 전송을 시작하지 않습니다. 다운로드는 여전히
-    [가드형 확인](enable-downloads.md)과 패스당 5개 제한을 거칩니다.
+    [가드형 확인](enable-downloads.md)과 설정한 패스당 받을 개수를 거칩니다.

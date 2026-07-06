@@ -1,7 +1,7 @@
 # Product tour
 
-A reference for every screen. For the guided first run, start with the
-[First backup wizard](first-backup.md).
+A reference for every screen. For the guided first run, start with
+[Your first channel backup](first-backup.md).
 
 ## Dashboard
 
@@ -10,23 +10,24 @@ worker / scheduler / storage / library state, recent events, and operator tasks.
 It intentionally avoids deep controls.
 
 <figure markdown="span">
-  ![Dashboard cockpit](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>Dashboard — “Know what needs attention before opening a tab,” plus the five-step first archive path and the public-readiness checklist.</figcaption>
+  ![Dashboard overview](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
+  <figcaption>Dashboard — “Know what needs attention before opening a tab,” plus the next useful action and the public-readiness checklist.</figcaption>
 </figure>
 
 ## Channels
 
-The channel workbench is the start point:
+The Channels tab is the start point. The top **Channel management** card is an
+informational summary; the work happens in registration and the channel detail:
 
-1. Register or probe a source.
-2. Sync metadata.
-3. Review missing videos.
-4. Queue/download only what is not archived.
-5. Use the `archive.txt` import path when you already have a ledger.
+1. Register a channel — paste a URL / `@handle` / `UC…` ID, click **Preview**,
+   review it, then **Register channel**.
+2. Review the **remaining videos** (Total / Downloaded / Remaining).
+3. Start the **automatic download schedule** to archive the remaining videos.
+4. Use the `archive.txt` import path when you already have a ledger.
 
 <figure markdown="span">
   ![Channel overview](../assets/user-manual/en/02-channel-overview.png){ loading=lazy }
-  <figcaption>Channel detail — overview, sync cadence, and per-channel actions (Check new videos, Download new only, View progress).</figcaption>
+  <figcaption>Channel detail — the Channel backup guide, Total / Downloaded / Remaining counts, and the automatic download schedule (interval, batch size, Start / Save only / Stop). Advanced actions hold the manual one-pass test.</figcaption>
 </figure>
 
 ### Channel logs
@@ -51,8 +52,10 @@ for that channel.
 ## Queue
 
 The queue console shows all candidate, queued, running, completed, failed, and
-cancelled jobs. Real downloads are guarded by a confirmation flow and a maximum of
-**5 jobs per worker pass**.
+cancelled jobs. It leads with the current **Visible jobs**; stale failures for
+videos that are already archived are hidden so you see only real work. Real
+downloads are guarded by a confirmation flow and the configured **Downloads per
+pass** batch size.
 
 <figure markdown="span">
   ![Global queue control](../assets/user-manual/en/05-queue-console.png){ loading=lazy }
@@ -103,5 +106,5 @@ NAS checks.
 
 <figure markdown="span">
   ![Mobile dashboard](../assets/user-manual/en/11-mobile-dashboard.png){ loading=lazy width="360" }
-  <figcaption>Mobile Dashboard — the same cockpit, adapted to a narrow viewport.</figcaption>
+  <figcaption>Mobile Dashboard — the same overview, adapted to a narrow viewport.</figcaption>
 </figure>

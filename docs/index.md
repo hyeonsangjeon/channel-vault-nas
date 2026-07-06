@@ -51,8 +51,9 @@ backup, recorded on the real UI with on-screen step markers the whole way.
 
     ---
 
-    Paste a channel URL, `@handle`, or `UC…` ID, analyze it, review the plan, and
-    start a guarded backup pass — capped at 5 per run.
+    Paste a channel URL, `@handle`, or `UC…` ID, preview it, register it, then
+    start the automatic download schedule that archives the remaining videos for
+    you.
 
     [:octicons-arrow-right-24: Usage manual](usage/index.md)
 
@@ -69,8 +70,9 @@ backup, recorded on the real UI with on-screen step markers the whole way.
 
     ---
 
-    Real downloads stay off until you flip the worker flag and confirm the pass.
-    The filesystem is never destructively rewritten.
+    Real downloads stay off until you start the automatic download schedule (or
+    run the advanced manual test). The filesystem is never destructively
+    rewritten.
 
     [:octicons-arrow-right-24: Enable downloads](usage/enable-downloads.md)
 

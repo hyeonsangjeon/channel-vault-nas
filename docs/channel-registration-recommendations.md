@@ -27,7 +27,7 @@ DB 영속화 → 살아있는 UI** 로 한 줄기를 관통시키는 것.
 
 ## 북극성 한 줄
 
-> Channel 등록은 "폼 제출"이 아니라 **관측소에 별 하나를 점화하는 순간**이다.
+> Channel 등록은 단순한 "폼 제출"이 아니라 **소스 검증 후 보관 기준을 만드는 순간**이다.
 > 붙여넣는 순간 채널이 살아 움직이며 자기를 드러내고, 사용자는 **눈 뜨고**
 > 아카이빙을 시작한다.
 
@@ -37,7 +37,7 @@ DB 영속화 → 살아있는 UI** 로 한 줄기를 관통시키는 것.
 ## End-to-end 계약 (최소한 이게 돌면 성공) [Core]
 
 ```
-[붙여넣기] → [Probe(미리보기)] → [정책 선택] → [점화(commit)] → [목록/상세]
+[붙여넣기] → [Probe(미리보기)] → [정책 선택] → [채널 등록] → [목록/상세]
 ```
 
 1. 사용자가 URL/handle을 붙여넣는다.
@@ -115,13 +115,11 @@ probe를 WebSocket 잡으로: flat 목록이 enumerate되며 **영상 카운터�
    배너를 blur 처리해 카드 뒤 ambient 배경으로.
 3. **Preview 카드** — 아바타 미세 parallax, **mono 숫자 count-up**(총 영상 수·
    GB·일수), cadence sparkline, storage forecast 게이지. 정보 밀도 높지만 정돈.
-4. **점화(commit)** — 확정하면 채널이 **constellation으로 ignite**: 노드가
-   태어나고 엣지가 그려짐. 이 한 방의 모션이 제품의 시그니처.
-5. **Channels 빈 상태** — 슬픈 "no data" 금지. 초대하는 starfield + "첫 별을
-   점화하세요."
-6. 상태 전이(probe→preview→정책→점화)는 abrupt redraw 대신 **애니메이션 전환**.
+4. **채널 등록** — 확정하면 채널 상세, 새 영상 확인, 다운로드 시작 경로가 바로 열린다.
+5. **Channels 빈 상태** — 슬픈 "no data" 금지. 바로 붙여넣고 미리보기 할 수 있는 시작 화면.
+6. 상태 전이(probe→preview→정책→등록)는 abrupt redraw 대신 **애니메이션 전환**.
 
-기존 컴포넌트를 재사용해 일관성 유지: `ChannelConstellation`(점화 대상),
+기존 컴포넌트를 재사용해 일관성 유지: `ChannelConstellation`(채널 시각화),
 `MetricTile`(미리보기 KPI), `QueueFlow`(라이브 probe), 다크 토큰·semantic accent.
 
 ## 비차별 함정 — 하지 말 것

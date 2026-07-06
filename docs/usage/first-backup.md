@@ -1,7 +1,7 @@
-# First backup wizard
+# Your first channel backup
 
-This is the click-by-click walkthrough from an empty workspace to a verified
-archive. It matches the [5-minute video guide](../index.md#watch-the-5-minute-guide).
+This is the click-by-click walkthrough from an empty workspace to a verified,
+self-updating archive. It matches the [5-minute video guide](../index.md#watch-the-5-minute-guide).
 
 !!! info "Sample channel"
     The screenshots register a real channel handle
@@ -12,76 +12,87 @@ archive. It matches the [5-minute video guide](../index.md#watch-the-5-minute-gu
 
 ## Step 1 — Open the console
 
-Open **`http://127.0.0.1:5173/`**. On a fresh, empty workspace the Dashboard
-leads with the **first channel backup** wizard.
+Open **`http://127.0.0.1:5173/`**. The Dashboard is a read-only overview: it
+shows your archive score and the next useful action, then points you to the
+**Channels** tab to do the work.
 
 <figure markdown="span">
-  ![Dashboard first-run cockpit](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>Dashboard — the five-step archive path (Add source → Check new videos → Stage missing only → Run guarded pass → Verify library) is shown across the middle.</figcaption>
+  ![Dashboard first-run overview](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
+  <figcaption>Dashboard — archive score, the next useful action, and worker / storage / library state at a glance. No deep controls here; the Channels tab is where you register and archive.</figcaption>
 </figure>
 
 !!! note "What to click"
-    Find **Start your first channel backup**. The primary input accepts a channel
-    URL, an `@handle`, or a `UC…` channel ID.
+    Open **Channels** in the left sidebar. The top **Channel management** card is
+    an informational summary of the current channel — the buttons you actually
+    click are in the **Channel registration** panel and the **Channel detail**
+    below it.
 
 ---
 
-## Step 2 — Paste a channel and analyze
+## Step 2 — Register the channel
 
-Go to the **Channels** tab (or use the first-run wizard). Paste the channel into
-**Channel registration**, choose a quality (`720p` / `1080p` / `best`), toggle
-**Subtitles** / **Audio only** as needed, then click **Preview** to
-analyze the source before anything is registered.
+In the **Channel registration** panel, paste the channel URL, an `@handle`, or a
+`UC…` channel ID, choose a quality (`720p` / `1080p` / `best`), toggle
+**Subtitles** / **Audio only** as needed, then click **Preview** to inspect the
+source before anything is saved. Review the preview, then click **Register
+channel** to add it to the vault.
 
 <figure markdown="span">
-  ![Channel registration and download planner](../assets/user-manual/en/03-download-launch-control.png){ loading=lazy }
-  <figcaption>Channels workbench — registration input, quality/subtitle options, and the Download planner that previews the batch (candidates, queued, estimated size) before any transfer.</figcaption>
+  ![Channel management and registration](../assets/user-manual/en/03-download-launch-control.png){ loading=lazy }
+  <figcaption>Channels — the Channel management card (Channel admin, Add another channel) is informational; registration is the paste → Preview → Register channel flow, and the channel detail below drives the backup.</figcaption>
 </figure>
 
 !!! note "What to click"
     1. Paste the channel URL / `@handle` / `UC…` ID.
     2. Pick **1080p** (or your preferred quality) and enable **Subtitles**.
-    3. Click **Preview** to analyze.
+    3. Click **Preview** to inspect the source.
+    4. Click **Register channel** to save it. Use **Add another channel** later to
+       register more without losing the current one.
 
 ---
 
-## Step 3 — Review the backup plan
+## Step 3 — Review the remaining videos
 
-Analysis returns the channel name, video count, estimated size, save folder, first
-preview videos, and safety notes. The **Download planner** shows how many videos
-are **Ready**, **Candidates**, **Queued**, and already **Selected**, plus a batch
-size estimate.
+Open the registered channel. The **Channel backup** guide leads with
+**"Archive the remaining videos automatically"** and three counts — **Total
+videos**, **Downloaded**, and **Remaining** — so you always know how much work
+is left.
 
 !!! note "What to check"
-    - **Already archived vs missing** — already-archived videos are skipped.
-    - **Batch estimate** — the total size before you commit.
+    - **Total / Downloaded / Remaining** — how many videos still need archiving.
     - **Save folder** — where media will land (see
       [Filesystem contract](../reference/filesystem.md)).
+    - Click **Check again** any time to refresh the source and archive state.
 
-When it looks right, click **Download new only** (or **Start first backup** from
-the wizard).
+!!! success "Already fully archived?"
+    If everything is saved, the guide reads **"This channel is fully archived"**
+    — that is a **completed** state, not a failure. The schedule simply has no
+    remaining work; check again when the channel publishes new videos.
 
 ---
 
-## Step 4 — Confirm the guarded pass
+## Step 4 — Start the automatic download schedule
 
-Real downloads always stop at a confirmation modal. It summarizes **Max this
-pass**, **Already downloaded skipped**, and **Queued**, and warns if the media
-worker is still disabled.
+This is the main backup flow. Click **Configure automatic downloads** to open the
+**Automatic download schedule**, then choose:
+
+- **Run every N minutes** — how often the scheduler wakes up.
+- **Downloads per pass** — how many videos each pass claims.
+
+Click **Start schedule** to begin. Starting the schedule automatically enables
+real downloads and the scheduler, and it queues **only the remaining videos** at
+the interval you chose — already-downloaded videos are skipped. Prefer to set it
+up without starting yet? Use **Save only**, and **Stop schedule** halts future
+passes.
 
 <figure markdown="span">
-  ![Download confirmation modal](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
-  <figcaption>Confirmation modal — a guarded pass is capped at 5 per run. If the worker is off, it says: “Media worker is disabled. Set CVN_DOWNLOAD_WORKER_ENABLED=true before starting real transfers.”</figcaption>
+  ![Automatic download schedule](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
+  <figcaption>Automatic download schedule — interval and batch size, live status (On / Off / Running), next run, and Total / Downloaded / Remaining counts. Hover the info (i) hint for a plain-language explanation.</figcaption>
 </figure>
 
-!!! note "What to click"
-    Click **Start up to 5** to launch a guarded pass — but only if you have
-    [enabled real downloads](enable-downloads.md). Otherwise the videos stage as
-    candidates and wait.
-
 !!! warning "Safe by default"
-    With the worker disabled, nothing is transferred — the plan is staged and the
-    queue is paused before claim. This is intentional. See
+    Nothing transfers until you start the schedule (or run the advanced manual
+    test below). Registering and previewing never download anything. See
     [Enable real downloads](enable-downloads.md).
 
 ---
@@ -89,16 +100,16 @@ worker is still disabled.
 ## Step 5 — Watch the queue
 
 Open the **Queue** tab to watch progress, failures, retries, and the worker audit
-detail. The **Global queue control** shows Ready / Queued / Running / done /
-Failed / Claimable counts across every channel.
+detail. It shows the current **Visible jobs** across every channel; past failures
+for videos that are already archived are hidden so you see only real, current
+work.
 
 <figure markdown="span">
   ![Global queue control](../assets/user-manual/en/05-queue-console.png){ loading=lazy }
-  <figcaption>Queue — counters, filters, and per-job cards. The Worker control room on the right shows the worker state; with downloads off it reads “locked / paused before claim”.</figcaption>
+  <figcaption>Queue — counters, filters, and per-job cards, with the Worker control room on the right. When the schedule is running the worker reads “armed” and jobs move to Running.</figcaption>
 </figure>
 
-Once the worker is armed and you confirm the pass, jobs move to **Running** and
-progress bars fill to 100%.
+Once the worker is armed, jobs move to **Running** and progress bars fill to 100%.
 
 ---
 
@@ -114,10 +125,25 @@ state, and path integrity.
 </figure>
 
 !!! success "Done"
-    You've registered a channel, staged only missing videos, run a guarded pass,
-    and verified coverage in the Library. Next: explore
+    You've registered a channel, reviewed the remaining videos, and started the
+    automatic download schedule that keeps the archive current. Next: explore
     [Insights](product-tour.md#insights) and lock down
     [Settings](product-tour.md#settings).
+
+---
+
+## Advanced — run a manual one-pass test
+
+Under **Advanced actions** you can run a **Manual one-pass test** — **Run up to 5
+now only**. It is separate from the schedule: this pass starts up to your
+configured batch size immediately, which is handy for verifying one batch before
+you rely on the schedule. Real transfers still stop at a confirmation modal.
+
+!!! note "What to click"
+    Open **Advanced actions → Manual one-pass test**, review the confirmation
+    modal (**Max this pass**, **Already downloaded skipped**, **Queued**), and
+    confirm to launch a single guarded pass. It only runs if you have
+    [enabled real downloads](enable-downloads.md) or start it from here.
 
 ---
 

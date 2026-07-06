@@ -27,7 +27,7 @@ docker compose up -d --no-build
 ```
 
 그런 다음 **`http://127.0.0.1:5173/`** 을 열고
-[첫 백업 마법사](../usage/first-backup.md)로 이동하세요.
+[첫 채널 백업](../usage/first-backup.md)으로 이동하세요.
 
 ??? note "GHCR 이미지를 선호하나요?"
     이미지 오버라이드를 GitHub Container Registry 미러로 바꾸세요:

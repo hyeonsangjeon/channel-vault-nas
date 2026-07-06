@@ -133,5 +133,6 @@ What to check in Container Manager:
   accepted API/WebSocket paths.
 - Set up backups before archiving anything real:
   [`docs/backup-restore.md`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/backup-restore.md).
-- Real downloads stay disabled until you
-  [enable the worker](../usage/enable-downloads.md) and confirm the guarded pass.
+- Real downloads stay disabled until you start the automatic download schedule
+  (which [enables the worker](../usage/enable-downloads.md) for you) or run the
+  advanced manual test.

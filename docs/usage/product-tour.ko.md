@@ -1,7 +1,7 @@
 # 화면 둘러보기
 
 모든 화면에 대한 레퍼런스입니다. 안내식 첫 실행은
-[첫 백업 마법사](first-backup.md)로 시작하세요.
+[첫 채널 백업](first-backup.md)으로 시작하세요.
 
 ## Dashboard
 
@@ -10,23 +10,24 @@
 의도적으로 배제합니다.
 
 <figure markdown="span">
-  ![대시보드 콕핏](../assets/user-manual/ko/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>대시보드 — “탭을 열기 전에 무엇이 주의를 요하는지 알기”, 그리고 다섯 단계 첫 아카이브 경로와 공개 준비 체크리스트.</figcaption>
+  ![대시보드 개요](../assets/user-manual/ko/01-dashboard-cockpit.png){ loading=lazy }
+  <figcaption>대시보드 — “탭을 열기 전에 무엇이 주의를 요하는지 알기”, 그리고 다음에 할 유용한 작업과 공개 준비 체크리스트.</figcaption>
 </figure>
 
 ## Channels
 
-채널 워크벤치가 시작점입니다:
+Channels 탭이 시작점입니다. 상단 **채널 관리** 카드는 정보용 요약이고, 실제 작업은
+등록과 채널 상세에서 이뤄집니다:
 
-1. 원본을 등록하거나 조사합니다.
-2. 메타데이터를 동기화합니다.
-3. 누락 영상을 검토합니다.
-4. 아카이브되지 않은 것만 큐에 넣고 다운로드합니다.
-5. 이미 장부가 있으면 `archive.txt` 가져오기 경로를 사용합니다.
+1. 채널 등록 — URL / `@handle` / `UC…` ID를 붙여넣고 **미리보기**를 눌러 검토한 뒤
+   **채널 등록**.
+2. **남은 영상**(총 영상 / 다운받음 / 남은 영상)을 검토합니다.
+3. **자동 다운로드 스케줄**을 시작해 남은 영상을 보관합니다.
+4. 이미 장부가 있으면 `archive.txt` 가져오기 경로를 사용합니다.
 
 <figure markdown="span">
   ![채널 개요](../assets/user-manual/ko/02-channel-overview.png){ loading=lazy }
-  <figcaption>채널 상세 — 개요, 동기화 주기, 채널별 작업(새 영상 확인, 새 것만 다운로드, 진행률 보기).</figcaption>
+  <figcaption>채널 상세 — 채널 백업 안내, 총 영상 / 다운받음 / 남은 영상 수, 그리고 자동 다운로드 스케줄(간격, 받을 개수, 스케줄 시작 / 설정만 저장 / 스케줄 정지). 고급 작업에는 수동 1회 테스트가 있습니다.</figcaption>
 </figure>
 
 ### 채널 로그
@@ -50,8 +51,9 @@
 
 ## Queue
 
-큐 콘솔은 모든 후보, 대기, 실행 중, 완료, 실패, 취소된 작업을 보여줍니다. 실제
-다운로드는 확인 흐름과 **워커 패스당 최대 5개 작업**으로 보호됩니다.
+큐 콘솔은 모든 후보, 대기, 실행 중, 완료, 실패, 취소된 작업을 보여줍니다. 현재
+**보이는 작업**을 앞세우고, 이미 보관된 영상의 과거 실패는 숨겨 실제 작업만 보이게
+합니다. 실제 다운로드는 확인 흐름과 설정한 **한 번에 받을 개수**로 보호됩니다.
 
 <figure markdown="span">
   ![글로벌 큐 컨트롤](../assets/user-manual/ko/05-queue-console.png){ loading=lazy }
@@ -100,5 +102,5 @@ DB 행은 파일이 여전히 NAS에 있는 척하지 않고 누락 미디어로
 
 <figure markdown="span">
   ![모바일 대시보드](../assets/user-manual/ko/11-mobile-dashboard.png){ loading=lazy width="360" }
-  <figcaption>모바일 대시보드 — 같은 콕핏을 좁은 뷰포트에 맞춘 모습.</figcaption>
+  <figcaption>모바일 대시보드 — 같은 개요를 좁은 뷰포트에 맞춘 모습.</figcaption>
 </figure>

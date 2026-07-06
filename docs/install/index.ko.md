@@ -65,9 +65,9 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
 ## 설치 후
 
 1. 웹 콘솔을 `http://127.0.0.1:5173/` 에서 엽니다.
-2. [첫 백업 마법사](../usage/first-backup.md)를 따라 첫 채널을 아카이브합니다.
-3. 실제 다운로드는 [워커를 켜고](../usage/enable-downloads.md) 가드형 패스를
-   확인하기 전까지 꺼져 있습니다.
+2. [첫 채널 백업](../usage/first-backup.md)을 따라 첫 채널을 아카이브합니다.
+3. 실제 다운로드는 자동 다운로드 스케줄을 시작(그때 [워커가 켜집니다](../usage/enable-downloads.md))
+   하거나 고급 수동 테스트를 실행하기 전까지 꺼져 있습니다.
 
 !!! question "`{\"detail\":\"Not Found\"}` 만 보이나요?"
     **웹** 콘솔 대신 원시 **API** 포트를 연 것입니다. 웹 포트(`CVN_WEB_PORT`,

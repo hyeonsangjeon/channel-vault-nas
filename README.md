@@ -65,10 +65,12 @@ docker compose pull
 docker compose up -d --no-build
 ```
 
-Open `http://127.0.0.1:5173/`, paste a YouTube channel URL, `@handle`, or
-`UC...` channel ID into **Start your first channel backup**, then click
-**Analyze channel**. To explore without touching YouTube, expand the secondary
-**Safe demo and advanced import options** panel instead.
+Open `http://127.0.0.1:5173/`, go to the **Channels** tab, paste a YouTube
+channel URL, `@handle`, or `UC...` channel ID, click **Preview**, then
+**Register channel**. Open the channel and **Start schedule** on the automatic
+download schedule to archive the remaining videos. To explore without touching
+YouTube, expand the secondary **Safe demo and advanced import options** panel
+instead.
 
 > Guardrail: this self-hosted release is built for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose it directly to the public internet.
@@ -94,7 +96,7 @@ step markers the whole way.
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-hi.mp4">हिन्दी</a>
 </p>
 
-<sub>Chapters: install → first backup wizard → plan review → confirm &amp; start the backup → watch the download queue reach 100% → library, insights, and settings. Same walkthrough in every language, hosted on the <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1">v0.1.0-alpha.1 release</a>. ~5 min · 1440×1000.</sub>
+<sub>Chapters: install → register a channel → review the backup plan → start the backup → watch the download queue reach 100% → library, insights, and settings. Same walkthrough in every language, hosted on the <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1">v0.1.0-alpha.1 release</a>. ~5 min · 1440×1000.</sub>
 
 ## Visual Preview
 
@@ -192,9 +194,9 @@ See [`docs/roadmap.md`](docs/roadmap.md) for non-goals and
 These screenshots are generated from the seeded browser smoke fixture, not from
 static mockups.
 
-| Dashboard overview | Channel downloads |
+| Dashboard overview | Channel backup schedule |
 | --- | --- |
-| ![Dashboard overview showing readiness, operations, and live archive state](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel downloads tab showing guarded queue staging and worker controls](docs/assets/screenshots/channel-downloads.png) |
+| ![Dashboard overview showing readiness, operations, and live archive state](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel detail showing the automatic download schedule, remaining-video counts, and worker controls](docs/assets/screenshots/channel-downloads.png) |
 
 | Queue console | Library shelf | Runtime guide |
 | --- | --- | --- |
@@ -227,19 +229,21 @@ operator tasks. It intentionally avoids deep controls.
 
 ### Channels
 
-The channel workbench is the start point:
+The Channels tab is the start point. The top **Channel management** card is an
+informational summary; the work happens in registration and the channel detail:
 
-1. Register or probe a source.
-2. Sync metadata.
-3. Review missing videos.
-4. Queue/download only what is not archived.
-5. Use the `archive.txt` import path when you already have a ledger.
+1. Register a channel — paste a URL / `@handle` / `UC…` ID, click **Preview**,
+   review it, then **Register channel**.
+2. Review the remaining videos (Total / Downloaded / Remaining).
+3. Start the automatic download schedule to archive the remaining videos.
+4. Use the `archive.txt` import path when you already have a ledger.
 
 ### Queue
 
 The queue console shows all candidate, queued, running, completed, failed, and
-cancelled jobs. Real downloads are guarded by a confirmation flow and a maximum
-of 5 jobs per worker pass.
+cancelled jobs. It leads with the current Visible jobs; stale failures for
+already-archived videos are hidden. Real downloads are guarded by a confirmation
+flow and the configured Downloads-per-pass batch size.
 
 ### Library
 
@@ -549,13 +553,17 @@ outside your private network.
 Deployment examples for private LAN or tunnel access are in
 [`docs/deployment-security.md`](docs/deployment-security.md).
 
-### First-Run Wizard And Safe Demo
+### First-Run Flow And Safe Demo
 
-On a fresh empty workspace, the Dashboard first-run panel leads with the first
-channel backup wizard. Paste a channel URL, `@handle`, or `UC...` channel ID,
-analyze the source, review the estimated backup plan, then click **Start first
-backup** to register, sync, stage missing videos, and stop at the real-download
-confirmation modal.
+On the **Channels** tab, the top **Channel management** card is an informational
+summary; the work happens in the registration panel and the channel detail below
+it. Paste a channel URL, `@handle`, or `UC...` channel ID, click **Preview** to
+inspect the source, then **Register channel**. Open the channel and use the
+**automatic download schedule** — pick how often it runs and how many videos per
+pass, then **Start schedule** to archive the remaining videos (starting it also
+enables real downloads). An advanced **Manual one-pass test** runs a single
+guarded pass behind a confirmation modal. If a channel is already fully archived,
+the guide says so — that is a completed state, not a failure.
 
 The secondary safe demo workspace action seeds a deterministic `Signal Lab`
 channel, one archived media item, missing-video candidates, queue history,
@@ -627,7 +635,10 @@ still required.
 
 Worker passes are intentionally bounded:
 
-- UI run buttons default to a confirmation modal.
+- Starting the automatic download schedule enables real downloads; each pass
+  claims only the configured **Downloads per pass** batch size.
+- The advanced Manual one-pass test runs up to that same batch size once, behind
+  a confirmation modal.
 - API `run-once` limits are capped.
 - Per-channel policy can pause worker claims.
 - Candidate creation can continue even when workers are paused.
@@ -636,17 +647,16 @@ Worker passes are intentionally bounded:
 
 1. Start with Docker Compose or the local development commands above.
 2. Open Dashboard and confirm the release readiness card, live event pill, and clean-install gate.
-3. If the workspace is empty, paste a channel URL, `@handle`, or `UC...` channel ID into the first backup wizard and analyze it before anything is registered.
-4. Review the channel name, video count, estimated size, save folder, first preview videos, and safety notes.
-5. Click **Start first backup** to register, sync, stage missing videos, and open the confirmation modal.
-6. Run a live worker pass only if `CVN_DOWNLOAD_WORKER_ENABLED=true` and the modal button is enabled.
+3. Go to the Channels tab, paste a channel URL, `@handle`, or `UC...` channel ID, and click **Preview** to inspect the source before anything is registered.
+4. Review the channel name, video count, estimated size, save folder, first preview videos, and safety notes, then click **Register channel**.
+5. Open the channel, review Total / Downloaded / Remaining, and use the automatic download schedule (interval + downloads per pass); click **Start schedule** to archive the remaining videos.
+6. Real downloads run only if the schedule is started (or you run the advanced Manual one-pass test) — both go through the confirmation modal.
 7. For a no-network walkthrough, expand the secondary safe demo panel and load `Signal Lab` without external calls.
-8. Open Downloads and review “already archived” versus “missing” before queueing more work.
-9. Open Queue to watch progress, failures, retries, and worker audit detail.
-10. Open Library and confirm completed media/index coverage changed.
-11. Open Insights to inspect storage pressure, drift, and orphan sidecars.
-12. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, backup confidence, and support exports.
-13. Return to Dashboard and copy or download the onboarding proof JSON for a redacted readiness snapshot.
+8. Open Queue to watch the current Visible jobs — progress, failures, retries, and worker audit detail (stale failures for already-archived videos are hidden).
+9. Open Library and confirm completed media/index coverage changed.
+10. Open Insights to inspect storage pressure, drift, and orphan sidecars.
+11. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, backup confidence, and support exports.
+12. Return to Dashboard and copy or download the onboarding proof JSON for a redacted readiness snapshot.
 
 Dashboard support export buttons request a server-generated redacted diagnostic
 bundle first, then fall back to the browser snapshot if the server endpoint is

@@ -4,27 +4,28 @@ Channel Vault NAS has one archive path, from source to verified media:
 
 ```mermaid
 flowchart LR
-  A[Register a source] --> B[Sync metadata]
-  B --> C[Stage only missing]
-  C --> D[Guarded download pass]
+  A[Register a channel] --> B[Preview and Register]
+  B --> C[Review remaining videos]
+  C --> D[Start the automatic download schedule]
   D --> E[Verify in Library]
 ```
 
 <figure markdown="span">
   ![Dashboard: today's archive status](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>The Dashboard is a read-only cockpit: archive score, the next useful action, worker/storage/library state, and the five-step archive path.</figcaption>
+  <figcaption>The Dashboard is a read-only overview: archive score, the next useful action, and worker/storage/library state. Deep controls live on the Channels tab.</figcaption>
 </figure>
 
 ## Start here
 
 <div class="grid cards" markdown>
 
--   :material-play-box:{ .lg .middle } __First backup wizard__
+-   :material-play-box:{ .lg .middle } __First backup__
 
     ---
 
-    The click-by-click walkthrough: paste a channel, analyze, review the plan,
-    confirm, and watch the queue reach 100%.
+    The click-by-click walkthrough: paste a channel, preview it, register it,
+    then start the automatic download schedule that archives the remaining
+    videos for you.
 
     [:octicons-arrow-right-24: First backup](first-backup.md)
 
@@ -32,8 +33,9 @@ flowchart LR
 
     ---
 
-    The app is safe by default. Turn on the worker and confirm the guarded pass
-    when you're ready for real transfers.
+    The app is safe by default. Starting the schedule enables real downloads;
+    an advanced manual one-pass test is there when you want to check a single
+    batch first.
 
     [:octicons-arrow-right-24: Enable downloads](enable-downloads.md)
 
@@ -62,8 +64,8 @@ flowchart LR
 | Tab | What it's for |
 | --- | --- |
 | **Dashboard** | Archive overview and the next useful action. No deep controls. |
-| **Channels** | The start point: register/probe a source, sync, review missing, stage the download batch. |
-| **Queue** | Every candidate, queued, running, completed, failed, and cancelled job. |
+| **Channels** | The start point: register a channel (Preview → Register channel), review remaining videos, and start the automatic download schedule. |
+| **Queue** | Every candidate, queued, running, completed, failed, and cancelled job. Stale failures for already-archived videos are hidden from current work. |
 | **Library** | Archived and missing videos together, with codec/sidecar/path integrity. |
 | **Insights** | Storage pressure, folder structure, drift, orphan sidecars — read from the real archive root. |
 | **Settings** | Runtime console: worker/scheduler flags, binary paths, restart adapters, audit. |

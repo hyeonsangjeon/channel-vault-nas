@@ -25,8 +25,8 @@ docker compose pull
 docker compose up -d --no-build
 ```
 
-Then open **`http://127.0.0.1:5173/`** and jump to the
-[First backup wizard](../usage/first-backup.md).
+Then open **`http://127.0.0.1:5173/`** and jump to
+[Your first channel backup](../usage/first-backup.md).
 
 ??? note "Prefer GHCR images?"
     Swap the image overrides for the GitHub Container Registry mirror:

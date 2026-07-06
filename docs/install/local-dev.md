@@ -47,7 +47,7 @@ curl http://127.0.0.1:8000/api/health
 
 ## Next steps
 
-- Walk through the [First backup wizard](../usage/first-backup.md).
+- Walk through [Your first channel backup](../usage/first-backup.md).
 - Review the [Runtime flags](../reference/runtime-flags.md) you can set locally.
 - Understand the [Filesystem contract](../reference/filesystem.md) before pointing
   the app at a real archive.

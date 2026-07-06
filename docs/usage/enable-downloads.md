@@ -1,12 +1,15 @@
 # Enable real downloads
 
-Channel Vault NAS is **safe by default**. It can plan and queue jobs without
-starting any media transfer. Real downloads require the worker flag — a
-deliberate, explicit step.
+Channel Vault NAS is **safe by default**. It can register, preview, and plan
+without starting any media transfer. Real downloads require the worker flag — and
+the app arms it for you the moment you **start the automatic download schedule**.
 
 ## Turn on the worker
 
-Set these runtime env values:
+The simplest path is the UI: opening a channel and clicking **Start schedule**
+turns on real downloads and the scheduler automatically (see
+[First backup → Step 4](first-backup.md#step-4-start-the-automatic-download-schedule)).
+To arm the NAS globally instead, set these runtime env values:
 
 ```bash
 CVN_DOWNLOAD_WORKER_ENABLED=true
@@ -46,16 +49,17 @@ overrides into `.env.runtime` and shows whether a restart is still required.
 Worker passes are intentionally capped so an accidental click can't saturate your
 NAS or your network:
 
-- UI run buttons default to a **confirmation modal** (see
-  [First backup → Step 4](first-backup.md#step-4-confirm-the-guarded-pass)).
+- The **automatic download schedule** claims only your **Downloads per pass**
+  batch size each time it runs — never the whole channel at once.
+- The advanced **Manual one-pass test** runs up to that same batch size **once**,
+  behind a confirmation modal.
 - API `run-once` limits are capped.
-- A single guarded pass runs **up to 5 jobs**.
 - Per-channel policy can **pause** worker claims.
 - Candidate creation can continue **even when workers are paused**.
 
 <figure markdown="span">
-  ![Download confirmation modal](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
-  <figcaption>The confirmation modal is the gate for real transfers — “Start up to 5” only runs when the worker is enabled.</figcaption>
+  ![Automatic download schedule](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
+  <figcaption>Starting the schedule enables real downloads; each pass claims only the configured batch size. The advanced Manual one-pass test is gated by the same confirmation modal.</figcaption>
 </figure>
 
 !!! warning "Verify before you expose"

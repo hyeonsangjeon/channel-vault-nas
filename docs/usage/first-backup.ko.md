@@ -1,7 +1,8 @@
-# 첫 백업 마법사
+# 첫 채널 백업
 
-비어 있는 워크스페이스에서 검증된 아카이브까지 이어지는 클릭 단위 안내입니다.
-[5분 영상 가이드](../index.md#watch-the-5-minute-guide)와 동일한 흐름입니다.
+비어 있는 워크스페이스에서 검증되고 자동으로 갱신되는 아카이브까지 이어지는 클릭
+단위 안내입니다. [5분 영상 가이드](../index.md#watch-the-5-minute-guide)와 동일한
+흐름입니다.
 
 !!! info "샘플 채널"
     스크린샷은 실제 채널 핸들(`https://www.youtube.com/@wingnut987s4`)을
@@ -12,92 +13,99 @@
 
 ## 1단계 — 콘솔 열기
 
-**`http://127.0.0.1:5173/`** 을 엽니다. 새로 비어 있는 워크스페이스에서는
-대시보드가 **첫 채널 백업** 마법사를 앞세웁니다.
+**`http://127.0.0.1:5173/`** 을 엽니다. 대시보드는 읽기 전용 개요입니다. 아카이브
+점수와 다음에 할 유용한 작업을 보여준 뒤, 실제 작업을 하는 **Channels** 탭으로
+안내합니다.
 
 <figure markdown="span">
-  ![대시보드 첫 실행 콕핏](../assets/user-manual/ko/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>대시보드 — 다섯 단계 아카이브 경로(원본 추가 → 새 영상 확인 → 누락분만 스테이징 → 가드형 패스 실행 → 라이브러리 검증)가 가운데에 표시됩니다.</figcaption>
+  ![대시보드 첫 실행 개요](../assets/user-manual/ko/01-dashboard-cockpit.png){ loading=lazy }
+  <figcaption>대시보드 — 아카이브 점수, 다음에 할 유용한 작업, 워커/스토리지/라이브러리 상태를 한눈에. 깊은 제어는 없고, 등록과 보관은 Channels 탭에서 합니다.</figcaption>
 </figure>
 
 !!! note "무엇을 클릭하나"
-    **Start your first channel backup**을 찾으세요. 기본 입력창은 채널 URL,
-    `@handle`, 또는 `UC…` 채널 ID를 받습니다.
+    왼쪽 사이드바에서 **Channels**를 엽니다. 상단의 **채널 관리** 카드는 현재
+    채널을 요약해 보여주는 정보용이며, 실제로 누르는 버튼은 그 아래 **채널 등록**
+    패널과 **채널 상세**에 있습니다.
 
 ---
 
-## 2단계 — 채널 붙여넣고 분석
+## 2단계 — 채널 등록
 
-**Channels** 탭으로 이동하거나 첫 실행 마법사를 사용하세요. **Channel
-registration**에 채널을 붙여넣고, 품질(`720p` / `1080p` / `best`)을 고르고,
-필요하면 **Subtitles** / **Audio only**를 켠 뒤, **Preview**를 눌러 등록 전에
-원본을 분석합니다.
+**채널 등록** 패널에 채널 URL, `@handle`, 또는 `UC…` 채널 ID를 붙여넣고,
+품질(`720p` / `1080p` / `best`)을 고르고, 필요하면 **Subtitles** / **Audio
+only**를 켠 뒤, **미리보기**를 눌러 저장 전에 원본을 확인합니다. 미리보기를
+검토한 다음 **채널 등록**을 눌러 볼트에 추가합니다.
 
 <figure markdown="span">
-  ![채널 등록 및 다운로드 플래너](../assets/user-manual/ko/03-download-launch-control.png){ loading=lazy }
-  <figcaption>Channels 워크벤치 — 등록 입력, 품질/자막 옵션, 그리고 전송 전에 배치(후보, 대기, 예상 용량)를 미리 보여주는 다운로드 플래너.</figcaption>
+  ![채널 관리와 등록](../assets/user-manual/ko/03-download-launch-control.png){ loading=lazy }
+  <figcaption>Channels — 채널 관리 카드(채널 관리자, 다른 채널 추가)는 정보용이고, 등록은 붙여넣기 → 미리보기 → 채널 등록 흐름이며, 아래 채널 상세가 백업을 실행합니다.</figcaption>
 </figure>
 
 !!! note "무엇을 클릭하나"
     1. 채널 URL / `@handle` / `UC…` ID를 붙여넣습니다.
     2. **1080p**(또는 원하는 품질)를 고르고 **Subtitles**를 켭니다.
-    3. **Preview**를 눌러 분석합니다.
+    3. **미리보기**를 눌러 원본을 확인합니다.
+    4. **채널 등록**을 눌러 저장합니다. 나중에 **다른 채널 추가**로 현재 채널을
+       유지한 채 채널을 더 등록할 수 있습니다.
 
 ---
 
-## 3단계 — 백업 계획 검토
+## 3단계 — 남은 영상 검토
 
-분석은 채널 이름, 영상 수, 예상 용량, 저장 폴더, 첫 미리보기 영상, 안전 참고
-사항을 반환합니다. **다운로드 플래너**는 **Ready**, **Candidates**, **Queued**,
-이미 **Selected**된 영상이 각각 몇 개인지와 배치 용량 추정치를 보여줍니다.
+등록한 채널을 엽니다. **채널 백업** 안내는 **“남은 영상을 자동으로 보관하세요”**를
+앞세우고, **총 영상**, **다운받음**, **남은 영상** 세 가지 수를 보여줘 얼마나
+남았는지 항상 알 수 있습니다.
 
 !!! note "무엇을 확인하나"
-    - **이미 아카이브됨 vs 누락** — 이미 아카이브된 영상은 건너뜁니다.
-    - **배치 추정치** — 확정 전 총 용량.
+    - **총 영상 / 다운받음 / 남은 영상** — 아직 보관이 필요한 영상 수.
     - **저장 폴더** — 미디어가 저장될 위치
       ([파일시스템 규칙](../reference/filesystem.md) 참고).
+    - 언제든 **새 영상 다시 확인**을 눌러 원본과 아카이브 상태를 갱신하세요.
 
-문제없어 보이면 **Download new only**(또는 마법사의 **Start first backup**)를
-누릅니다.
+!!! success "이미 모두 보관됐나요?"
+    전부 저장됐다면 안내에 **“이 채널은 모두 보관됐습니다”**가 표시됩니다 — 이는
+    실패가 아니라 **완료** 상태입니다. 스케줄은 남은 작업이 없을 뿐이며, 채널에 새
+    영상이 올라오면 다시 확인하세요.
 
 ---
 
-## 4단계 — 가드형 패스 확인 { #step-4-confirm-the-guarded-pass }
+## 4단계 — 자동 다운로드 스케줄 시작 { #step-4-start-the-automatic-download-schedule }
 
-실제 다운로드는 항상 확인 모달에서 멈춥니다. 모달은 **Max this pass**, **Already
-downloaded skipped**, **Queued**를 요약하고, 미디어 워커가 아직 꺼져 있으면
-경고합니다.
+이것이 핵심 백업 흐름입니다. **자동 다운로드 설정**을 눌러 **자동 다운로드
+스케줄**을 열고 다음을 고르세요:
+
+- **몇 분마다 실행** — 스케줄러가 얼마나 자주 깨어날지.
+- **한 번에 받을 개수** — 한 패스가 가져올 영상 수.
+
+**스케줄 시작**을 누르면 시작됩니다. 스케줄을 시작하면 실제 다운로드 허용과
+스케줄러가 자동으로 켜지고, 정한 간격으로 **남은 영상만** 큐에 올립니다 — 이미
+받은 영상은 건너뜁니다. 아직 시작하지 않고 설정만 저장하려면 **설정만 저장**을,
+이후 자동 실행을 멈추려면 **스케줄 정지**를 사용하세요.
 
 <figure markdown="span">
-  ![다운로드 확인 모달](../assets/user-manual/ko/04-download-confirm-modal.png){ loading=lazy }
-  <figcaption>확인 모달 — 가드형 패스는 한 번에 5개로 제한됩니다. 워커가 꺼져 있으면 “Media worker is disabled. Set CVN_DOWNLOAD_WORKER_ENABLED=true before starting real transfers.”라고 표시됩니다.</figcaption>
+  ![자동 다운로드 스케줄](../assets/user-manual/ko/04-download-confirm-modal.png){ loading=lazy }
+  <figcaption>자동 다운로드 스케줄 — 간격과 받을 개수, 현재 상태(켜짐 / 꺼짐 / 실행 중), 다음 실행, 총 영상 / 다운받음 / 남은 영상. 정보(i) 아이콘에 마우스를 올리면 쉬운 설명이 나옵니다.</figcaption>
 </figure>
 
-!!! note "무엇을 클릭하나"
-    [실제 다운로드를 켰다면](enable-downloads.md) **Start up to 5**를 눌러
-    가드형 패스를 시작합니다. 그렇지 않으면 영상은 후보로 스테이징되어
-    대기합니다.
-
 !!! warning "기본은 안전"
-    워커가 꺼져 있으면 아무것도 전송되지 않습니다 — 계획은 스테이징되고 큐는
-    claim 전에 일시정지됩니다. 이는 의도된 동작입니다.
+    스케줄을 시작(또는 아래 고급 수동 테스트를 실행)하기 전에는 아무것도 전송되지
+    않습니다. 등록과 미리보기는 아무것도 다운로드하지 않습니다.
     [실제 다운로드 켜기](enable-downloads.md) 참고.
 
 ---
 
 ## 5단계 — 큐 지켜보기
 
-**Queue** 탭을 열어 진행률, 실패, 재시도, 워커 감사 상세를 확인하세요. **Global
-queue control**은 모든 채널에 걸친 Ready / Queued / Running / done / Failed /
-Claimable 수를 보여줍니다.
+**Queue** 탭을 열어 진행률, 실패, 재시도, 워커 감사 상세를 확인하세요. 모든 채널의
+현재 **보이는 작업**을 보여주며, 이미 보관된 영상의 과거 실패는 숨겨서 실제 현재
+작업만 보이게 합니다.
 
 <figure markdown="span">
   ![글로벌 큐 컨트롤](../assets/user-manual/ko/05-queue-console.png){ loading=lazy }
-  <figcaption>큐 — 카운터, 필터, 작업별 카드. 다운로드가 꺼져 있으면 오른쪽 Worker control room이 “locked / paused before claim”으로 표시됩니다.</figcaption>
+  <figcaption>큐 — 카운터, 필터, 작업별 카드와 오른쪽의 Worker control room. 스케줄이 실행 중이면 워커가 “무장됨”으로 표시되고 작업이 Running으로 이동합니다.</figcaption>
 </figure>
 
-워커가 무장되고 패스를 확인하면 작업이 **Running**으로 이동하고 진행 막대가
-100%까지 채워집니다.
+워커가 무장되면 작업이 **Running**으로 이동하고 진행 막대가 100%까지 채워집니다.
 
 ---
 
@@ -112,10 +120,23 @@ Claimable 수를 보여줍니다.
 </figure>
 
 !!! success "완료"
-    채널을 등록하고, 누락분만 스테이징하고, 가드형 패스를 실행하고,
-    라이브러리에서 커버리지를 검증했습니다. 다음:
-    [인사이트](product-tour.md#insights)를 살펴보고
-    [설정](product-tour.md#settings)을 잠그세요.
+    채널을 등록하고, 남은 영상을 검토하고, 아카이브를 최신으로 유지하는 자동
+    다운로드 스케줄을 시작했습니다. 다음: [인사이트](product-tour.md#insights)를
+    살펴보고 [설정](product-tour.md#settings)을 잠그세요.
+
+---
+
+## 고급 — 수동 1회 테스트 실행 { #advanced-manual-one-pass-test }
+
+**고급 작업**에서 **수동 1회 테스트** — **최대 5개만 바로 실행**을 실행할 수
+있습니다. 스케줄과는 별개로 이번 패스에서 설정한 개수만큼 즉시 실행하므로,
+스케줄에 맡기기 전에 한 배치를 검증할 때 유용합니다. 실제 전송은 여전히 확인
+모달에서 멈춥니다.
+
+!!! note "무엇을 클릭하나"
+    **고급 작업 → 수동 1회 테스트**를 열고, 확인 모달(**이번 pass 최대**, **이미
+    받은 영상 건너뜀**, **대기**)을 검토한 뒤 확인해 단일 가드형 패스를 실행하세요.
+    [실제 다운로드를 켰거나](enable-downloads.md) 여기서 시작할 때만 실행됩니다.
 
 ---
 

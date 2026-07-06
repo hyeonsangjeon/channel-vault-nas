@@ -47,7 +47,7 @@ curl http://127.0.0.1:8000/api/health
 
 ## 다음 단계
 
-- [첫 백업 마법사](../usage/first-backup.md)를 따라가 보세요.
+- [첫 채널 백업](../usage/first-backup.md)을 따라가 보세요.
 - 로컬에서 설정할 수 있는 [런타임 플래그](../reference/runtime-flags.md)를
   살펴보세요.
 - 앱을 실제 아카이브로 가리키기 전에
