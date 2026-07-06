@@ -5222,6 +5222,9 @@ function App() {
   function openChannelWorkspace(tab: ChannelDetailTab = "overview", selector = ".channel-detail-panel") {
     setActiveNavId("channels");
     setActiveChannelTab(tab);
+    if (selector === ".registration-panel") {
+      setRegistrationComposerOpen(true);
+    }
     pushAppRoute({ nav: "channels", channelTab: tab });
     window.setTimeout(() => scrollToAppSection(selector), 0);
   }

@@ -54,6 +54,9 @@ async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await page.goto(path);
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
   if (!expectDashboard) return;
+  const cockpit = page.getByLabel("대시보드 개요");
+  await expect(cockpit).toContainText("내 채널 백업 상태");
+  await page.locator("button.dashboard-advanced-toggle").click();
   const opsBoard = page.getByLabel("오늘의 아카이브 작업");
   await expect(opsBoard).toContainText("준비도");
   await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
@@ -62,7 +65,7 @@ async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await expect(releaseReadiness).toContainText("공개 브리핑");
   await expect(releaseReadiness).toContainText("다음 확인");
   const mountDoctor = page.getByLabel("NAS 볼륨 마운트 진단");
-  await expect(mountDoctor).toContainText("NAS 마운트 Doctor");
+  await expect(mountDoctor).toContainText("저장소 점검");
   await expect(mountDoctor).toContainText("DB");
   await expect(mountDoctor).toContainText("Archive");
 }
@@ -148,8 +151,8 @@ test("command palette opens operational surfaces and live status is visible", as
   await queuePalette.getByLabel("운영, 화면, archive 도구 검색").fill("queue");
   await expect(queuePalette).toContainText("전역 큐 콘솔");
   await page.screenshot({ path: testInfo.outputPath("command-palette-filtered.png"), fullPage: true });
-  await queuePalette.getByRole("button").filter({ hasText: "전체 큐 관제" }).click();
-  await expect(page.getByLabel("전체 큐 관제")).toBeVisible();
+  await queuePalette.getByRole("button").filter({ hasText: "다운로드 큐" }).click();
+  await expect(page.getByLabel("다운로드 큐")).toBeVisible();
 
   expect(errors).toEqual([]);
 });
@@ -170,8 +173,8 @@ test("url hash deep links restore nav and channel tabs", async ({ page }) => {
   await expect(page).toHaveURL(/#\/channels\/policy\?channel=1/);
 
   await page.getByRole("button", { name: "큐", exact: true }).click();
-  await expect(page.getByLabel("전체 큐 관제")).toBeVisible();
-  await expect(page).toHaveTitle("전체 큐 관제 · Channel Vault NAS");
+  await expect(page.getByLabel("다운로드 큐")).toBeVisible();
+  await expect(page).toHaveTitle("다운로드 큐 · Channel Vault NAS");
   await expect(page).toHaveURL(/#\/queue\?channel=1/);
 
   await page.goBack();
@@ -262,7 +265,10 @@ test("registration command bar can probe and commit without external YouTube cal
   });
 
   await openKoreanVault(page);
-  await page.getByRole("button", { name: "채널", exact: true }).click();
+  await page.getByRole("button", { name: "Command Palette 열기" }).click();
+  const registrationPalette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
+  await registrationPalette.getByLabel("운영, 화면, archive 도구 검색").fill("소스 등록");
+  await registrationPalette.getByRole("button").filter({ hasText: "소스 등록" }).first().click();
   const registrationInput = page.getByLabel("채널 URL 또는 ID");
   await expect(registrationInput).toBeVisible();
   await registrationInput.fill("https://www.youtube.com/@e2evault");
@@ -345,7 +351,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(growthMissionLens).toContainText("7/30일 성장 비교");
   await page.getByRole("button", { name: "대시보드", exact: true }).click();
   await page.getByRole("button", { name: "큐", exact: true }).click();
-  const queueConsole = page.getByLabel("전체 큐 관제");
+  const queueConsole = page.getByLabel("다운로드 큐");
   const refreshQueueButton = queueConsole.getByRole("button", { name: "큐 새로고침" }).first();
   const runFiveButton = queueConsole.getByRole("button", { name: "대기 5개 실행" });
   await expect(queueConsole).toBeVisible();
