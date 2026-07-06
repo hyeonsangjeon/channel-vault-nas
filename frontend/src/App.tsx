@@ -1590,6 +1590,11 @@ function App() {
       ? t("detail.automation.statusRunning")
       : t("detail.automation.statusOn")
     : t("detail.automation.statusOff");
+  const channelSchedulerDirty =
+    channelSchedulerEnabled &&
+    schedulerStatus != null &&
+    (schedulerStatus.interval_seconds !== runtimeDraftIntervalNumber ||
+      schedulerStatus.limit !== runtimeDraftLimitNumber);
   const channelScheduleTotalCount = Math.max(
     activeCounts?.video_count ?? 0,
     library?.total ?? 0,
@@ -2967,17 +2972,11 @@ function App() {
 
   async function handleStartDownloadSchedule() {
     if (!registeredChannelId) return;
-    if (channelScheduleComplete) {
-      setRuntimeApplyStatus("saved");
-      setRuntimeApplyMessage(t("detail.automation.completeHint"));
-      setWorkflowStatus("idle");
-      setWorkflowMessage(t("detail.automation.completeHint"));
-      return;
-    }
     const nextDraft: RuntimeDraft = {
       ...runtimeDraft,
       downloadWorkerEnabled: true,
       schedulerEnabled: true,
+      metadataSchedulerEnabled: true,
     };
     if (!isRuntimeDraftValid(nextDraft)) {
       setRuntimeApplyStatus("error");
@@ -2987,6 +2986,7 @@ function App() {
 
     const intervalMinutes = Math.max(1, Math.round(Number(nextDraft.schedulerIntervalSeconds) / 60));
     const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 1);
+    const registerForFuture = channelScheduleComplete;
     setRuntimeDraft(nextDraft);
     setRuntimeApplyStatus("applying");
     setRuntimeApplyMessage("");
@@ -2994,29 +2994,47 @@ function App() {
     setWorkflowMessage("");
 
     try {
-      const quality = channelPolicy?.max_quality ?? maxQuality;
-      const candidateResult = await createDownloadCandidates(registeredChannelId, quality);
-      let jobs = await getDownloadJobs(registeredChannelId);
-      const candidateIds = jobs.filter((job) => job.status === "candidate").map((job) => job.id);
-      let newlyQueued = 0;
-      if (candidateIds.length) {
-        const queuedResult = await bulkUpdateDownloadJobs({ job_ids: candidateIds, action: "queue", priority: 85, quality });
-        newlyQueued = queuedResult.updated;
-        jobs = await getDownloadJobs(registeredChannelId);
+      if (channelPolicy && !channelPolicy.auto_download) {
+        try {
+          const policy = await updateChannelPolicy(registeredChannelId, { auto_download: true });
+          setChannelPolicy(policy);
+        } catch {
+          /* non-fatal: schedule still registers even if the policy toggle fails */
+        }
       }
-      const queuedNow = jobs.filter((job) => job.status === "queued").length;
+      const quality = channelPolicy?.max_quality ?? maxQuality;
+      let candidatesCreated = 0;
+      let queuedCount = 0;
+      if (!registerForFuture) {
+        const candidateResult = await createDownloadCandidates(registeredChannelId, quality);
+        candidatesCreated = candidateResult.candidates_created;
+        let jobs = await getDownloadJobs(registeredChannelId);
+        const candidateIds = jobs.filter((job) => job.status === "candidate").map((job) => job.id);
+        let newlyQueued = 0;
+        if (candidateIds.length) {
+          const queuedResult = await bulkUpdateDownloadJobs({ job_ids: candidateIds, action: "queue", priority: 85, quality });
+          newlyQueued = queuedResult.updated;
+          jobs = await getDownloadJobs(registeredChannelId);
+        }
+        const queuedNow = jobs.filter((job) => job.status === "queued").length;
+        queuedCount = Math.max(newlyQueued, queuedNow);
+      }
       const result = await saveRuntimeSettingsDraft(nextDraft);
       await Promise.all([loadChannelState(registeredChannelId), refreshQueueConsoleState()]);
-      const message = t("detail.automation.started")
-        .replace("{candidates}", String(candidateResult.candidates_created))
-        .replace("{queued}", String(Math.max(newlyQueued, queuedNow)))
-        .replace("{minutes}", String(intervalMinutes))
-        .replace("{limit}", String(limit));
+      const message = registerForFuture
+        ? t("detail.automation.registeredIdle")
+            .replace("{minutes}", String(intervalMinutes))
+            .replace("{limit}", String(limit))
+        : t("detail.automation.started")
+            .replace("{candidates}", String(candidatesCreated))
+            .replace("{queued}", String(queuedCount))
+            .replace("{minutes}", String(intervalMinutes))
+            .replace("{limit}", String(limit));
       setRuntimeApplyStatus("saved");
       setRuntimeApplyMessage(message);
       setWorkflowStatus("idle");
       setWorkflowMessage(message);
-      if (result.runtime.scheduler_status.running || result.runtime.scheduler_status.next_tick_at) {
+      if (!registerForFuture && (result.runtime.scheduler_status.running || result.runtime.scheduler_status.next_tick_at)) {
         setActiveChannelTab("downloads");
       }
     } catch (error) {
@@ -3048,6 +3066,46 @@ function App() {
     try {
       await saveRuntimeSettingsDraft(nextDraft);
       const message = t("detail.automation.stopped");
+      setRuntimeApplyStatus("saved");
+      setRuntimeApplyMessage(message);
+      setWorkflowStatus("idle");
+      setWorkflowMessage(message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("runtime.apply.error");
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(message);
+      setWorkflowStatus("error");
+      setWorkflowMessage(message);
+    }
+  }
+
+  async function handleUpdateDownloadSchedule() {
+    if (!registeredChannelId) return;
+    const nextDraft: RuntimeDraft = {
+      ...runtimeDraft,
+      downloadWorkerEnabled: true,
+      schedulerEnabled: true,
+    };
+    if (!isRuntimeDraftValid(nextDraft)) {
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(t("runtime.apply.invalid"));
+      return;
+    }
+
+    const intervalMinutes = Math.max(1, Math.round(Number(nextDraft.schedulerIntervalSeconds) / 60));
+    const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 1);
+    setRuntimeDraft(nextDraft);
+    setRuntimeApplyStatus("applying");
+    setRuntimeApplyMessage("");
+    setWorkflowStatus("queueing");
+    setWorkflowMessage("");
+
+    try {
+      await saveRuntimeSettingsDraft(nextDraft);
+      await Promise.all([loadChannelState(registeredChannelId), refreshQueueConsoleState()]);
+      const message = t("detail.automation.updated")
+        .replace("{minutes}", String(intervalMinutes))
+        .replace("{limit}", String(limit));
       setRuntimeApplyStatus("saved");
       setRuntimeApplyMessage(message);
       setWorkflowStatus("idle");
@@ -7522,12 +7580,20 @@ function App() {
             <h2>{t("channel.workbench.title")}</h2>
             <span>{registeredChannelId ? `${activeTitle} · ${activeHandle}` : t("channel.workbench.noChannel")}</span>
           </article>
-          <article className="channel-workbench-card channel-workbench-status" aria-label={t("channel.workbench.register")}>
+          <button
+            className="channel-workbench-card channel-workbench-action register"
+            aria-label={registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}
+            onClick={() => {
+              setRegistrationComposerOpen(true);
+              window.setTimeout(() => scrollToAppSection(".registration-panel"), 0);
+            }}
+            type="button"
+          >
             <Link2 size={16} />
             <span>{registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}</span>
-            <strong>{registeredChannelId ? t("registration.registered") : t("registration.commit")}</strong>
+            <strong>{registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}</strong>
             <small>{registeredChannelId ? t("registration.addAnotherDetail") : t("channel.workbench.registerDetail")}</small>
-          </article>
+          </button>
           <button
             className="channel-workbench-card channel-workbench-action sync"
             disabled={!registeredChannelId}
@@ -7922,49 +7988,66 @@ function App() {
                 </label>
               </div>
               <div className="channel-automation-footer">
-                <span>{channelScheduleComplete ? t("detail.automation.completeHint") : t("detail.automation.workerHint")}</span>
-                <button
-                  className="command-button"
-                  disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
-                  onClick={() => void applyRuntimeSettingsDraft()}
-                  type="button"
-                >
-                  <Settings size={14} />
-                  {runtimeApplyStatus === "applying" ? t("runtime.apply.saving") : t("detail.automation.save")}
-                </button>
+                <span>
+                  {channelSchedulerEnabled
+                    ? channelSchedulerDirty
+                      ? t("detail.automation.updateHint")
+                      : channelSchedulerSummary
+                    : channelScheduleComplete
+                      ? t("detail.automation.registerCompleteHint")
+                          .replace("{minutes}", String(channelSchedulerDisplayIntervalMinutes))
+                          .replace("{limit}", String(channelSchedulerDisplayLimit))
+                      : t("detail.automation.registerHint")}
+                </span>
                 {channelSchedulerEnabled ? (
-                  <button
-                    className="danger-action"
-                    disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
-                    onClick={() => void handleStopDownloadSchedule()}
-                    type="button"
-                  >
-                    <CirclePause size={14} />
-                    {runtimeApplyStatus === "applying" ? t("detail.automation.stopping") : t("detail.automation.stop")}
-                  </button>
-                ) : channelScheduleComplete ? (
-                  <button
-                    className="command-button"
-                    disabled={workflowStatus === "syncing"}
-                    onClick={() => {
-                      setActiveChannelTab("overview");
-                      void handleManualSync();
-                    }}
-                    type="button"
-                  >
-                    <CheckCircle2 size={14} />
-                    {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.guide.checkAgain")}
-                  </button>
+                  <>
+                    {channelSchedulerDirty ? (
+                      <button
+                        className="primary-action"
+                        disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
+                        onClick={() => void handleUpdateDownloadSchedule()}
+                        type="button"
+                      >
+                        <RotateCcw size={14} />
+                        {runtimeApplyStatus === "applying" ? t("detail.automation.updating") : t("detail.automation.update")}
+                      </button>
+                    ) : null}
+                    <button
+                      className="danger-action"
+                      disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
+                      onClick={() => void handleStopDownloadSchedule()}
+                      type="button"
+                    >
+                      <CirclePause size={14} />
+                      {runtimeApplyStatus === "applying" ? t("detail.automation.stopping") : t("detail.automation.stop")}
+                    </button>
+                  </>
                 ) : (
-                  <button
-                    className="primary-action"
-                    disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
-                    onClick={() => void handleStartDownloadSchedule()}
-                    type="button"
-                  >
-                    <Download size={14} />
-                    {runtimeApplyStatus === "applying" ? t("detail.automation.starting") : t("detail.automation.start")}
-                  </button>
+                  <>
+                    <button
+                      className="primary-action"
+                      disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
+                      onClick={() => void handleStartDownloadSchedule()}
+                      type="button"
+                    >
+                      <Rocket size={14} />
+                      {runtimeApplyStatus === "applying" ? t("detail.automation.registering") : t("detail.automation.register")}
+                    </button>
+                    {channelScheduleComplete ? (
+                      <button
+                        className="command-button"
+                        disabled={workflowStatus === "syncing"}
+                        onClick={() => {
+                          setActiveChannelTab("overview");
+                          void handleManualSync();
+                        }}
+                        type="button"
+                      >
+                        <RotateCcw size={14} />
+                        {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.guide.checkAgain")}
+                      </button>
+                    ) : null}
+                  </>
                 )}
               </div>
               {runtimeApplyMessage ? (
