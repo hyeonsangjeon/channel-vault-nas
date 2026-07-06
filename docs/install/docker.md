@@ -19,8 +19,8 @@ cd channel-vault-nas
 cp .env.example .env
 mkdir -p metadata downfolder runtime
 
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
 docker compose pull
 docker compose up -d --no-build
 ```
@@ -32,8 +32,8 @@ Then open **`http://127.0.0.1:5173/`** and jump to
     Swap the image overrides for the GitHub Container Registry mirror:
 
     ```bash
-    export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
-    export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+    export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
+    export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
     ```
 
     Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. If only one is
@@ -82,8 +82,8 @@ one Docker network. The `api` network alias is required because the web image
 proxies `/api` and `/ws` to `http://api:8000`.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

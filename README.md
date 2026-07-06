@@ -59,15 +59,15 @@ cd channel-vault-nas
 cp .env.example .env
 mkdir -p metadata downfolder runtime
 
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
 docker compose pull
 docker compose up -d --no-build
 ```
 
 Open `http://127.0.0.1:5173/`, go to the **Channels** tab, paste a YouTube
 channel URL, `@handle`, or `UC...` channel ID, click **Preview**, then
-**Register channel**. Open the channel and **Start schedule** on the automatic
+**Register channel**. Open the channel and **Register schedule** on the automatic
 download schedule to archive the remaining videos. To explore without touching
 YouTube, expand the secondary **Safe demo and advanced import options** panel
 instead.
@@ -196,11 +196,11 @@ static mockups.
 
 | Dashboard overview | Channel backup schedule |
 | --- | --- |
-| ![Dashboard overview showing readiness, operations, and live archive state](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel detail showing the automatic download schedule, remaining-video counts, and worker controls](docs/assets/screenshots/channel-downloads.png) |
+| ![Dashboard showing today's archive status, the next useful action, and the guided first-archive path](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel detail showing the automatic download schedule, remaining-video counts, and worker controls](docs/assets/screenshots/channel-downloads.png) |
 
 | Queue console | Library shelf | Runtime guide |
 | --- | --- | --- |
-| ![Global queue console with candidate and worker detail](docs/assets/screenshots/queue-console.png) | ![Global library shelf with saved views, sidecar fidelity, and filtered archive coverage](docs/assets/screenshots/library-shelf.png) | ![Runtime env guide with the public access guard token setup, restart adapter, and Compose smoke verification](docs/assets/screenshots/runtime-guide.png) |
+| ![Download queue with candidate and worker detail](docs/assets/screenshots/queue-console.png) | ![Global library shelf with saved views, sidecar fidelity, and filtered archive coverage](docs/assets/screenshots/library-shelf.png) | ![Runtime env guide with the public access guard token setup, restart adapter, and Compose smoke verification](docs/assets/screenshots/runtime-guide.png) |
 
 Refresh the public screenshot set:
 
@@ -428,8 +428,8 @@ cd channel-vault-nas
 cp .env.example .env
 mkdir -p metadata downfolder runtime
 
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
 docker compose pull
 docker compose up -d --no-build
 ```
@@ -437,8 +437,8 @@ docker compose up -d --no-build
 Equivalent GHCR image overrides:
 
 ```bash
-export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
 ```
 
 Direct `docker run` is also possible. Compose is still recommended because it
@@ -448,15 +448,15 @@ commands are useful for registry smoke tests.
 Choose Docker Hub:
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
 ```
 
 Or choose GHCR:
 
 ```bash
-export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.1
-export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.1
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
 ```
 
 Then run both containers on one Docker network. The `api` network alias is
@@ -555,13 +555,16 @@ Deployment examples for private LAN or tunnel access are in
 
 ### First-Run Flow And Safe Demo
 
-On the **Channels** tab, the top **Channel management** card is an informational
-summary; the work happens in the registration panel and the channel detail below
+On the **Channels** tab, the top **Channel management** card summarizes the
+channel, and its **Add another channel** button opens the registration composer;
+the work happens in the registration panel and the channel detail below
 it. Paste a channel URL, `@handle`, or `UC...` channel ID, click **Preview** to
 inspect the source, then **Register channel**. Open the channel and use the
 **automatic download schedule** — pick how often it runs and how many videos per
-pass, then **Start schedule** to archive the remaining videos (starting it also
-enables real downloads). An advanced **Manual one-pass test** runs a single
+pass, then **Register schedule** to archive the remaining videos (registering also
+enables real downloads and the scheduler). Adjust the interval or batch size later
+and **Update schedule** applies it to the running schedule; **Stop schedule**
+halts future passes. An advanced **Manual one-pass test** runs a single
 guarded pass behind a confirmation modal. If a channel is already fully archived,
 the guide says so — that is a completed state, not a failure.
 
@@ -649,8 +652,8 @@ Worker passes are intentionally bounded:
 2. Open Dashboard and confirm the release readiness card, live event pill, and clean-install gate.
 3. Go to the Channels tab, paste a channel URL, `@handle`, or `UC...` channel ID, and click **Preview** to inspect the source before anything is registered.
 4. Review the channel name, video count, estimated size, save folder, first preview videos, and safety notes, then click **Register channel**.
-5. Open the channel, review Total / Downloaded / Remaining, and use the automatic download schedule (interval + downloads per pass); click **Start schedule** to archive the remaining videos.
-6. Real downloads run only if the schedule is started (or you run the advanced Manual one-pass test) — both go through the confirmation modal.
+5. Open the channel, review Total / Downloaded / Remaining, and use the automatic download schedule (interval + downloads per pass); click **Register schedule** to archive the remaining videos.
+6. Real downloads run only if the schedule is registered (or you run the advanced Manual one-pass test) — both go through the confirmation modal.
 7. For a no-network walkthrough, expand the secondary safe demo panel and load `Signal Lab` without external calls.
 8. Open Queue to watch the current Visible jobs — progress, failures, retries, and worker audit detail (stale failures for already-archived videos are hidden).
 9. Open Library and confirm completed media/index coverage changed.

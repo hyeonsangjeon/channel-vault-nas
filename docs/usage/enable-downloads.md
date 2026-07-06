@@ -2,11 +2,11 @@
 
 Channel Vault NAS is **safe by default**. It can register, preview, and plan
 without starting any media transfer. Real downloads require the worker flag — and
-the app arms it for you the moment you **start the automatic download schedule**.
+the app arms it for you the moment you **register the automatic download schedule**.
 
 ## Turn on the worker
 
-The simplest path is the UI: opening a channel and clicking **Start schedule**
+The simplest path is the UI: opening a channel and clicking **Register schedule**
 turns on real downloads and the scheduler automatically (see
 [First backup → Step 4](first-backup.md#step-4-start-the-automatic-download-schedule)).
 To arm the NAS globally instead, set these runtime env values:

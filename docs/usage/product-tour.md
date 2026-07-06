@@ -11,7 +11,7 @@ It intentionally avoids deep controls.
 
 <figure markdown="span">
   ![Dashboard overview](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>Dashboard — “Know what needs attention before opening a tab,” plus the next useful action and the public-readiness checklist.</figcaption>
+  <figcaption>Dashboard — “Today's archive status” at a glance (backed up vs. remaining), the next useful action, and the guided first-archive path. Operator checks (mounts, access token, readiness) tuck behind a single advanced toggle.</figcaption>
 </figure>
 
 ## Channels
@@ -27,7 +27,7 @@ informational summary; the work happens in registration and the channel detail:
 
 <figure markdown="span">
   ![Channel overview](../assets/user-manual/en/02-channel-overview.png){ loading=lazy }
-  <figcaption>Channel detail — the Channel backup guide, Total / Downloaded / Remaining counts, and the automatic download schedule (interval, batch size, Start / Save only / Stop). Advanced actions hold the manual one-pass test.</figcaption>
+  <figcaption>Channel detail — the Channel backup guide, Total / Downloaded / Remaining counts, and the automatic download schedule (interval, batch size, Register / Update / Stop). Advanced actions hold the manual one-pass test.</figcaption>
 </figure>
 
 ### Channel logs
@@ -58,7 +58,7 @@ downloads are guarded by a confirmation flow and the configured **Downloads per
 pass** batch size.
 
 <figure markdown="span">
-  ![Global queue control](../assets/user-manual/en/05-queue-console.png){ loading=lazy }
+  ![Download queue](../assets/user-manual/en/05-queue-console.png){ loading=lazy }
   <figcaption>Queue — one screen for every channel’s download state, failures, and claimable work.</figcaption>
 </figure>
 
@@ -86,7 +86,7 @@ orphan sidecars.
 
 <figure markdown="span">
   ![Insights storage](../assets/user-manual/en/09-insights-storage.png){ loading=lazy }
-  <figcaption>Insights — Volume Map, storage trend, per-channel treemap, drift response, and the storage triage console.</figcaption>
+  <figcaption>Insights — Storage map, storage trend, per-channel treemap, drift response, and the storage triage console.</figcaption>
 </figure>
 
 ## Settings
