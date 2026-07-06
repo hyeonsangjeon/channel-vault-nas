@@ -26,6 +26,7 @@ import {
   Gauge,
   HardDrive,
   History,
+  Info,
   KeyRound,
   Languages,
   Link2,
@@ -101,7 +102,6 @@ import {
   requestRuntimeRestart,
   recoverUnindexedStorageDrift,
   restoreStorageOrphanSidecar,
-  retryDownloadJob,
   runDownloadWorkerOnce,
   runMetadataSyncSchedulerOnce,
   saveLibraryView,
@@ -150,6 +150,7 @@ import {
   type RescanApplyResult,
   type RuntimeRestartAdapter,
   type RuntimeSettings,
+  type RuntimeSettingsApplyResult,
   type RuntimeSettingsUpdate,
   type MetadataSyncTickFilters,
   type MetadataSyncTick,
@@ -186,6 +187,14 @@ import {
   type UploadRhythmDay,
 } from "./data/observatory";
 import { languages, useI18n, type Language, type TranslationKey } from "./i18n";
+
+function InfoHint({ label }: { label: string }) {
+  return (
+    <span aria-label={label} className="info-hint" role="img" tabIndex={0} title={label}>
+      <Info size={13} />
+    </span>
+  );
+}
 
 const qualityOptions = ["720p", "1080p", "best"];
 const DEMO_WORKSPACE_EXTERNAL_ID = "UC_CVN_DEMO_SIGNAL";
@@ -488,6 +497,7 @@ function App() {
   const [registrationStatus, setRegistrationStatus] = useState<"idle" | "probing" | "ready" | "committing" | "registered" | "error">("idle");
   const [firstBackupStatus, setFirstBackupStatus] = useState<FirstBackupWizardStatus>("idle");
   const [registrationError, setRegistrationError] = useState("");
+  const [registrationComposerOpen, setRegistrationComposerOpen] = useState(false);
   const [channelDetail, setChannelDetail] = useState<ChannelDetail | null>(null);
   const [channelPolicy, setChannelPolicy] = useState<ChannelPolicy | null>(null);
   const [channelVideos, setChannelVideos] = useState<ChannelVideo[]>([]);
@@ -710,6 +720,16 @@ function App() {
   const isDemoWorkspace = channelDetail?.external_id === DEMO_WORKSPACE_EXTERNAL_ID;
   const activeInitials = getInitials(activeTitle);
   const activeCounts = channelDetail ?? registration?.channel;
+  const registrationPanelCompact = Boolean(
+    registeredChannelId &&
+      !registrationComposerOpen &&
+      !activeProbe &&
+      !registrationError &&
+      registrationStatus !== "probing" &&
+      registrationStatus !== "ready" &&
+      registrationStatus !== "committing" &&
+      sourceValueTrimmed.length === 0,
+  );
   const activeArchivedCount = library?.archived ?? activeCounts?.archived_count ?? 0;
   const activeMissingCount = library?.missing ?? activeCounts?.missing_count ?? 0;
   const activeBackupStats = activeCounts
@@ -1017,6 +1037,27 @@ function App() {
           })) ?? [],
     [activeProbe, channelVideos],
   );
+  const archivedDownloadKeys = useMemo(() => {
+    const keys = new Set<string>();
+    activeTimeline.forEach((video) => {
+      if (video.archive_state === "archived") addVideoIdentityKeys(keys, video.id, video.external_id);
+    });
+    (library?.items ?? []).forEach((item) => {
+      if (item.archive_state === "archived") addVideoIdentityKeys(keys, item.id, item.video_external_id);
+    });
+    downloadJobs.forEach((job) => {
+      if (job.status === "completed") addVideoIdentityKeys(keys, job.video_id, job.video_external_id);
+    });
+    return keys;
+  }, [activeTimeline, downloadJobs, library]);
+  const staleArchivedDownloadJobs = useMemo(
+    () => downloadJobs.filter((job) => isArchivedRetryDuplicateJob(job, archivedDownloadKeys)),
+    [archivedDownloadKeys, downloadJobs],
+  );
+  const currentDownloadJobs = useMemo(
+    () => downloadJobs.filter((job) => !isArchivedRetryDuplicateJob(job, archivedDownloadKeys)),
+    [archivedDownloadKeys, downloadJobs],
+  );
   const activeRhythm = useMemo(() => buildUploadRhythm(activeTimeline, uploadRhythm), [activeTimeline]);
   const latestUploadLabel = channelDetail?.latest_video_published_at
     ? `${t("backup.latest.label")}: ${formatDateLabel(channelDetail.latest_video_published_at)}`
@@ -1029,8 +1070,8 @@ function App() {
   const syncIntervalNumber = Number(syncIntervalDraft);
   const syncIntervalValid = Number.isInteger(syncIntervalNumber) && syncIntervalNumber >= 5 && syncIntervalNumber <= 10_080;
   const activeQueue = useMemo(
-    () => (registeredChannelId ? buildQueueLanes(downloadJobs, workflowStatus === "syncing") : []),
-    [downloadJobs, registeredChannelId, workflowStatus],
+    () => (registeredChannelId ? buildQueueLanes(currentDownloadJobs, workflowStatus === "syncing") : []),
+    [currentDownloadJobs, registeredChannelId, workflowStatus],
   );
   const activeMetrics = useMemo<ArchiveMetric[]>(() => {
     if (!dashboard) return [];
@@ -1057,20 +1098,20 @@ function App() {
     : t("policy.none");
   const workerPolicyLabel = channelPolicy?.worker_paused ? t("policy.worker.paused") : t("policy.worker.live");
   const launchableJobs = useMemo(
-    () => downloadJobs.filter((job) => job.status === "candidate" || job.status === "queued"),
-    [downloadJobs],
+    () => currentDownloadJobs.filter((job) => job.status === "candidate" || job.status === "queued"),
+    [currentDownloadJobs],
   );
   const nextDownloadJobs = useMemo(
-    () => downloadJobs.filter((job) => job.status === "candidate" || job.status === "queued").slice(0, 5),
-    [downloadJobs],
+    () => currentDownloadJobs.filter((job) => job.status === "candidate" || job.status === "queued").slice(0, 5),
+    [currentDownloadJobs],
   );
-  const archiveSkipCount = Math.max(activeArchivedCount, downloadJobs.filter((job) => job.status === "completed").length);
+  const archiveSkipCount = Math.max(activeArchivedCount, currentDownloadJobs.filter((job) => job.status === "completed").length);
   const simpleFlowStats = {
     seen: channelDetail?.video_count ?? channelVideos.length,
     archived: archiveSkipCount,
     fresh: Math.max(activeMissingCount, 0),
-    queued: downloadJobs.filter((job) => job.status === "queued").length,
-    running: downloadJobs.filter((job) => job.status === "running").length,
+    queued: currentDownloadJobs.filter((job) => job.status === "queued").length,
+    running: currentDownloadJobs.filter((job) => job.status === "running").length,
   };
   const archiveTxtStageableCount = (archiveTxtPreview?.known_missing_count ?? 0) + (archiveTxtPreview?.unknown_count ?? 0);
   const archiveTxtDraftLineCount = archiveTxtDraft.split(/\r?\n/).filter((line) => line.trim()).length;
@@ -1122,7 +1163,7 @@ function App() {
     !activeProbe || firstBackupStatus === "analyzing" || firstBackupStatus === "planning";
   const firstBackupPreviewVideos = activeProbe?.videos.slice(0, 3) ?? [];
   const firstBackupFolderLabel = activeProbe ? `/downfolder/${activeProbe.folder_preview.channel_dir}` : t("firstBackup.folder.pending");
-  const actionableQueueJobs = useMemo(() => downloadJobs.filter(isSelectableQueueJob), [downloadJobs]);
+  const actionableQueueJobs = useMemo(() => currentDownloadJobs.filter(isSelectableQueueJob), [currentDownloadJobs]);
   const preflightPlanStatusByJobId = useMemo(() => {
     const statuses = new Map<number, string>();
     preflightPlan?.ready_job_ids.forEach((id) => statuses.set(id, "ready"));
@@ -1131,23 +1172,23 @@ function App() {
   }, [preflightPlan]);
   const queueRadar = useMemo(
     () => ({
-      total: downloadJobs.length,
-      review: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length,
-      retry: downloadJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length,
-      running: downloadJobs.filter((job) => job.status === "running").length,
+      total: currentDownloadJobs.length,
+      review: currentDownloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length,
+      retry: currentDownloadJobs.filter((job) => job.status === "failed" || job.status === "cancelled").length,
+      running: currentDownloadJobs.filter((job) => job.status === "running").length,
     }),
-    [downloadJobs, preflightPlanStatusByJobId],
+    [currentDownloadJobs, preflightPlanStatusByJobId],
   );
   const preflightFilterCounts = useMemo(
     () => ({
-      all: downloadJobs.length,
-      ready: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "ready").length,
-      review: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length,
-      unchecked: downloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "unchecked").length,
+      all: currentDownloadJobs.length,
+      ready: currentDownloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "ready").length,
+      review: currentDownloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "review").length,
+      unchecked: currentDownloadJobs.filter((job) => effectivePreflightStatus(job, preflightPlanStatusByJobId) === "unchecked").length,
     }),
-    [downloadJobs, preflightPlanStatusByJobId],
+    [currentDownloadJobs, preflightPlanStatusByJobId],
   );
-  const runningJobs = useMemo(() => downloadJobs.filter((job) => job.status === "running"), [downloadJobs]);
+  const runningJobs = useMemo(() => currentDownloadJobs.filter((job) => job.status === "running"), [currentDownloadJobs]);
   const runningWorkerJobs = useMemo(
     () => (workerPlan?.running_jobs.length ? workerPlan.running_jobs.map((item) => item.job) : runningJobs),
     [runningJobs, workerPlan],
@@ -1229,7 +1270,6 @@ function App() {
     return dedupeDownloadTelemetry([...fromRunningJobs, ...fromEvents]).slice(0, 5);
   }, [runningWorkerJobs, telemetryByJobId, visibleDownloadTelemetry]);
   const latestDownloadTelemetry = activeDownloadTelemetry[0] ?? visibleDownloadTelemetry[0] ?? null;
-  const liveActiveJobCount = Math.max(simpleFlowStats.running, activeDownloadTelemetry.length);
   const workerHistorySummary = useMemo(
     () => ({
       total: workerHistoryRuns.length,
@@ -1249,8 +1289,8 @@ function App() {
       queueStatusFilter === "launchable"
         ? actionableQueueJobs
         : queueStatusFilter === "all"
-          ? downloadJobs
-          : downloadJobs.filter((job) => job.status === queueStatusFilter);
+          ? currentDownloadJobs
+          : currentDownloadJobs.filter((job) => job.status === queueStatusFilter);
     const preflightFiltered =
       queuePreflightFilter === "all"
         ? statusFiltered
@@ -1262,7 +1302,7 @@ function App() {
         .toLowerCase()
         .includes(query),
     );
-  }, [actionableQueueJobs, downloadJobs, preflightPlanStatusByJobId, queuePreflightFilter, queueSearch, queueStatusFilter]);
+  }, [actionableQueueJobs, currentDownloadJobs, preflightPlanStatusByJobId, queuePreflightFilter, queueSearch, queueStatusFilter]);
   const visibleActionableJobs = useMemo(() => filteredLaunchJobs.filter(isSelectableQueueJob), [filteredLaunchJobs]);
   const selectedJobs = useMemo(
     () => actionableQueueJobs.filter((job) => selectedJobIds.includes(job.id)),
@@ -1292,9 +1332,27 @@ function App() {
     globalDownloadJobs.forEach((job) => channels.set(job.channel_id, job.channel_title));
     return Array.from(channels, ([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title));
   }, [globalDownloadJobs]);
+  const globalArchivedDownloadKeys = useMemo(() => {
+    const keys = new Set<string>();
+    globalDownloadJobs.forEach((job) => {
+      if (job.status === "completed") addVideoIdentityKeys(keys, job.video_id, job.video_external_id);
+    });
+    (library?.items ?? []).forEach((item) => {
+      if (item.archive_state === "archived") addVideoIdentityKeys(keys, item.id, item.video_external_id);
+    });
+    return keys;
+  }, [globalDownloadJobs, library]);
+  const staleGlobalDownloadJobs = useMemo(
+    () => globalDownloadJobs.filter((job) => isArchivedRetryDuplicateJob(job, globalArchivedDownloadKeys)),
+    [globalArchivedDownloadKeys, globalDownloadJobs],
+  );
+  const currentGlobalDownloadJobs = useMemo(
+    () => globalDownloadJobs.filter((job) => !isArchivedRetryDuplicateJob(job, globalArchivedDownloadKeys)),
+    [globalArchivedDownloadKeys, globalDownloadJobs],
+  );
   const queueConsoleActionableJobs = useMemo(
-    () => globalDownloadJobs.filter(isSelectableQueueJob),
-    [globalDownloadJobs],
+    () => currentGlobalDownloadJobs.filter(isSelectableQueueJob),
+    [currentGlobalDownloadJobs],
   );
   const filteredQueueConsoleJobs = useMemo(() => {
     const query = queueConsoleSearch.trim().toLowerCase();
@@ -1302,8 +1360,8 @@ function App() {
       queueConsoleStatusFilter === "launchable"
         ? queueConsoleActionableJobs
         : queueConsoleStatusFilter === "all"
-          ? globalDownloadJobs
-          : globalDownloadJobs.filter((job) => job.status === queueConsoleStatusFilter);
+          ? currentGlobalDownloadJobs
+          : currentGlobalDownloadJobs.filter((job) => job.status === queueConsoleStatusFilter);
     const preflightFiltered =
       queueConsolePreflightFilter === "all"
         ? statusFiltered
@@ -1320,7 +1378,7 @@ function App() {
         .includes(query),
     );
   }, [
-    globalDownloadJobs,
+    currentGlobalDownloadJobs,
     queueConsoleActionableJobs,
     queueConsoleChannelFilter,
     queueConsolePreflightFilter,
@@ -1340,16 +1398,16 @@ function App() {
     visibleQueueConsoleActionableJobs.every((job) => queueConsoleSelectedJobIds.includes(job.id));
   const queueConsoleCounts = useMemo(
     () => ({
-      total: globalDownloadJobs.length,
-      candidate: globalDownloadJobs.filter((job) => job.status === "candidate").length,
-      queued: globalDownloadJobs.filter((job) => job.status === "queued").length,
-      running: globalDownloadJobs.filter((job) => job.status === "running").length,
-      completed: globalDownloadJobs.filter((job) => job.status === "completed").length,
-      failed: globalDownloadJobs.filter((job) => job.status === "failed").length,
-      cancelled: globalDownloadJobs.filter((job) => job.status === "cancelled").length,
-      review: globalDownloadJobs.filter((job) => job.preflight_status === "review").length,
+      total: currentGlobalDownloadJobs.length,
+      candidate: currentGlobalDownloadJobs.filter((job) => job.status === "candidate").length,
+      queued: currentGlobalDownloadJobs.filter((job) => job.status === "queued").length,
+      running: currentGlobalDownloadJobs.filter((job) => job.status === "running").length,
+      completed: currentGlobalDownloadJobs.filter((job) => job.status === "completed").length,
+      failed: currentGlobalDownloadJobs.filter((job) => job.status === "failed").length,
+      cancelled: currentGlobalDownloadJobs.filter((job) => job.status === "cancelled").length,
+      review: currentGlobalDownloadJobs.filter((job) => job.preflight_status === "review").length,
     }),
-    [globalDownloadJobs],
+    [currentGlobalDownloadJobs],
   );
   const queueConsoleSelectedBytesLabel = useMemo(
     () => formatBytes(queueConsoleSelectedJobs.reduce((sum, job) => sum + (job.estimated_bytes ?? 0), 0)),
@@ -1359,8 +1417,8 @@ function App() {
     () =>
       queueConsoleWorkerPlan?.running_jobs.length
         ? queueConsoleWorkerPlan.running_jobs.map((item) => item.job)
-        : globalDownloadJobs.filter((job) => job.status === "running"),
-    [globalDownloadJobs, queueConsoleWorkerPlan],
+        : currentGlobalDownloadJobs.filter((job) => job.status === "running"),
+    [currentGlobalDownloadJobs, queueConsoleWorkerPlan],
   );
   const queueConsoleClaimableIds = useMemo(
     () => new Set((queueConsoleWorkerPlan?.jobs ?? []).map((item) => item.job.id)),
@@ -1501,19 +1559,54 @@ function App() {
   const runtimeDraftLimitNumber = Number(runtimeDraft.schedulerLimit);
   const runtimeDraftMetadataIntervalNumber = Number(runtimeDraft.metadataSchedulerIntervalSeconds);
   const runtimeDraftMetadataLimitNumber = Number(runtimeDraft.metadataSchedulerLimit);
-  const runtimeDraftValid =
-    Number.isInteger(runtimeDraftIntervalNumber) &&
-    runtimeDraftIntervalNumber >= 5 &&
-    Number.isInteger(runtimeDraftLimitNumber) &&
-    runtimeDraftLimitNumber >= 1 &&
-    runtimeDraftLimitNumber <= 20 &&
-    Number.isInteger(runtimeDraftMetadataIntervalNumber) &&
-    runtimeDraftMetadataIntervalNumber >= 30 &&
-    Number.isInteger(runtimeDraftMetadataLimitNumber) &&
-    runtimeDraftMetadataLimitNumber >= 1 &&
-    runtimeDraftMetadataLimitNumber <= 20 &&
-    runtimeDraft.ytdlpBinary.trim().length > 0 &&
-    runtimeDraft.ffprobeBinary.trim().length > 0;
+  const runtimeDraftValid = isRuntimeDraftValid(runtimeDraft);
+  const channelAutoPassCount = Math.max(
+    1,
+    Math.ceil(Math.max(simpleFlowStats.fresh, simpleFlowStats.queued, 1) / Math.max(runtimeDraftLimitNumber || 1, 1)),
+  );
+  const channelSchedulerIntervalMinutes = Math.max(1, Math.round((runtimeDraftIntervalNumber || 60) / 60));
+  const channelSchedulerEnabled = Boolean(schedulerStatus?.enabled);
+  const channelSchedulerActualIntervalMinutes = Math.max(
+    1,
+    Math.round(((schedulerStatus?.interval_seconds ?? runtimeDraftIntervalNumber) || 60) / 60),
+  );
+  const channelSchedulerActualLimit = schedulerStatus?.limit ?? (runtimeDraftLimitNumber || 1);
+  const channelSchedulerDisplayIntervalMinutes = channelSchedulerEnabled
+    ? channelSchedulerActualIntervalMinutes
+    : channelSchedulerIntervalMinutes;
+  const channelSchedulerDisplayLimit = channelSchedulerEnabled
+    ? channelSchedulerActualLimit
+    : runtimeDraftLimitNumber || channelSchedulerActualLimit || 1;
+  const channelSchedulerSummary = channelSchedulerEnabled
+    ? t("detail.automation.schedulerHint")
+        .replace("{limit}", String(channelSchedulerDisplayLimit))
+        .replace("{minutes}", String(channelSchedulerDisplayIntervalMinutes))
+        .replace("{passes}", String(channelAutoPassCount))
+    : t("detail.automation.directHint");
+  const channelSchedulerNextLabel = channelSchedulerEnabled ? schedulerNextTickLabel : t("detail.automation.notScheduled");
+  const channelSchedulerLastLabel = channelSchedulerEnabled ? schedulerLastTickLabel : t("detail.automation.noRuns");
+  const channelSchedulerStatusLabel = channelSchedulerEnabled
+    ? schedulerStatus?.running
+      ? t("detail.automation.statusRunning")
+      : t("detail.automation.statusOn")
+    : t("detail.automation.statusOff");
+  const channelScheduleTotalCount = Math.max(
+    activeCounts?.video_count ?? 0,
+    library?.total ?? 0,
+    channelVideos.length,
+    simpleFlowStats.seen,
+    activeArchivedCount + activeMissingCount,
+  );
+  const channelScheduleDownloadedCount = Math.min(
+    channelScheduleTotalCount,
+    Math.max(activeArchivedCount, simpleFlowStats.archived),
+  );
+  const channelScheduleRemainingCount = Math.max(
+    0,
+    activeMissingCount || channelScheduleTotalCount - channelScheduleDownloadedCount,
+  );
+  const channelScheduleComplete = channelScheduleTotalCount > 0 && channelScheduleRemainingCount === 0;
+  const channelSchedulerSummaryLabel = channelScheduleComplete ? t("detail.automation.complete") : channelSchedulerSummary;
   const binaryStateLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
     !binary ? t("runtime.checking") : binary.available ? t("runtime.available") : t("runtime.missing");
   const binaryDetailLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
@@ -2197,7 +2290,11 @@ function App() {
   async function handleRetryJob(jobId: number) {
     if (!registeredChannelId) return;
     try {
-      await retryDownloadJob(jobId);
+      await bulkUpdateDownloadJobs({
+        job_ids: [jobId],
+        action: "retry",
+        quality: channelPolicy?.max_quality ?? maxQuality,
+      });
       applyDownloadJobs(await getDownloadJobs(registeredChannelId));
       setPreflightPlan(null);
       const [snapshot, librarySnapshot, workerSnapshot] = await Promise.all([
@@ -2296,7 +2393,8 @@ function App() {
     setWorkflowStatus("bulk");
     setWorkflowMessage("");
     try {
-      const result = await bulkUpdateDownloadJobs({ job_ids: jobIds, action, priority });
+      const quality = action === "queue" || action === "retry" ? channelPolicy?.max_quality ?? maxQuality : undefined;
+      const result = await bulkUpdateDownloadJobs({ job_ids: jobIds, action, priority, quality });
       const jobs = await getDownloadJobs(registeredChannelId);
       applyDownloadJobs(jobs);
       setPreflightPlan(null);
@@ -2375,7 +2473,8 @@ function App() {
     setQueueConsoleStatus("bulk");
     setWorkflowMessage("");
     try {
-      const result = await bulkUpdateDownloadJobs({ job_ids: jobIds, action, priority });
+      const quality = action === "queue" || action === "retry" ? channelPolicy?.max_quality ?? maxQuality : undefined;
+      const result = await bulkUpdateDownloadJobs({ job_ids: jobIds, action, priority, quality });
       await refreshQueueConsoleState();
       if (registeredChannelId) {
         await loadChannelState(registeredChannelId);
@@ -2401,7 +2500,13 @@ function App() {
     setQueueConsoleStatus("bulk");
     setWorkflowMessage("");
     try {
-      if (action === "retry") await retryDownloadJob(job.id);
+      if (action === "retry") {
+        await bulkUpdateDownloadJobs({
+          job_ids: [job.id],
+          action: "retry",
+          quality: channelPolicy?.max_quality ?? maxQuality,
+        });
+      }
       if (action === "cancel") await cancelDownloadJob(job.id);
       if (action === "stop") await stopDownloadJob(job.id);
       await refreshQueueConsoleState();
@@ -2860,6 +2965,102 @@ function App() {
     setLiveDownloadConfirmOpen(true);
   }
 
+  async function handleStartDownloadSchedule() {
+    if (!registeredChannelId) return;
+    if (channelScheduleComplete) {
+      setRuntimeApplyStatus("saved");
+      setRuntimeApplyMessage(t("detail.automation.completeHint"));
+      setWorkflowStatus("idle");
+      setWorkflowMessage(t("detail.automation.completeHint"));
+      return;
+    }
+    const nextDraft: RuntimeDraft = {
+      ...runtimeDraft,
+      downloadWorkerEnabled: true,
+      schedulerEnabled: true,
+    };
+    if (!isRuntimeDraftValid(nextDraft)) {
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(t("runtime.apply.invalid"));
+      return;
+    }
+
+    const intervalMinutes = Math.max(1, Math.round(Number(nextDraft.schedulerIntervalSeconds) / 60));
+    const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 1);
+    setRuntimeDraft(nextDraft);
+    setRuntimeApplyStatus("applying");
+    setRuntimeApplyMessage("");
+    setWorkflowStatus("queueing");
+    setWorkflowMessage("");
+
+    try {
+      const quality = channelPolicy?.max_quality ?? maxQuality;
+      const candidateResult = await createDownloadCandidates(registeredChannelId, quality);
+      let jobs = await getDownloadJobs(registeredChannelId);
+      const candidateIds = jobs.filter((job) => job.status === "candidate").map((job) => job.id);
+      let newlyQueued = 0;
+      if (candidateIds.length) {
+        const queuedResult = await bulkUpdateDownloadJobs({ job_ids: candidateIds, action: "queue", priority: 85, quality });
+        newlyQueued = queuedResult.updated;
+        jobs = await getDownloadJobs(registeredChannelId);
+      }
+      const queuedNow = jobs.filter((job) => job.status === "queued").length;
+      const result = await saveRuntimeSettingsDraft(nextDraft);
+      await Promise.all([loadChannelState(registeredChannelId), refreshQueueConsoleState()]);
+      const message = t("detail.automation.started")
+        .replace("{candidates}", String(candidateResult.candidates_created))
+        .replace("{queued}", String(Math.max(newlyQueued, queuedNow)))
+        .replace("{minutes}", String(intervalMinutes))
+        .replace("{limit}", String(limit));
+      setRuntimeApplyStatus("saved");
+      setRuntimeApplyMessage(message);
+      setWorkflowStatus("idle");
+      setWorkflowMessage(message);
+      if (result.runtime.scheduler_status.running || result.runtime.scheduler_status.next_tick_at) {
+        setActiveChannelTab("downloads");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("runtime.apply.error");
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(message);
+      setWorkflowStatus("error");
+      setWorkflowMessage(message);
+    }
+  }
+
+  async function handleStopDownloadSchedule() {
+    const nextDraft: RuntimeDraft = {
+      ...runtimeDraft,
+      schedulerEnabled: false,
+    };
+    if (!isRuntimeDraftValid(nextDraft)) {
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(t("runtime.apply.invalid"));
+      return;
+    }
+
+    setRuntimeDraft(nextDraft);
+    setRuntimeApplyStatus("applying");
+    setRuntimeApplyMessage("");
+    setWorkflowStatus("queueing");
+    setWorkflowMessage("");
+
+    try {
+      await saveRuntimeSettingsDraft(nextDraft);
+      const message = t("detail.automation.stopped");
+      setRuntimeApplyStatus("saved");
+      setRuntimeApplyMessage(message);
+      setWorkflowStatus("idle");
+      setWorkflowMessage(message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("runtime.apply.error");
+      setRuntimeApplyStatus("error");
+      setRuntimeApplyMessage(message);
+      setWorkflowStatus("error");
+      setWorkflowMessage(message);
+    }
+  }
+
   async function handleRunLiveDownloadPass() {
     if (!registeredChannelId || liveDownloadBlocked) return;
     setLiveDownloadStatus("running");
@@ -2871,7 +3072,7 @@ function App() {
       let jobs = await getDownloadJobs(registeredChannelId);
       const candidateIds = jobs
         .filter((job) => job.status === "candidate")
-        .slice(0, 5)
+        .slice(0, liveRunLimit)
         .map((job) => job.id);
       if (candidateIds.length) {
         await bulkUpdateDownloadJobs({ job_ids: candidateIds, action: "queue", priority: 85, quality });
@@ -3767,39 +3968,42 @@ function App() {
     }
   }
 
-  async function handleApplyRuntimeSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!runtimeDraftValid) {
+  async function saveRuntimeSettingsDraft(draft: RuntimeDraft): Promise<RuntimeSettingsApplyResult> {
+    if (!isRuntimeDraftValid(draft)) {
+      throw new Error(t("runtime.apply.invalid"));
+    }
+    const result = await updateRuntimeSettings(runtimeSettingsPayloadFromDraft(draft));
+    setRuntimeSettings(result.runtime);
+    return result;
+  }
+
+  async function applyRuntimeSettingsDraft(draft: RuntimeDraft = runtimeDraft) {
+    if (!isRuntimeDraftValid(draft)) {
       setRuntimeApplyStatus("error");
       setRuntimeApplyMessage(t("runtime.apply.invalid"));
-      return;
+      return null;
     }
     setRuntimeApplyStatus("applying");
     setRuntimeApplyMessage("");
-    const payload: RuntimeSettingsUpdate = {
-      download_worker_enabled: runtimeDraft.downloadWorkerEnabled,
-      download_worker_scheduler_enabled: runtimeDraft.schedulerEnabled,
-      download_worker_scheduler_interval_seconds: runtimeDraftIntervalNumber,
-      download_worker_scheduler_limit: runtimeDraftLimitNumber,
-      metadata_sync_scheduler_enabled: runtimeDraft.metadataSchedulerEnabled,
-      metadata_sync_scheduler_interval_seconds: runtimeDraftMetadataIntervalNumber,
-      metadata_sync_scheduler_limit: runtimeDraftMetadataLimitNumber,
-      ytdlp_binary: runtimeDraft.ytdlpBinary.trim(),
-      ffprobe_binary: runtimeDraft.ffprobeBinary.trim(),
-    };
     try {
-      const result = await updateRuntimeSettings(payload);
-      setRuntimeSettings(result.runtime);
+      const result = await saveRuntimeSettingsDraft(draft);
       setRuntimeApplyStatus("saved");
       setRuntimeApplyMessage(
         result.restart_required
           ? t("runtime.apply.savedRestart").replace("{count}", String(result.changed_keys.length))
           : t("runtime.apply.savedClean").replace("{count}", String(result.changed_keys.length)),
       );
+      return result;
     } catch (error) {
       setRuntimeApplyStatus("error");
       setRuntimeApplyMessage(error instanceof Error ? error.message : t("runtime.apply.error"));
+      return null;
     }
+  }
+
+  async function handleApplyRuntimeSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await applyRuntimeSettingsDraft();
   }
 
   async function refreshWorkerHistory(filter: WorkerHistoryFilter = workerHistoryFilter) {
@@ -5300,7 +5504,7 @@ function App() {
       : `${t("runtime.worker")} ${workerRuntimeLabel}`;
   const sidebarRuntimeDetail = !runtimeSettings
     ? t("runtime.checking")
-    : `${schedulerRuntimeLabel} · ${metadataSchedulerRuntimeLabel}`;
+    : `${t("runtime.scheduler")} ${schedulerRuntimeLabel} · ${t("runtime.metadataScheduler")} ${metadataSchedulerRuntimeLabel}`;
   const sidebarNavBadges = useMemo<Record<NavId, NavStatusBadge>>(
     () => ({
       dashboard: {
@@ -5677,7 +5881,7 @@ function App() {
       id: "scheduler",
       icon: History,
       labelKey: "runtime.rail.scheduler",
-      detail: `${schedulerRuntimeLabel} · ${metadataSchedulerRuntimeLabel}`,
+        detail: `${t("runtime.scheduler")} ${schedulerRuntimeLabel} · ${t("runtime.metadataScheduler")} ${metadataSchedulerRuntimeLabel}`,
       selector: ".runtime-guide-state",
       tone: runtimeSettings ? "active" : "neutral",
     },
@@ -6702,7 +6906,10 @@ function App() {
             <div className="queue-console-hero">
               <div>
                 <p className="panel-kicker">{t("queue.console.kicker")}</p>
-                <h2>{t("queue.console.title")}</h2>
+                <h2>
+                  {t("queue.console.title")}
+                  <InfoHint label={t("help.queuePage")} />
+                </h2>
                 <span>{t("queue.console.subtitle")}</span>
               </div>
               <div className="queue-console-actions">
@@ -6730,7 +6937,7 @@ function App() {
 
             <div className="queue-console-stats">
               <article>
-                <span>{t("launch.jobs")}</span>
+                <span>{t("queue.console.currentJobs")}</span>
                 <strong>{queueConsoleCounts.total}</strong>
               </article>
               <article>
@@ -6823,6 +7030,12 @@ function App() {
                 </button>
               ))}
             </div>
+            {staleGlobalDownloadJobs.length ? (
+              <div className="stale-archive-note queue-console-note" role="status">
+                <Info size={14} />
+                {t("queue.console.staleHidden").replace("{count}", String(staleGlobalDownloadJobs.length))}
+              </div>
+            ) : null}
 
             {queueConsoleClaimBlocked ? (
               <div className="queue-console-state blocked" aria-live="polite">
@@ -7067,22 +7280,22 @@ function App() {
                   );
                 })}
                 {filteredQueueConsoleJobs.length === 0 ? (
-                  <div className={`queue-console-empty-state ${globalDownloadJobs.length === 0 ? "empty" : "filtered"}`}>
+                  <div className={`queue-console-empty-state ${currentGlobalDownloadJobs.length === 0 ? "empty" : "filtered"}`}>
                     <div className="queue-console-empty-icon">
-                      {globalDownloadJobs.length === 0 ? <ClipboardList size={20} /> : <Search size={20} />}
+                      {currentGlobalDownloadJobs.length === 0 ? <ClipboardList size={20} /> : <Search size={20} />}
                     </div>
                     <strong>
-                      {globalDownloadJobs.length === 0
+                      {currentGlobalDownloadJobs.length === 0
                         ? t("queue.console.empty.noJobsTitle")
                         : t("queue.console.empty.filteredTitle")}
                     </strong>
                     <span>
-                      {globalDownloadJobs.length === 0
+                      {currentGlobalDownloadJobs.length === 0
                         ? t("queue.console.empty.noJobsDetail")
                         : t("queue.console.empty.filteredDetail")}
                     </span>
                     <div className="queue-console-empty-actions">
-                      {globalDownloadJobs.length === 0 ? (
+                      {currentGlobalDownloadJobs.length === 0 ? (
                         <>
                           <button className="primary-action" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
                             <Link2 size={15} />
@@ -7119,7 +7332,10 @@ function App() {
 
               <aside className="queue-console-side">
                 <div>
-                  <span>{t("worker.title")}</span>
+                  <span>
+                    {t("worker.title")}
+                    <InfoHint label={t("help.worker")} />
+                  </span>
                   <strong>{queueConsoleWorkerPlan?.enabled ? t("worker.enabled") : t("worker.locked")}</strong>
                   <small>
                     {queueConsoleWorkerPlan?.queued_count ?? 0} {t("queue.queued")} · {queueConsoleWorkerPlan?.running_count ?? 0} {t("queue.running")}
@@ -7283,18 +7499,14 @@ function App() {
             <h2>{t("channel.workbench.title")}</h2>
             <span>{registeredChannelId ? `${activeTitle} · ${activeHandle}` : t("channel.workbench.noChannel")}</span>
           </article>
-          <button
-            onClick={() => {
-              scrollToAppSection(".registration-panel");
-            }}
-            type="button"
-          >
+          <article className="channel-workbench-card channel-workbench-status" aria-label={t("channel.workbench.register")}>
             <Link2 size={16} />
-            <span>{t("channel.workbench.register")}</span>
-            <strong>{registeredChannelId ? t("registration.registered") : t("registration.probe")}</strong>
-            <small>{t("channel.workbench.registerDetail")}</small>
-          </button>
+            <span>{registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}</span>
+            <strong>{registeredChannelId ? t("registration.registered") : t("registration.commit")}</strong>
+            <small>{registeredChannelId ? t("registration.addAnotherDetail") : t("channel.workbench.registerDetail")}</small>
+          </article>
           <button
+            className="channel-workbench-card channel-workbench-action sync"
             disabled={!registeredChannelId}
             onClick={() => {
               handleSelectChannelTab("overview");
@@ -7304,38 +7516,54 @@ function App() {
           >
             <RotateCcw size={16} />
             <span>{t("channel.workbench.sync")}</span>
-            <strong>{simpleFlowStats.fresh}</strong>
+            <strong>{channelScheduleRemainingCount}</strong>
             <small>{t("channel.workbench.syncDetail")}</small>
           </button>
           <button
+            className="channel-workbench-card channel-workbench-action downloads"
             disabled={!registeredChannelId}
             onClick={() => {
-              handleSelectChannelTab("downloads");
-              scrollToAppSection(".launch-control-panel");
+              handleSelectChannelTab("overview");
+              scrollToAppSection(".channel-automation-panel");
             }}
             type="button"
           >
             <Rocket size={16} />
             <span>{t("channel.workbench.downloads")}</span>
-            <strong>{simpleFlowStats.queued || simpleFlowStats.running}</strong>
+            <strong>{channelSchedulerStatusLabel}</strong>
             <small>{t("channel.workbench.downloadsDetail")}</small>
-          </button>
-          <button
-            onClick={() => {
-              scrollToAppSection(".quick-panel");
-            }}
-            type="button"
-          >
-            <FileArchive size={16} />
-            <span>{t("channel.workbench.archiveTxt")}</span>
-            <strong>{archiveTxtDraftLineCount}</strong>
-            <small>{t("channel.workbench.archiveTxtDetail")}</small>
           </button>
         </section>
         ) : null}
 
-        {showChannelWorkspace ? (
-        <section className="panel registration-panel">
+        {showChannelWorkspace && (!registrationPanelCompact || registrationComposerOpen) ? (
+        <section className={`panel registration-panel ${registrationPanelCompact ? "is-compact" : ""}`}>
+          {registeredChannelId ? (
+            <div className="registration-compact-summary">
+              <div>
+                <p className="panel-kicker">{t("registration.kicker")}</p>
+                <h2>{t("registration.addAnother")}</h2>
+                <span>{t("registration.addAnotherDetail")}</span>
+              </div>
+              <button
+                className="command-button"
+                onClick={() => {
+                  setRegistrationComposerOpen((open) => !open);
+                  if (registrationComposerOpen) {
+                    setProbe(null);
+                    setRegistrationError("");
+                    setSourceValue("");
+                    setRegistrationStatus("idle");
+                  }
+                }}
+                type="button"
+              >
+                {registrationComposerOpen ? <X size={15} /> : <Link2 size={15} />}
+                {registrationComposerOpen ? t("registration.hideComposer") : t("registration.addAnother")}
+              </button>
+            </div>
+          ) : null}
+          <div className="registration-panel-body" hidden={registrationPanelCompact}>
           <div className="registration-copy">
             <p className="panel-kicker">{t("registration.kicker")}</p>
             <h2>{t("registration.title")}</h2>
@@ -7469,6 +7697,7 @@ function App() {
               ) : null}
             </motion.div>
           ) : null}
+          </div>
         </section>
         ) : null}
 
@@ -7502,12 +7731,48 @@ function App() {
                 </button>
               </div>
             ) : null}
-            <div className="channel-start-flow" aria-label={t("detail.flow.title")}>
-              <article>
-                <span>{t("detail.flow.check")}</span>
-                <strong>{simpleFlowStats.seen}</strong>
-                <small>{formatDateTimeLabel(channelDetail?.last_synced_at, t("detail.syncOps.autoNoRun"))}</small>
+            <section className="channel-backup-guide" aria-label={t("detail.guide.aria")}>
+              <div className="channel-backup-guide-copy">
+                <p>{t("detail.guide.kicker")}</p>
+                <h3>{channelScheduleRemainingCount > 0 ? t("detail.guide.title") : t("detail.guide.completeTitle")}</h3>
+                <span>
+                  {(channelScheduleRemainingCount > 0 ? t("detail.guide.subtitle") : t("detail.guide.completeSubtitle"))
+                    .replace("{remaining}", String(channelScheduleRemainingCount))
+                    .replace("{downloaded}", String(channelScheduleDownloadedCount))}
+                </span>
+              </div>
+              <div className="channel-backup-guide-counts">
+                <article>
+                  <span>{t("detail.automation.totalVideos")}</span>
+                  <strong>{channelScheduleTotalCount}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.downloadedVideos")}</span>
+                  <strong>{channelScheduleDownloadedCount}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.remainingVideos")}</span>
+                  <strong>{channelScheduleRemainingCount}</strong>
+                </article>
+              </div>
+              <div className="channel-backup-guide-actions">
                 <button
+                  className="primary-action"
+                  onClick={() => {
+                    if (channelScheduleRemainingCount > 0) {
+                      scrollToAppSection(".channel-automation-panel");
+                      return;
+                    }
+                    setActiveChannelTab("library");
+                    scrollToAppSection(".channel-tab-rail");
+                  }}
+                  type="button"
+                >
+                  {channelScheduleRemainingCount > 0 ? <TimerReset size={14} /> : <BookOpen size={14} />}
+                  {channelScheduleRemainingCount > 0 ? t("detail.guide.primary") : t("detail.guide.library")}
+                </button>
+                <button
+                  className="command-button"
                   disabled={workflowStatus === "syncing"}
                   onClick={() => {
                     setActiveChannelTab("overview");
@@ -7515,41 +7780,177 @@ function App() {
                   }}
                   type="button"
                 >
-                  <RotateCcw size={13} />
-                  {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.flow.check")}
+                  <RotateCcw size={14} />
+                  {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.guide.checkAgain")}
                 </button>
-              </article>
-              <article className="primary">
-                <span>{t("detail.flow.download")}</span>
-                <strong>{simpleFlowStats.queued || simpleFlowStats.fresh}</strong>
-                <small>
-                  {t("detail.flow.skipSummary")
-                    .replace("{archived}", String(simpleFlowStats.archived))
-                    .replace("{fresh}", String(simpleFlowStats.fresh))}
-                </small>
+              </div>
+            </section>
+            <details className="channel-quick-actions">
+              <summary>
+                <span>{t("detail.quickActions.title")}</span>
+                <small>{t("detail.quickActions.subtitle")}</small>
+              </summary>
+              <div className="channel-start-flow" aria-label={t("detail.flow.title")}>
+                <article>
+                  <span>{t("detail.flow.check")}</span>
+                  <strong>{simpleFlowStats.seen}</strong>
+                  <small>{formatDateTimeLabel(channelDetail?.last_synced_at, t("detail.syncOps.autoNoRun"))}</small>
+                  <button
+                    disabled={workflowStatus === "syncing"}
+                    onClick={() => {
+                      setActiveChannelTab("overview");
+                      void handleManualSync();
+                    }}
+                    type="button"
+                  >
+                    <RotateCcw size={13} />
+                    {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.flow.check")}
+                  </button>
+                </article>
+                <article>
+                  <span>{t("detail.flow.manualTest")}</span>
+                  <strong>{Math.min(5, Math.max(simpleFlowStats.queued || simpleFlowStats.fresh, 1))}</strong>
+                  <small>
+                    {t("detail.flow.manualHint").replace(
+                      "{limit}",
+                      String(Math.min(5, Math.max(simpleFlowStats.queued || simpleFlowStats.fresh, 1))),
+                    )}
+                  </small>
+                  <button
+                    disabled={liveDownloadStatus === "running" || workflowStatus === "downloading"}
+                    onClick={handleOpenLiveDownloadConfirm}
+                    type="button"
+                  >
+                    <Download size={13} />
+                    {workflowStatus === "downloading" ? t("detail.flow.downloading") : t("detail.flow.manualTest")}
+                  </button>
+                </article>
+              </div>
+            </details>
+            <details className="channel-automation-panel" open>
+              <summary>
+                <div>
+                  <strong>
+                    {t("detail.automation.title")}
+                    <InfoHint label={t("help.scheduler")} />
+                  </strong>
+                  <span>{t("detail.automation.subtitle")}</span>
+                </div>
+                <em>{channelSchedulerSummaryLabel}</em>
+              </summary>
+              <div className="channel-automation-count-grid" aria-label={t("detail.automation.counts")}>
+                <article>
+                  <span>{t("detail.automation.totalVideos")}</span>
+                  <strong>{channelScheduleTotalCount}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.downloadedVideos")}</span>
+                  <strong>{channelScheduleDownloadedCount}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.remainingVideos")}</span>
+                  <strong>{channelScheduleRemainingCount}</strong>
+                </article>
+              </div>
+              <div className={`channel-automation-status-grid ${channelSchedulerEnabled ? "is-on" : "is-off"}`}>
+                <article>
+                  <span>{t("detail.automation.status")}</span>
+                  <strong>{channelSchedulerStatusLabel}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.nextRun")}</span>
+                  <strong>{channelSchedulerNextLabel}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.interval")}</span>
+                  <strong>{t("detail.automation.minutes").replace("{minutes}", String(channelSchedulerDisplayIntervalMinutes))}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.batch")}</span>
+                  <strong>{t("detail.automation.items").replace("{count}", String(channelSchedulerDisplayLimit))}</strong>
+                </article>
+                <article>
+                  <span>{t("detail.automation.lastRun")}</span>
+                  <strong>{channelSchedulerLastLabel}</strong>
+                </article>
+              </div>
+              <div className="channel-automation-grid">
+                <label>
+                  <span>{t("detail.automation.intervalMinutes")}</span>
+                  <input
+                    min={1}
+                    onChange={(event) => {
+                      const minutes = Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1);
+                      setRuntimeDraft((draft) => ({ ...draft, schedulerIntervalSeconds: String(minutes * 60) }));
+                    }}
+                    type="number"
+                    value={channelSchedulerIntervalMinutes}
+                  />
+                </label>
+                <label>
+                  <span>{t("detail.automation.limitPerPass")}</span>
+                  <input
+                    max={20}
+                    min={1}
+                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: event.target.value }))}
+                    type="number"
+                    value={runtimeDraft.schedulerLimit}
+                  />
+                </label>
+              </div>
+              <div className="channel-automation-footer">
+                <span>{channelScheduleComplete ? t("detail.automation.completeHint") : t("detail.automation.workerHint")}</span>
                 <button
-                  disabled={liveDownloadStatus === "running" || workflowStatus === "downloading"}
-                  onClick={handleOpenLiveDownloadConfirm}
+                  className="command-button"
+                  disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
+                  onClick={() => void applyRuntimeSettingsDraft()}
                   type="button"
                 >
-                  <Download size={13} />
-                  {workflowStatus === "downloading" ? t("detail.flow.downloading") : t("detail.flow.download")}
+                  <Settings size={14} />
+                  {runtimeApplyStatus === "applying" ? t("runtime.apply.saving") : t("detail.automation.save")}
                 </button>
-              </article>
-              <article>
-                <span>{t("detail.flow.progress")}</span>
-                <strong>{liveActiveJobCount}</strong>
-                <small>
-                  {latestDownloadTelemetry && latestDownloadTelemetry.status === "running"
-                    ? downloadTelemetrySummary(latestDownloadTelemetry)
-                    : t("detail.flow.queueSummary").replace("{queued}", String(simpleFlowStats.queued))}
-                </small>
-                <button onClick={() => handleSelectChannelTab("downloads")} type="button">
-                  <History size={13} />
-                  {t("detail.flow.progress")}
-                </button>
-              </article>
-            </div>
+                {channelSchedulerEnabled ? (
+                  <button
+                    className="danger-action"
+                    disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
+                    onClick={() => void handleStopDownloadSchedule()}
+                    type="button"
+                  >
+                    <CirclePause size={14} />
+                    {runtimeApplyStatus === "applying" ? t("detail.automation.stopping") : t("detail.automation.stop")}
+                  </button>
+                ) : channelScheduleComplete ? (
+                  <button
+                    className="command-button"
+                    disabled={workflowStatus === "syncing"}
+                    onClick={() => {
+                      setActiveChannelTab("overview");
+                      void handleManualSync();
+                    }}
+                    type="button"
+                  >
+                    <CheckCircle2 size={14} />
+                    {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.guide.checkAgain")}
+                  </button>
+                ) : (
+                  <button
+                    className="primary-action"
+                    disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
+                    onClick={() => void handleStartDownloadSchedule()}
+                    type="button"
+                  >
+                    <Download size={14} />
+                    {runtimeApplyStatus === "applying" ? t("detail.automation.starting") : t("detail.automation.start")}
+                  </button>
+                )}
+              </div>
+              {runtimeApplyMessage ? (
+                <div className={`runtime-copy-status ${runtimeApplyStatus === "error" ? "error" : "copied"}`}>
+                  {runtimeApplyMessage}
+                </div>
+              ) : null}
+              {runtimePendingOverrides.length ? <small className="channel-automation-note">{t("detail.automation.restartHint")}</small> : null}
+            </details>
             <div className="channel-tab-rail" aria-label={t("detail.tabs.aria")}>
               {channelDetailTabs.map((tab) => {
                 const TabIcon = tab.icon;
@@ -7882,7 +8283,7 @@ function App() {
                     {t("backup.missing.label")}
                   </span>
                   <span>
-                    <strong>{downloadJobs.length}</strong>
+                    <strong>{currentDownloadJobs.length}</strong>
                     {t("detail.queue")}
                   </span>
                 </div>
@@ -7921,7 +8322,7 @@ function App() {
                   ) : null}
                 </div>
                 <div className="job-list">
-                  {downloadJobs.slice(0, 4).map((job) => {
+                  {currentDownloadJobs.slice(0, 4).map((job) => {
                     const telemetry = telemetryByJobId.get(job.id);
                     return (
                       <article className={`job-row ${job.status}`} key={job.id}>
@@ -7964,7 +8365,7 @@ function App() {
                       </article>
                     );
                   })}
-                  {downloadJobs.length === 0 ? <p className="empty-copy">{t("queue.empty")}</p> : null}
+                  {currentDownloadJobs.length === 0 ? <p className="empty-copy">{t("queue.empty")}</p> : null}
                 </div>
               </div>
             </div>
@@ -7977,7 +8378,10 @@ function App() {
             <div className="launch-hero">
               <div>
                 <p className="panel-kicker">{t("launch.kicker")}</p>
-                <h2>{t("launch.title")}</h2>
+                <h2>
+                  {t("launch.title")}
+                  <InfoHint label={t("help.downloadPlanner")} />
+                </h2>
                 <span>{t("launch.subtitle")}</span>
               </div>
               <div className="launch-readiness">
@@ -8012,7 +8416,10 @@ function App() {
               <div>
                 <ListFilter size={16} />
                 <div>
-                  <strong>{t("launch.signal.title")}</strong>
+                  <span className="label-with-info">
+                    <strong>{t("launch.signal.title")}</strong>
+                    <InfoHint label={t("help.queueRadar")} />
+                  </span>
                   <span>{t("launch.signal.subtitle")}</span>
                 </div>
               </div>
@@ -8033,6 +8440,12 @@ function App() {
                 <strong>{queueRadar.running}</strong>
               </article>
             </div>
+            {staleArchivedDownloadJobs.length ? (
+              <div className="stale-archive-note" role="status">
+                <Info size={14} />
+                {t("launch.staleHidden").replace("{count}", String(staleArchivedDownloadJobs.length))}
+              </div>
+            ) : null}
 
             <div className="launch-filter-rail" aria-label={t("launch.filter.label")}>
               {queueStatusFilters.map((filter) => (
@@ -8286,6 +8699,7 @@ function App() {
                   <div className="section-title worker-title">
                     {workerPlan?.enabled ? <Rocket size={16} /> : <CirclePause size={16} />}
                     <strong>{t("worker.title")}</strong>
+                    <InfoHint label={t("help.worker")} />
                     <button className="worker-run-button" onClick={handleWorkerDryRun} type="button">
                       <TimerReset size={13} />
                       {t("worker.runDry")}
@@ -10097,8 +10511,9 @@ function App() {
           >
             <div className="download-confirm-head">
               <div>
-                <p className="panel-kicker">archive.txt</p>
+                <p className="panel-kicker">{t("worker.liveConfirmKicker")}</p>
                 <h2>{t("worker.liveConfirmTitle")}</h2>
+                <span>{t("worker.liveConfirmPlan").replace("{limit}", String(liveRunLimit))}</span>
               </div>
               <button
                 aria-label={t("actions.close")}
@@ -10120,9 +10535,14 @@ function App() {
               </article>
               <article>
                 <span>{t("worker.liveConfirm.queued")}</span>
-                <strong>{simpleFlowStats.queued}</strong>
+                <strong>{Math.max(simpleFlowStats.queued, simpleFlowStats.fresh)}</strong>
               </article>
             </div>
+            <p className="download-confirm-note">
+              {t("worker.liveConfirm.schedulerHint")
+                .replace("{limit}", String(runtimeDraftLimitNumber || 1))
+                .replace("{minutes}", String(channelSchedulerIntervalMinutes))}
+            </p>
             <div className="download-confirm-list">
               {nextDownloadJobs.map((job) => (
                 <span key={job.id}>
@@ -13341,6 +13761,19 @@ function downloadTelemetryStatusFromEvent(type: string): DownloadTelemetryStatus
   return null;
 }
 
+function addVideoIdentityKeys(keys: Set<string>, id: number | null | undefined, externalId: string | null | undefined) {
+  if (typeof id === "number" && Number.isFinite(id)) keys.add(`video:${id}`);
+  if (externalId) keys.add(`external:${externalId}`);
+}
+
+function downloadJobMatchesVideoKeys(job: DownloadJob, keys: Set<string>) {
+  return keys.has(`video:${job.video_id}`) || keys.has(`external:${job.video_external_id}`);
+}
+
+function isArchivedRetryDuplicateJob(job: DownloadJob, archivedKeys: Set<string>) {
+  return (job.status === "failed" || job.status === "cancelled") && downloadJobMatchesVideoKeys(job, archivedKeys);
+}
+
 function readEventNumber(data: Record<string, unknown>, key: string) {
   const value = data[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -13515,6 +13948,41 @@ function runtimeDraftFromSettings(runtime: RuntimeSettings): RuntimeDraft {
     ytdlpBinary: overrides.get("CVN_YTDLP_BINARY") ?? binary("yt-dlp", "yt-dlp"),
     ffprobeBinary: overrides.get("CVN_FFPROBE_BINARY") ?? binary("ffprobe", "ffprobe"),
   };
+}
+
+function runtimeSettingsPayloadFromDraft(draft: RuntimeDraft): RuntimeSettingsUpdate {
+  return {
+    download_worker_enabled: draft.downloadWorkerEnabled,
+    download_worker_scheduler_enabled: draft.schedulerEnabled,
+    download_worker_scheduler_interval_seconds: Number(draft.schedulerIntervalSeconds),
+    download_worker_scheduler_limit: Number(draft.schedulerLimit),
+    metadata_sync_scheduler_enabled: draft.metadataSchedulerEnabled,
+    metadata_sync_scheduler_interval_seconds: Number(draft.metadataSchedulerIntervalSeconds),
+    metadata_sync_scheduler_limit: Number(draft.metadataSchedulerLimit),
+    ytdlp_binary: draft.ytdlpBinary.trim(),
+    ffprobe_binary: draft.ffprobeBinary.trim(),
+  };
+}
+
+function isRuntimeDraftValid(draft: RuntimeDraft) {
+  const schedulerInterval = Number(draft.schedulerIntervalSeconds);
+  const schedulerLimit = Number(draft.schedulerLimit);
+  const metadataInterval = Number(draft.metadataSchedulerIntervalSeconds);
+  const metadataLimit = Number(draft.metadataSchedulerLimit);
+  return (
+    Number.isInteger(schedulerInterval) &&
+    schedulerInterval >= 5 &&
+    Number.isInteger(schedulerLimit) &&
+    schedulerLimit >= 1 &&
+    schedulerLimit <= 20 &&
+    Number.isInteger(metadataInterval) &&
+    metadataInterval >= 30 &&
+    Number.isInteger(metadataLimit) &&
+    metadataLimit >= 1 &&
+    metadataLimit <= 20 &&
+    draft.ytdlpBinary.trim().length > 0 &&
+    draft.ffprobeBinary.trim().length > 0
+  );
 }
 
 function parseRuntimeBool(value: string | undefined, fallback: boolean) {

@@ -248,7 +248,7 @@ class DownloadWorkerRunRequest(BaseModel):
     """Request one bounded worker pass."""
 
     channel_id: int | None = None
-    limit: int = Field(default=1, ge=1, le=5)
+    limit: int = Field(default=1, ge=1, le=20)
     dry_run: bool = True
 
 

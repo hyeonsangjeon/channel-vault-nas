@@ -34,6 +34,7 @@ from app.services.archive_paths import video_archive_dir
 from app.services.archive_rescan import apply_rescan_target
 from app.services.download_queue import DownloadJobNotFoundError, to_download_job
 from app.services.event_bus import event_bus
+from app.services.ytdlp_format import ytdlp_format_selector
 from app.services.ytdlp_progress import parse_ytdlp_progress_line
 
 OUTPUT_TEMPLATE = "video.%(ext)s"
@@ -767,7 +768,7 @@ def _worker_command(*, job: DownloadJob, video: Video, channel: Channel) -> tupl
         "-o",
         OUTPUT_TEMPLATE,
         "-f",
-        job.quality,
+        ytdlp_format_selector(job.quality),
         f"https://www.youtube.com/watch?v={video.external_id}",
     ]
 

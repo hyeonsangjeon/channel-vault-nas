@@ -23,6 +23,7 @@ from app.services.archive_coverage import archived_video_ids_on_disk, resolve_ar
 from app.services.archive_paths import video_archive_dir
 from app.services.channel_registration import _to_registered_channel
 from app.services.event_bus import event_bus
+from app.services.ytdlp_format import ytdlp_format_selector
 
 ACTIVE_DOWNLOAD_STATUSES = ("candidate", "queued", "running")
 RETRYABLE_DOWNLOAD_STATUSES = ("candidate", "queued", "failed", "cancelled")
@@ -472,7 +473,7 @@ def _command_preview(jobs: list[DownloadJobRead]) -> list[str]:
     return [
         (
             "yt-dlp --no-overwrites --write-info-json --write-thumbnail "
-            f"-f {job.quality} https://www.youtube.com/watch?v={job.video_external_id}"
+            f"-f {ytdlp_format_selector(job.quality)} https://www.youtube.com/watch?v={job.video_external_id}"
         )
         for job in jobs
     ]

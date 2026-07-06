@@ -210,6 +210,7 @@ tempCodeRunnerFile.py
 .ruff_cache/
 
 # Channel Vault runtime data
+local.data/
 metadata/
 downfolder/
 runtime/

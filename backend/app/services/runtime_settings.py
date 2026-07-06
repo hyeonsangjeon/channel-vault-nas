@@ -29,11 +29,12 @@ from app.schemas.settings import (
     SchedulerTickPruneResult,
     SchedulerTickRead,
 )
-from app.services.download_scheduler import get_download_worker_scheduler_status
+from app.services.download_scheduler import download_worker_scheduler, get_download_worker_scheduler_status
 from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import (
     get_metadata_sync_scheduler_status,
     list_metadata_sync_ticks,
+    metadata_sync_scheduler,
 )
 
 ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
@@ -481,7 +482,7 @@ async def apply_runtime_settings(
     db: AsyncSession,
     payload: RuntimeSettingsUpdate,
 ) -> RuntimeSettingsApplyResult:
-    """Persist selected runtime settings to the managed env file for restart."""
+    """Persist selected runtime settings and apply mutable flags to this process."""
     updates = payload.model_dump(exclude_unset=True, exclude_none=True)
     env_updates = {
         RUNTIME_FIELD_TO_ENV_KEY[field_name]: _stringify_env_value(value)
@@ -489,6 +490,8 @@ async def apply_runtime_settings(
         if field_name in RUNTIME_FIELD_TO_ENV_KEY
     }
     changed_keys = _write_managed_env(env_updates) if env_updates else []
+    if env_updates:
+        await _apply_active_runtime_settings(updates)
     runtime = await get_runtime_settings(db=db)
     return RuntimeSettingsApplyResult(
         applied=bool(changed_keys),
@@ -498,6 +501,23 @@ async def apply_runtime_settings(
         restart_command=runtime.restart_command,
         runtime=runtime,
     )
+
+
+async def _apply_active_runtime_settings(updates: dict[str, object]) -> None:
+    """Apply runtime-safe settings immediately without forcing an app restart."""
+    for field_name, value in updates.items():
+        if field_name in RUNTIME_FIELD_TO_ENV_KEY:
+            setattr(settings, field_name, value)
+
+    if settings.download_worker_scheduler_enabled:
+        download_worker_scheduler.start()
+    else:
+        await download_worker_scheduler.stop()
+
+    if settings.metadata_sync_scheduler_enabled:
+        metadata_sync_scheduler.start()
+    else:
+        await metadata_sync_scheduler.stop()
 
 
 async def list_scheduler_ticks(

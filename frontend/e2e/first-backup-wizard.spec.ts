@@ -375,7 +375,7 @@ test("first backup wizard analyzes a channel and opens confirmation without runn
 
   await wizard.getByRole("button", { name: "첫 채널 백업 시작" }).click();
 
-  const confirm = page.getByLabel("새 영상만 다운로드");
+  const confirm = page.getByLabel("새 영상 다운로드 시작");
   await expect(confirm).toBeVisible();
   await expect(confirm.getByRole("button", { name: "최대 5개 시작" })).toBeEnabled();
   expect(calls.filter((call) => call !== "probe").slice(0, 4)).toEqual(["register", "sync", "candidates", "worker-plan"]);
@@ -393,7 +393,7 @@ test("first backup confirmation stays locked when the download engine is disable
   await expect(wizard).toContainText("Wingnut Archive Lab");
   await wizard.getByRole("button", { name: "첫 채널 백업 시작" }).click();
 
-  const confirm = page.getByLabel("새 영상만 다운로드");
+  const confirm = page.getByLabel("새 영상 다운로드 시작");
   await expect(confirm).toBeVisible();
   await expect(confirm.getByRole("button", { name: "최대 5개 시작" })).toBeDisabled();
   await expect(confirm.getByRole("button", { name: "다운로드 설정 열기" })).toBeVisible();

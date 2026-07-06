@@ -365,6 +365,9 @@ async def test_runtime_settings_apply_writes_managed_env(
     run_migrations()
     await init_db()
     monkeypatch.setattr("app.config.settings.runtime_env_file", str(tmp_path / ".env.runtime"))
+    monkeypatch.setattr(settings, "download_worker_enabled", False)
+    monkeypatch.setattr(settings, "download_worker_scheduler_enabled", False)
+    monkeypatch.setattr(settings, "metadata_sync_scheduler_enabled", False)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.patch(
@@ -379,13 +382,16 @@ async def test_runtime_settings_apply_writes_managed_env(
     assert response.status_code == 200
     data = response.json()
     assert data["applied"] is True
-    assert data["restart_required"] is True
+    assert data["restart_required"] is False
     assert "CVN_DOWNLOAD_WORKER_ENABLED" in data["changed_keys"]
     env_text = (tmp_path / ".env.runtime").read_text(encoding="utf-8")
     assert "CVN_DOWNLOAD_WORKER_ENABLED=true" in env_text
     assert "CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS=120" in env_text
-    assert data["runtime"]["pending_restart"] is True
-    assert any(item["key"] == "CVN_DOWNLOAD_WORKER_ENABLED" for item in data["runtime"]["pending_overrides"])
+    assert data["runtime"]["download_worker_enabled"] is True
+    assert data["runtime"]["download_worker_scheduler_interval_seconds"] == 120
+    assert data["runtime"]["pending_restart"] is False
+    assert data["runtime"]["pending_overrides"]
+    assert all(item["pending_restart"] is False for item in data["runtime"]["pending_overrides"])
 
 
 @pytest.mark.asyncio

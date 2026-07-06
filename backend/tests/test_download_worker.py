@@ -320,6 +320,39 @@ async def test_worker_plan_respects_paused_channel_policy() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_plan_translates_max_quality_labels_to_fallback_ytdlp_selectors() -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+
+    async with AsyncSessionLocal() as session:
+        channel, _video, job = await _create_queued_worker_job(session)
+        job.quality = "1080p"
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        plan = await build_download_worker_plan(db=session, channel_id=channel.id)
+
+    assert plan.jobs
+    command = plan.jobs[0].command_preview
+    assert "bv*[height<=1080]+ba/b[height<=1080]/b" in command
+    assert "-f 1080p" not in command
+
+    async with AsyncSessionLocal() as session:
+        stored_job = await session.get(DownloadJob, job.id)
+        assert stored_job is not None
+        stored_job.quality = "720p"
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        plan = await build_download_worker_plan(db=session, channel_id=channel.id)
+
+    command = plan.jobs[0].command_preview
+    assert "bv*[height<=720]+ba/b[height<=720]/b" in command
+    assert "-f 720p" not in command
+
+
+@pytest.mark.asyncio
 async def test_worker_run_history_filters_and_duration() -> None:
     run_migrations()
     await init_db()

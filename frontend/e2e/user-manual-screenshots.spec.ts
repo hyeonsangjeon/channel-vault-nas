@@ -82,10 +82,10 @@ test("capture English user-manual screenshots", async ({ page }) => {
   await expect(page.getByLabel("Queue radar")).toBeVisible();
   await capture(page, "03-download-launch-control.png");
 
-  await page.getByRole("button", { name: "Download new only" }).first().click();
-  await expect(page.getByLabel("Download new videos")).toBeVisible();
+  await page.getByRole("button", { name: "Start new-video download" }).first().click();
+  await expect(page.getByLabel("Start new-video download")).toBeVisible();
   await capture(page, "04-download-confirm-modal.png");
-  await page.getByLabel("Download new videos").getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Start new-video download").getByRole("button", { name: "Cancel" }).click();
 
   await openEnglishVault(page, "/#/queue?channel=1", "Global queue control");
   await expect(page.getByLabel("Global queue control")).toBeVisible();
