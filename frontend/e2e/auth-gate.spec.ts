@@ -44,7 +44,7 @@ test("operator token gate unlocks a protected NAS console", async ({ page }) => 
   await gate.getByRole("button", { name: "콘솔 열기" }).click();
 
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
-  await expect(page.getByLabel("오늘의 아카이브 작업")).toContainText("준비도");
+  await expect(page.getByLabel("대시보드 개요")).toContainText("내 채널 백업 상태");
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("cvn.authToken")))
     .toBe(token);
