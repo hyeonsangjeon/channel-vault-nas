@@ -26,6 +26,7 @@ from app.security import require_optional_auth
 from app.services.download_scheduler import download_worker_scheduler
 from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import metadata_sync_scheduler
+from app.services.runtime_settings import apply_managed_runtime_overrides
 from app.services.storage_guard import backup_sqlite_database
 
 
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.db_migrate_on_startup:
         run_migrations()
     await init_db()
+    apply_managed_runtime_overrides()
     metadata_sync_scheduler.start()
     download_worker_scheduler.start()
     try:
