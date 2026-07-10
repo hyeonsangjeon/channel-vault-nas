@@ -18,7 +18,7 @@ There are three ways to run Channel Vault NAS. Pick one:
     ---
 
     Container Manager / Container Station, separate host folders, reverse proxy,
-    and optional in-app restart adapters.
+    and a public compatibility-report thread.
 
     [:octicons-arrow-right-24: NAS install](nas.md)
 
@@ -38,7 +38,7 @@ There are three ways to run Channel Vault NAS. Pick one:
 === "Docker / NAS"
 
     - Docker with the Compose plugin (`docker compose`)
-    - ~250 MB for the images, plus disk space for your archive
+    - ~300 MB for the images, plus disk space for your archive
 
 === "Local development"
 
@@ -63,12 +63,15 @@ and metadata live on disk — not inside a container layer.
     overrides on **three separate host folders** so each can be backed up
     independently. See [NAS install](nas.md#before-you-start).
 
+    Check [compatibility and real NAS reports](compatibility.md) for verified
+    architectures and community-tested hardware.
+
 ## After install
 
 1. Open the web console at `http://127.0.0.1:5173/`.
 2. Follow [Your first channel backup](../usage/first-backup.md) to archive your
    first channel.
-3. Real downloads stay disabled until you start the automatic download schedule
+3. Real downloads stay disabled until you click **Start automatic backup**
    (which [enables the worker](../usage/enable-downloads.md) for you) or run the
    advanced manual test.
 

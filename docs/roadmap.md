@@ -26,8 +26,8 @@ The public release is ready when these are true:
 - README screenshots are generated from the Playwright fixture and match the
   current UI.
 - The safe first-run demo can be loaded and cleared from an empty workspace.
-- Real downloads remain disabled by default and guarded by confirmation when
-  enabled.
+- Real downloads remain disabled until the operator explicitly clicks **Start
+  automatic backup** or confirms the advanced manual one-pass test.
 - `CVN_AUTH_TOKEN` is documented and works for LAN/NAS demos.
 - The support bundle is server-generated and redacted.
 - Public issue templates, contributing guide, security policy, and demo
@@ -74,8 +74,8 @@ Focus: NAS deployment confidence.
 
 - [x] Versioned container images — `Release images` workflow publishes
   multi-arch `api`/`web` to Docker Hub and GHCR on `v*` tags
-  (`0.1.0-alpha.1` published on Docker Hub and GHCR; Docker Hub pull-based
-  Compose smoke verified, GHCR anonymous pull waits on package visibility).
+  (`0.1.0-alpha.2` is public on Docker Hub and GHCR; Docker Hub pull-based
+  Compose smoke is verified).
 - [x] Node 24 launch workflows — CI, release-image publishing, and docs Pages
   workflows use current GitHub/Docker action major versions.
 - [x] Synology/QNAP-oriented install notes — [`docs/nas-install.md`](nas-install.md).
@@ -101,6 +101,8 @@ Focus: NAS deployment confidence.
 - Google Takeout importer.
 - Full text subtitle search.
 - Optional source API integrations.
+- Supported cookies/authenticated-source workflow for creator-owned private or
+  otherwise account-gated videos.
 - Advanced streaming preview surfaces, thumbnails, and optional transcode paths.
 - Advanced visual insights: storage treemap, sync timeline, policy simulator,
   and channel health matrix.

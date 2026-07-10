@@ -1,82 +1,78 @@
 ---
 title: Channel Vault NAS
 description: >-
-  Self-hosted NAS console that archives your own YouTube channels with yt-dlp.
-  Install guide and screen-by-screen usage manual.
+  Back up YouTube channels to a Docker NAS. Reuse archive.txt and existing
+  media, download only what is missing, and recover the index from disk.
 hide:
   - navigation
 ---
 
 # Channel Vault NAS
 
-**Self-hosted console for archiving _your own_ YouTube channels to a NAS.**
-It plans, verifies, and downloads with `yt-dlp` — and keeps the filesystem as the
-durable archive, with SQLite as the index over it.
+**Back up YouTube channels to your NAS without throwing away the archive you
+already have.** Paste a channel URL, reuse existing media and `archive.txt`, and
+let `yt-dlp` download only what is missing. The files stay durable even if the
+searchable SQLite index must be rebuilt.
 
 [Install in 60 seconds :material-rocket-launch:](install/index.md){ .md-button .md-button--primary }
-[Open the usage manual :material-book-open-variant:](usage/index.md){ .md-button }
+[Bring an existing archive :material-folder-sync:](usage/migrate-existing-archive.md){ .md-button }
 
 ---
 
-## Watch the 5-minute guide
-
-A click-by-click screencast — from a fresh Docker install to a completed channel
-backup, recorded on the real UI with on-screen step markers the whole way.
-
-[![Watch the 5-minute Channel Vault NAS getting-started guide](assets/demo/tutorial-poster.png)](https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4)
-
-**▶ Watch / download:**
-[English](https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4) ·
-[한국어](https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ko.mp4) ·
-[日本語](https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ja.mp4) ·
-[中文](https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-zh.mp4) ·
-[हिन्दी](https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-hi.mp4)
-
----
-
-## What you get
+## The part other download queues leave out
 
 <div class="grid cards" markdown>
 
--   :material-clock-fast:{ .lg .middle } __Install in 60 seconds__
+-   :material-folder-check:{ .lg .middle } __Keep your current archive__
 
     ---
 
-    Pull the published Docker images and run the Compose stack. No build step,
-    no toolchain — just Docker.
+    Index media, thumbnails, subtitles, and `info.json` sidecars already stored
+    on the NAS. Nothing is renamed or deliberately downloaded again.
 
-    [:octicons-arrow-right-24: Install guide](install/index.md)
+    [:octicons-arrow-right-24: Migration guide](usage/migrate-existing-archive.md)
 
--   :material-television-guide:{ .lg .middle } __A guided first backup__
-
-    ---
-
-    Paste a channel URL, `@handle`, or `UC…` ID, preview it, register it, then
-    start the automatic download schedule that archives the remaining videos for
-    you.
-
-    [:octicons-arrow-right-24: Usage manual](usage/index.md)
-
--   :material-nas:{ .lg .middle } __Built for NAS__
+-   :material-format-list-checks:{ .lg .middle } __See every skip decision__
 
     ---
 
-    Separate host folders for metadata, media, and runtime overrides. Synology,
-    QNAP, and bare-metal recipes, with reverse-proxy guidance.
+    Downloaded, missing, queued, and skipped videos are visible in the UI instead
+    of disappearing inside a command-line flag.
 
-    [:octicons-arrow-right-24: NAS install](install/nas.md)
+    [:octicons-arrow-right-24: archive.txt import](usage/archive-txt.md)
 
--   :material-shield-check:{ .lg .middle } __Safe by default__
+-   :material-database-refresh:{ .lg .middle } __Recover from disk__
 
     ---
 
-    Real downloads stay off until you start the automatic download schedule (or
-    run the advanced manual test). The filesystem is never destructively
-    rewritten.
+    Media is durable data. SQLite is a searchable index that can be backed up or
+    rebuilt from mounted folders and sidecars.
 
-    [:octicons-arrow-right-24: Enable downloads](usage/enable-downloads.md)
+    [:octicons-arrow-right-24: Filesystem contract](reference/filesystem.md)
+
+-   :material-calendar-sync:{ .lg .middle } __Set it once__
+
+    ---
+
+    Choose the interval and videos per run, start automatic backup, and pause it
+    from the same channel screen.
+
+    [:octicons-arrow-right-24: First backup](usage/first-backup.md)
 
 </div>
+
+---
+
+## Your first backup is one screen
+
+Open **Channels**, paste and preview the source, then register it. The channel
+screen shows **Total / Downloaded / Remaining** once, beside the one primary
+action: **Start automatic backup**. Download interval, videos per run, next run,
+and pause all stay together.
+
+[![Channel Vault NAS channel backup screen](assets/screenshots/channel-downloads.png)](usage/first-backup.md)
+
+[Start the click-by-click guide :material-arrow-right:](usage/first-backup.md){ .md-button .md-button--primary }
 
 ---
 
@@ -93,8 +89,8 @@ The filesystem remains the durable archive. SQLite is the index over that archiv
 — rescan an existing NAS folder and it gets indexed without moving a single file.
 
 !!! warning "Self-hosted guardrail"
-    This alpha is built for localhost, private LAN, VPN, or a trusted reverse
-    proxy. Do **not** expose it directly to the public internet. See
+    This self-hosted release is built for localhost, private LAN, VPN, or a
+    trusted reverse proxy. Do **not** expose it directly to the public internet. See
     [Access token](install/access-token.md) and the
     [NAS install guide](install/nas.md).
 

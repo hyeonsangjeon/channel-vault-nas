@@ -1,14 +1,14 @@
 # 실제 다운로드 켜기
 
-Channel Vault NAS는 **기본적으로 안전**합니다. 미디어를 전송하지 않고도 등록,
-미리보기, 계획을 할 수 있습니다. 실제 다운로드에는 워커 플래그가 필요하며,
-**자동 다운로드 스케줄을 등록**하는 순간 앱이 이를 대신 켜 줍니다.
+Channel Vault NAS는 미디어를 전송하지 않고도 등록과 미리보기를 할 수 있습니다.
+**자동 백업 시작**을 누를 때 앱이 워커를 켭니다.
 
 ## 워커 켜기
 
-가장 간단한 방법은 UI입니다. 채널을 열고 **스케줄러 등록**을 누르면 실제 다운로드와
-스케줄러가 자동으로 켜집니다([첫 백업 → 4단계](first-backup.md#step-4-start-the-automatic-download-schedule)
-참고). 대신 NAS 전체를 무장시키려면 다음 런타임 env 값을 설정하세요:
+가장 간단한 방법은 UI입니다. 채널을 열고 다운로드 간격과 한 번에 받을 개수를 고른
+다음 **자동 백업 시작**을 누릅니다. 실제 다운로드, 메타데이터 동기화, 스케줄러가
+즉시 켜집니다([채널 백업 시작 → 4단계](first-backup.md#step-4-start-the-automatic-download-schedule)
+참고). 대신 NAS 전체에 직접 값을 지정하려면 다음 런타임 env를 설정하세요:
 
 ```bash
 CVN_DOWNLOAD_WORKER_ENABLED=true
@@ -16,15 +16,15 @@ CVN_YTDLP_BINARY=yt-dlp
 CVN_FFPROBE_BINARY=ffprobe
 ```
 
-그런 다음 **백엔드를 재시작**하세요. **Settings** 탭은 비밀이 아닌 런타임
-오버라이드를 `.env.runtime`에 저장하고, 재시작이 아직 필요한지 보여줍니다.
+채널 버튼과 **설정** 탭은 이 워커/스케줄러 값을 즉시 적용하므로 컨테이너 재시작이
+필요하지 않습니다. `.env`를 직접 편집한 경우에만 재시작하세요.
 
 === "Docker / Compose"
 
     `.env`(또는 `.env.runtime`)에 값을 추가하고 `api` 서비스를 재시작하세요:
 
     ```bash
-    docker compose restart api
+    docker compose -f compose.release.yml restart api
     ```
 
 === "로컬 개발"
@@ -38,16 +38,15 @@ CVN_FFPROBE_BINARY=ffprobe
     ```
 
 !!! tip "UI에서 하기"
-    **Settings → Runtime env manifest**를 여세요. NAS를 무장시키는 정확한 env
-    줄, **Copy manifest** 버튼, 그리고 재시작 어댑터가 구성돼 있으면 **Request
-    restart** 작업을 보여줍니다. [설정 둘러보기](product-tour.md#settings) 참고.
+    **설정 → Runtime env manifest**를 여세요. 현재 적용값과 저장 대기값을
+    보여줍니다. [설정 둘러보기](product-tour.md#settings) 참고.
 
 ## 패스는 항상 제한됩니다
 
 워커 패스는 실수로 클릭해도 NAS나 네트워크를 포화시키지 못하도록 의도적으로
 제한됩니다:
 
-- **자동 다운로드 스케줄**은 실행할 때마다 **한 번에 받을 개수**만큼만 가져옵니다
+- **자동 백업**은 실행할 때마다 **한 번에 받을 개수**만큼만 가져옵니다
   — 채널 전체를 한꺼번에 받지 않습니다.
 - 고급 **수동 1회 테스트**는 같은 개수만큼 **한 번** 실행하며, 확인 모달을 거칩니다.
 - API `run-once` 한도가 제한됩니다.
@@ -55,7 +54,7 @@ CVN_FFPROBE_BINARY=ffprobe
 - 워커가 일시정지돼 있어도 후보 생성은 **계속**될 수 있습니다.
 
 <figure markdown="span">
-  ![자동 다운로드 스케줄](../assets/user-manual/ko/04-download-confirm-modal.png){ loading=lazy }
+  ![자동 백업 설정](../assets/user-manual/ko/04-download-confirm-modal.png){ loading=lazy }
   <figcaption>스케줄을 시작하면 실제 다운로드가 켜지고, 각 패스는 설정한 개수만큼만 가져옵니다. 고급 수동 1회 테스트도 같은 확인 모달을 거칩니다.</figcaption>
 </figure>
 

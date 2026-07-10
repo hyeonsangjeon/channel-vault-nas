@@ -74,8 +74,8 @@ docs/assets/demo/channel-vault-public-alpha.webm
 
 Fresh empty installs lead with the Channels tab: paste a channel URL, `@handle`,
 or `UC...` channel ID, click **Preview**, review the source, then **Register
-channel**. Open the channel and start the automatic download schedule to archive
-the remaining videos. Public demos can still load the same kind of operator story
+channel**. Open the channel, choose interval and per-run count, then click
+**Start automatic backup**. Public demos can still load the same operator story
 from the secondary safe demo panel. That action creates a `Signal Lab` channel,
 one indexed media file, missing-video candidates, queue audit, scheduler ticks,
 library sidecars, storage drift, and orphan sidecars.
@@ -109,15 +109,14 @@ For a local public walkthrough:
 1. Start the app with Docker Compose or local development commands from the README.
 2. If `CVN_AUTH_TOKEN` is enabled, enter the operator token once. Do not show
    the token in recordings, livestreams, or screenshots.
-3. Open Dashboard and point out readiness, operations, the clean-install
-   gate, and the onboarding proof export.
+3. Open Dashboard and point out archive coverage, the next useful action, queue,
+   storage, and library state.
 4. On an empty workspace, go to the Channels tab, paste a channel URL, `@handle`,
    or `UC...` channel ID, and click **Preview** before anything is registered.
 5. Review the channel name, video count, estimated size, save folder, preview
    videos, and safety notes, then click **Register channel**.
-6. Open the channel, review Total / Downloaded / Remaining, and start the
-   automatic download schedule (interval + downloads per pass) to archive the
-   remaining videos.
+6. Open the channel, review Total / Downloaded / Remaining, choose interval and
+   per-run count, then click **Start automatic backup**.
 7. For a no-network public walkthrough, expand the secondary safe demo panel and
    load `Signal Lab` without external calls.
 8. Open a channel detail and move through Overview, Downloads, Library, Logs, and Policy.
@@ -129,8 +128,8 @@ For a local public walkthrough:
 14. Open Insights and show real storage scan, drift, pressure trend, orphan sidecars, and quarantine.
 15. Open Settings and show runtime flags, scheduler tick drawers, restart
     adapters, backup confidence, and support exports.
-16. Return to Dashboard and copy/download the onboarding proof. Confirm it
-    is a redacted readiness snapshot, not an archive export or a secret dump.
+16. Return to Dashboard and close with the current archive coverage and next
+    useful action.
 
 ## Real Download Guardrail
 

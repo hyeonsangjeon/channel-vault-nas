@@ -1,138 +1,130 @@
-# NAS install (Synology / QNAP)
+# Install on Synology or QNAP NAS
 
-This guide covers deploying Channel Vault NAS on a NAS with Docker, plus
-bare-metal / VM host installs. It is a guarded **alpha → beta**: keep the raw API
-loopback-bound, set an operator token, and publish only the web tier through a
-trusted reverse proxy or VPN.
+You need Docker, one Compose file, and three writable folders. You do **not**
+need Git or a local build. The release stack exposes only the web console; the
+API stays inside the private Docker network.
 
-Read first: the [Docker install](docker.md), the
-[Access token](access-token.md) page, and — on GitHub —
-[`docs/deployment-security.md`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/deployment-security.md).
+[Check reported environments](compatibility.md){ .md-button }
+[Download the release Compose file](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml){ .md-button .md-button--primary }
 
 ## Before you start
 
-Decide on **three separate host folders** so metadata, media, and runtime
-overrides are independently backed up and never mixed:
+Create one app folder with three subfolders:
 
-| Purpose | Container path | Example NAS path |
+| Purpose | Synology example | QNAP example |
 | --- | --- | --- |
-| SQLite metadata DB + startup backups | `/app/metadata` | `/volume1/channel-vault-nas/metadata` |
-| Archived media + sidecars | `/app/downfolder` | `/volume1/channel-vault-nas/archive` |
-| Managed `.env.runtime` overrides | `/app/runtime` | `/volume1/channel-vault-nas/runtime` |
+| Database and backups | `/volume1/docker/channel-vault-nas/metadata` | `/share/Container/channel-vault-nas/metadata` |
+| Downloaded media and sidecars | `/volume1/docker/channel-vault-nas/archive` | `/share/Container/channel-vault-nas/archive` |
+| Settings changed in the app | `/volume1/docker/channel-vault-nas/runtime` | `/share/Container/channel-vault-nas/runtime` |
 
-Generate an operator token (or use **Settings → Env guide → Public access guard**):
+Keep these folders separate. Back up `metadata` and `runtime`, and include
+`archive` in your normal media backup plan.
+
+Put `compose.release.yml` in the parent app folder. With SSH, the shortest path
+is:
 
 ```bash
-openssl rand -base64 36
+mkdir -p channel-vault-nas/{metadata,archive,runtime}
+cd channel-vault-nas
+curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml
 ```
 
-After the stack is up, the dashboard **NAS Mount Doctor** strip verifies these
-paths are writable and separated, and the **Public access guard** confirms the
-token is active before you expose the console.
+Create a `.env` file beside it with paths for your NAS:
 
-## Synology (Container Manager / DSM 7.2+)
-
-1. **Create shared folders** for `metadata`, `archive`, and `runtime` under a
-   volume (Control Panel → Shared Folder), e.g. `/volume1/channel-vault-nas/...`.
-2. **Get the app**: clone this repo to the NAS (or copy `docker-compose.yml` and
-   `.env.example`). In **Container Manager → Project → Create**, point at the
-   folder containing `docker-compose.yml`.
-3. **Configure `.env`** (copy from `.env.example`) and set:
+=== "Synology"
 
     ```env
-    CVN_AUTH_TOKEN=replace-with-the-generated-token
-    CVN_METADATA_HOST_DIR=/volume1/channel-vault-nas/metadata
-    CVN_DOWNLOAD_HOST_DIR=/volume1/channel-vault-nas/archive
-    CVN_RUNTIME_HOST_DIR=/volume1/channel-vault-nas/runtime
-    # Keep the raw API on loopback; only the web port is published.
-    CVN_API_PORT=127.0.0.1:8000
+    CVN_METADATA_HOST_DIR=/volume1/docker/channel-vault-nas/metadata
+    CVN_DOWNLOAD_HOST_DIR=/volume1/docker/channel-vault-nas/archive
+    CVN_RUNTIME_HOST_DIR=/volume1/docker/channel-vault-nas/runtime
     CVN_WEB_PORT=5173
     ```
 
-4. **Build/run** the project. Or pull published images instead of building
-   (see [Docker → published images](docker.md#start-in-60-seconds-published-images)).
-5. **Reverse proxy + TLS**: use DSM **Control Panel → Login Portal → Advanced →
-   Reverse Proxy** to map an HTTPS hostname to the web port `127.0.0.1:5173`
-   (enable WebSocket via custom headers `Upgrade`/`Connection`). Do **not** expose
-   the API port. Concrete Nginx/Caddy/Cloudflare Tunnel snippets are in
-   [`docs/deployment-security.md`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/deployment-security.md).
-6. **Optional in-app restart**: set `CVN_RESTART_ADAPTER=synology-package` and
-   `CVN_RESTART_SERVICE_NAME=<package>` to surface `synopkg restart <package>`. It
-   stays copy-only until `CVN_RESTART_ADAPTER_EXECUTE=true`.
+=== "QNAP"
+
+    ```env
+    CVN_METADATA_HOST_DIR=/share/Container/channel-vault-nas/metadata
+    CVN_DOWNLOAD_HOST_DIR=/share/Container/channel-vault-nas/archive
+    CVN_RUNTIME_HOST_DIR=/share/Container/channel-vault-nas/runtime
+    CVN_WEB_PORT=5173
+    ```
+
+Use the actual shared-folder paths shown by your NAS. If the console will be
+reachable beyond a trusted private LAN, also set a long `CVN_AUTH_TOKEN` and
+read [Access token](access-token.md).
+
+## Synology DSM 7.2+ (Container Manager)
+
+1. Open **Container Manager → Project → Create**.
+2. Name the project `channel-vault-nas` and select the app folder that contains
+   `compose.release.yml` and `.env`.
+3. Choose the existing Compose file. Container Manager will pull the published
+   API and web images; no image build is required.
+4. Start the project and wait until both containers are healthy.
+5. Open **`http://<NAS-IP>:5173/`**.
+
+If DSM asks which file to use, rename `compose.release.yml` to
+`docker-compose.yml`; the contents stay unchanged.
 
 ## QNAP (Container Station)
 
-1. **Create shared folders** for `metadata`, `archive`, and `runtime`.
-2. In **Container Station → Applications → Create**, import `docker-compose.yml`.
-3. Set the same `.env` values as the Synology section (token, host dirs, loopback
-   API bind).
-4. **Reverse proxy + TLS**: front the web port with QNAP's web server / a reverse
-   proxy app, or an external proxy. Publish only the web tier.
-5. **Optional in-app restart**: set `CVN_RESTART_ADAPTER=qnap-package` and
-   `CVN_RESTART_SERVICE_NAME=<package>` to surface
-   `/etc/init.d/<package>.sh restart` (copy-only until execution is enabled and
-   the init script exists).
+1. Open **Container Station → Applications → Create**.
+2. Import `compose.release.yml` from the app folder.
+3. Keep the project `.env` beside the Compose file so the three host paths are
+   applied.
+4. Create/start the application and wait for both containers to become healthy.
+5. Open **`http://<NAS-IP>:5173/`**.
 
-## Bare-metal / VM host (systemd or supervisor)
+## First backup after install
 
-For non-Docker hosts, run the API with the project virtualenv and serve the built
-frontend with your web server. Ready-to-edit examples on GitHub:
+1. Open **Channels**, paste a channel URL or `@handle`, and select **Preview**.
+2. Confirm the source and select **Register channel**.
+3. Choose the interval and videos per run, then select **Start automatic
+   backup**.
 
-- [`deploy/systemd/channel-vault-nas-api.service`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/deploy/systemd/channel-vault-nas-api.service)
-- [`deploy/supervisor/channel-vault-nas-api.conf`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/deploy/supervisor/channel-vault-nas-api.conf)
-- Usage: [`deploy/README.md`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/deploy/README.md)
+Already have media or `archive.txt`? Follow [Bring an existing
+archive](../usage/migrate-existing-archive.md) before step 3 so existing videos
+are indexed and skipped.
 
-## Restart adapters
+## Private access and HTTPS
 
-`CVN_RESTART_ADAPTER` makes **Settings → Env guide** show the correct restart
-command. Executable restart additionally needs `CVN_RESTART_ADAPTER_EXECUTE=true`
-and an available command; it is copy-only (safe) by default.
+For a home LAN trial, open the web port directly. For remote access, prefer a
+VPN such as Tailscale or a trusted reverse proxy with HTTPS and authentication.
+Publish the **web** port only. The release Compose file does not publish the raw
+API port.
 
-| Adapter | Generated command |
-| --- | --- |
-| `docker-compose` | `docker compose [-f <file>] restart <service>` |
-| `systemd` | `systemctl restart <service>` |
-| `supervisor` | `supervisorctl restart <service>` |
-| `synology-package` | `synopkg restart <package>` |
-| `qnap-package` | `/etc/init.d/<package>.sh restart` |
-| `auto` | detects Docker Compose / systemd / supervisor / Synology / QNAP |
+Concrete Nginx, Caddy, and Cloudflare Tunnel examples are in
+[`docs/deployment-security.md`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/deployment-security.md).
 
-## Troubleshooting: `{"detail":"Not Found"}`
+## Troubleshooting
 
-If the browser shows only:
+### The page does not open
 
-```json
-{"detail":"Not Found"}
-```
+- Confirm that both `api` and `web` containers are running and healthy.
+- Confirm that another app is not already using port `5173`; change
+  `CVN_WEB_PORT` in `.env` if needed.
+- Check that Docker can write to all three host folders.
+- Open the `web` container logs first, then the `api` logs.
 
-you are opening the raw FastAPI backend, not the React web console. In the
-Compose stack the two published ports have different jobs:
+### The browser shows `{"detail":"Not Found"}` { #troubleshooting-detailnot-found }
 
-| Port | Service | What to open |
-| --- | --- | --- |
-| `CVN_WEB_PORT`, default `5173` | `web` / nginx | Browser UI, e.g. `http://<nas-ip>:5173/` |
-| `CVN_API_PORT`, default `8000` | `api` / FastAPI | API only, e.g. `/api/health` |
+You opened a raw API port from a source/development Compose stack. Open the web
+port (`5173` by default). The release Compose file avoids this mistake by
+publishing only the web service.
 
-What to check in Container Manager:
+### Registration works but downloads fail
 
-1. The project should create **two containers**: `api` and `web`.
-2. Open the mapped **web** port, not the API port.
-3. If using DSM Reverse Proxy, point the proxy target to the web port
-   `127.0.0.1:5173`, not `127.0.0.1:8000`.
-4. API health can be checked separately at `http://<nas-ip>:8000/api/health` if
-   you intentionally published the API port.
+- Open the channel and confirm **Automatic backup on** is visible.
+- Check the failed item for the actual `yt-dlp` message.
+- Confirm the archive folder is writable and has free space.
+- Some private, age-restricted, or source-blocked videos need access features
+  that this release does not yet support.
 
-## After install
+## Advanced deployment
 
-- Verify the stack with
-  [`scripts/compose-smoke.sh`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/scripts/compose-smoke.sh)
-  (override ports for collision-free checks).
-- Verify the exposed web/reverse-proxy endpoint with
-  [`scripts/deployment-smoke.sh`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/scripts/deployment-smoke.sh).
-  Pass `CVN_DEPLOYMENT_SMOKE_AUTH_TOKEN` so the script can prove both rejected and
-  accepted API/WebSocket paths.
-- Set up backups before archiving anything real:
-  [`docs/backup-restore.md`](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/backup-restore.md).
-- Real downloads stay disabled until you start the automatic download schedule
-  (which [enables the worker](../usage/enable-downloads.md) for you) or run the
-  advanced manual test.
+Systemd, supervisor, restart adapters, reverse proxies, and deployment smoke
+scripts are documented in the repository:
+
+- [Deployment examples](https://github.com/hyeonsangjeon/channel-vault-nas/tree/main/deploy)
+- [Deployment security](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/deployment-security.md)
+- [Backup and restore](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/backup-restore.md)

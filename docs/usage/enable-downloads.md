@@ -1,14 +1,14 @@
 # Enable real downloads
 
-Channel Vault NAS is **safe by default**. It can register, preview, and plan
-without starting any media transfer. Real downloads require the worker flag — and
-the app arms it for you the moment you **register the automatic download schedule**.
+Channel Vault NAS can register and preview without starting any media transfer.
+The app arms the worker when you click **Start automatic backup**.
 
 ## Turn on the worker
 
-The simplest path is the UI: opening a channel and clicking **Register schedule**
-turns on real downloads and the scheduler automatically (see
-[First backup → Step 4](first-backup.md#step-4-start-the-automatic-download-schedule)).
+The simplest path is the UI: open a channel, choose the download interval and
+videos per run, then click **Start automatic backup**. It turns on real
+downloads, metadata sync, and the scheduler immediately (see
+[Channel backup → Step 4](first-backup.md#step-4-start-the-automatic-download-schedule)).
 To arm the NAS globally instead, set these runtime env values:
 
 ```bash
@@ -17,15 +17,15 @@ CVN_YTDLP_BINARY=yt-dlp
 CVN_FFPROBE_BINARY=ffprobe
 ```
 
-Then **restart the backend**. The **Settings** tab can persist non-secret runtime
-overrides into `.env.runtime` and shows whether a restart is still required.
+The channel button and **Settings** tab hot-apply these worker/scheduler values;
+no container restart is required. Restart only when you edit `.env` manually.
 
 === "Docker / Compose"
 
     Add the values to `.env` (or `.env.runtime`) and restart the `api` service:
 
     ```bash
-    docker compose restart api
+    docker compose -f compose.release.yml restart api
     ```
 
 === "Local development"
@@ -39,9 +39,8 @@ overrides into `.env.runtime` and shows whether a restart is still required.
     ```
 
 !!! tip "Do it from the UI"
-    Open **Settings → Runtime env manifest**. It shows the exact env lines to arm
-    the NAS, a **Copy manifest** button, and — if a restart adapter is configured
-    — a **Request restart** action. See the
+    Open **Settings → Runtime env manifest**. It shows the active values and
+    pending overrides. See the
     [Settings tour](product-tour.md#settings).
 
 ## The pass is always bounded
@@ -49,7 +48,7 @@ overrides into `.env.runtime` and shows whether a restart is still required.
 Worker passes are intentionally capped so an accidental click can't saturate your
 NAS or your network:
 
-- The **automatic download schedule** claims only your **Downloads per pass**
+- **Automatic backup** claims only your **Per run**
   batch size each time it runs — never the whole channel at once.
 - The advanced **Manual one-pass test** runs up to that same batch size **once**,
   behind a confirmation modal.

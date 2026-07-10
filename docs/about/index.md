@@ -33,8 +33,8 @@ actually have on the NAS.
 
     ---
 
-    [`v0.1.0-alpha.1`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1)
-    — images and the 5-language video guide.
+    [`v0.1.0-alpha.2`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.2)
+    — versioned Docker Hub and GHCR images.
 
 -   :octicons-mark-github-16:{ .lg .middle } __Source__
 
@@ -59,6 +59,8 @@ These documents live in the repository and render on GitHub:
 | [Archive priorities](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/archive-priorities.md) | What to archive first. |
 | [Channel registration recommendations](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/channel-registration-recommendations.md) | Getting the source right. |
 | [NAS install notes](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/nas-install.md) | Extra Synology / QNAP detail. |
+| [Bring an existing archive](../usage/migrate-existing-archive.md) | Reconcile NAS folders and `archive.txt` without starting over. |
+| [Is it for me?](comparison.md) | A factual workflow comparison with other self-hosted archivers. |
 
 ## Relationship to youtube-dl-nas
 

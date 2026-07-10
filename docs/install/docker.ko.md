@@ -12,35 +12,29 @@ Channel Vault NAS를 실행하는 가장 빠른 방법입니다. 여기서는 �
 
 ## 60초 만에 시작 (공개 이미지) { #start-in-60-seconds-published-images }
 
-가장 빠른 경로로 공개된 Docker Hub 이미지를 사용합니다:
+가장 빠른 경로로 릴리스 Compose 파일을 사용합니다. 웹 포트만 공개하고 API는
+Compose 내부 네트워크에 둡니다:
 
 ```bash
-git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
-cd channel-vault-nas
-cp .env.example .env
-mkdir -p metadata downfolder runtime
-
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
-docker compose pull
-docker compose up -d --no-build
+mkdir channel-vault-nas && cd channel-vault-nas
+curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml
+docker compose -f compose.release.yml up -d
 ```
 
 그런 다음 **`http://127.0.0.1:5173/`** 을 열고
-[첫 채널 백업](../usage/first-backup.md)으로 이동하세요.
+[채널 백업 시작](../usage/first-backup.md)으로 이동하세요.
 
 ??? note "GHCR 이미지를 선호하나요?"
-    이미지 오버라이드를 GitHub Container Registry 미러로 바꾸세요:
+    `compose.release.yml` 옆에 `.env`를 만들고 두 이미지 오버라이드를 지정하세요:
 
     ```bash
-    export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-    export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
     ```
 
     `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. 하나만
-    설정하면 Compose가 다른 하나를 기본 로컬 태그에서 받으려다 실패합니다.
-    GHCR 패키지는 비공개일 수 있습니다. `docker compose pull`이 권한 오류를
-    내면, 읽기 권한이 있는 토큰으로 `docker login ghcr.io`를 실행하세요.
+    설정하세요. `docker compose pull`이 권한 오류를 내면 읽기 권한이 있는
+    토큰으로 `docker login ghcr.io`를 실행하세요.
 
 ## 소스에서 빌드 { #build-from-source }
 

@@ -16,18 +16,19 @@ It intentionally avoids deep controls.
 
 ## Channels
 
-The Channels tab is the start point. The top **Channel management** card is an
-informational summary; the work happens in registration and the channel detail:
+The Channels tab is the start point. Registration and automatic backup are the
+two primary surfaces:
 
 1. Register a channel — paste a URL / `@handle` / `UC…` ID, click **Preview**,
    review it, then **Register channel**.
 2. Review the **remaining videos** (Total / Downloaded / Remaining).
-3. Start the **automatic download schedule** to archive the remaining videos.
-4. Use the `archive.txt` import path when you already have a ledger.
+3. Choose interval and per-run count, then click **Start automatic backup**.
+4. Use [Bring an existing archive](migrate-existing-archive.md) when you already
+   have media or an `archive.txt` ledger.
 
 <figure markdown="span">
   ![Channel overview](../assets/user-manual/en/02-channel-overview.png){ loading=lazy }
-  <figcaption>Channel detail — the Channel backup guide, Total / Downloaded / Remaining counts, and the automatic download schedule (interval, batch size, Register / Update / Stop). Advanced actions hold the manual one-pass test.</figcaption>
+  <figcaption>Channel detail — Total / Downloaded / Remaining, one automatic-backup action, interval, per-run count, next run, and pause. Advanced actions hold the manual one-pass test.</figcaption>
 </figure>
 
 ### Channel logs

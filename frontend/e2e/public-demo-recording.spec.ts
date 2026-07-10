@@ -58,36 +58,36 @@ async function recordDemo(browser: Browser) {
   const page = await context.newPage();
 
   await openEnglishVault(page);
-  await expect(page.getByLabel("Dashboard overview")).toContainText("Know what needs attention");
+  await expect(page.getByLabel("Dashboard overview")).toContainText("Your channel backup at a glance");
   await hold(page, 1300);
 
-  await go(page, "/#/channels/downloads?channel=1");
-  await expect(page.getByLabel("Channel detail tabs").getByRole("button", { name: "Downloads" })).toHaveClass(/active/);
-  await expect(page.getByText("Preview the download batch")).toBeVisible();
+  await go(page, "/#/channels/overview?channel=1");
+  const backupOverview = page.locator(".channel-backup-overview");
+  await expect(backupOverview).toBeVisible();
+  await expect(backupOverview).toContainText("Total videos");
+  await expect(backupOverview).toContainText("Remaining");
+  await expect(backupOverview.getByRole("button", { name: /automatic backup/i })).toBeVisible();
+  await expect(backupOverview).toContainText("Already downloaded videos are skipped");
+  await hold(page, 2300);
 
-  await go(page, "/#/queue?channel=1");
-  await expect(page.getByLabel("Global queue control")).toContainText("Download operations");
+  await page.getByRole("button", { name: "Add channel" }).click();
+  await expect(page.locator(".channel-registration-panel")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add another channel" })).toBeVisible();
+  await hold(page, 1100);
+
+  await page.locator(".channel-registration-panel .icon-button").click();
+  await hold(page, 500);
+
+  const importKit = page.locator(".quick-panel");
+  await importKit.scrollIntoViewIfNeeded();
+  await expect(importKit).toContainText("Existing NAS folder");
+  await expect(importKit).toContainText("archive.txt");
+  await hold(page, 1800);
 
   await go(page, "/#/library?channel=1");
   await expect(page.getByText("Indexed media shelf")).toBeVisible();
-  await hold(page, 1000);
-
-  await go(page, "/#/insights");
-  await expect(page.getByRole("heading", { name: "Insights" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Volume Map" })).toBeVisible();
-  await hold(page, 1000);
-
-  await go(page, "/#/settings?runtime=guide");
-  const runtimeGuide = page.getByLabel("Runtime env manifest");
-  await expect(runtimeGuide).toBeVisible();
-  await expect(runtimeGuide).toContainText("Live deployment smoke");
-  await runtimeGuide.getByLabel("External exposure cookbook").scrollIntoViewIfNeeded();
-  await hold(page, 1300);
-
-  await go(page, "/#/dashboard");
-  await expect(page.getByLabel("Release readiness checklist")).toContainText("Public readiness");
-  await expect(page.getByLabel("Onboarding proof export")).toBeVisible();
-  await hold(page, 1000);
+  await expect(page.getByText("Golden hour archive")).toBeVisible();
+  await hold(page, 1600);
 
   const video = page.video();
   await page.close();

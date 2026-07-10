@@ -11,35 +11,29 @@ Both store archive data in bind-mounted host folders (`./metadata`,
 
 ## Start in 60 seconds (published images)
 
-Use the published Docker Hub images for the fastest path:
+Use the release Compose file for the fastest path. It publishes only the web
+port and keeps the API inside the Compose network:
 
 ```bash
-git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
-cd channel-vault-nas
-cp .env.example .env
-mkdir -p metadata downfolder runtime
-
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
-docker compose pull
-docker compose up -d --no-build
+mkdir channel-vault-nas && cd channel-vault-nas
+curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml
+docker compose -f compose.release.yml up -d
 ```
 
 Then open **`http://127.0.0.1:5173/`** and jump to
 [Your first channel backup](../usage/first-backup.md).
 
 ??? note "Prefer GHCR images?"
-    Swap the image overrides for the GitHub Container Registry mirror:
+    Create a `.env` beside `compose.release.yml` and set both image overrides:
 
     ```bash
-    export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-    export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
     ```
 
-    Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. If only one is
-    set, Compose tries to pull the other from its default local tag and the pull
-    fails. GHCR packages may be private; if `docker compose pull` returns a
-    permission error, run `docker login ghcr.io` with a token that can read them.
+    Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. If `docker
+    compose pull` returns a permission error, run `docker login ghcr.io` with a
+    token that can read the packages.
 
 ## Build from source
 

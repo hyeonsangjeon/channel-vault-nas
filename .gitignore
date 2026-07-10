@@ -252,3 +252,4 @@ __marimo__/
 
 # Tutorial video build artefacts (large binaries; attach to a release instead)
 .tutorial-build/
+.codex/designs/

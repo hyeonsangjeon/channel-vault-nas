@@ -9,7 +9,7 @@ const probe = {
   handle: "@wingnut987s4",
   source_url: "https://www.youtube.com/@wingnut987s4",
   channel_url: "https://www.youtube.com/channel/UCmLADXQtWVuzOnOK5TNrWaw",
-  description: "Mocked first backup probe.",
+  description: "Mocked channel registration probe.",
   thumbnail_url: null,
   banner_url: null,
   follower_count: 42_000,
@@ -157,7 +157,76 @@ function emptyDashboard() {
   };
 }
 
-async function setupFirstBackupRoutes(page: Page, options: { workerEnabled: boolean }) {
+function runtimeSettings(enabled = false, intervalSeconds = 300, limit = 5) {
+  return {
+    download_worker_enabled: enabled,
+    download_worker_scheduler_enabled: enabled,
+    download_worker_scheduler_interval_seconds: intervalSeconds,
+    download_worker_scheduler_limit: limit,
+    metadata_sync_scheduler_enabled: enabled,
+    metadata_sync_scheduler_interval_seconds: 900,
+    metadata_sync_scheduler_limit: 2,
+    download_dir: "/tmp/channel-vault-nas-e2e/archive",
+    metadata_dir: "/tmp/channel-vault-nas-e2e/metadata",
+    managed_env_file: "/tmp/channel-vault-nas-e2e/runtime.env",
+    pending_restart: false,
+    pending_overrides: [],
+    restart_command: "docker compose restart api",
+    restart_adapter: {
+      adapter: "manual",
+      environment: "test",
+      label: "Test runtime",
+      command: "docker compose restart api",
+      executable: false,
+      manual_required: true,
+      reason: "test fixture",
+      command_available: true,
+      setup_hints: [],
+      env_lines: [],
+      service_name: "api",
+      compose_file: null,
+    },
+    scheduler_status: {
+      state: enabled ? "armed" : "off",
+      enabled,
+      worker_enabled: enabled,
+      running: false,
+      interval_seconds: intervalSeconds,
+      limit,
+      last_started_at: null,
+      last_completed_at: null,
+      last_error: null,
+      last_result_status: null,
+      next_tick_at: enabled ? now : null,
+    },
+    metadata_scheduler_status: {
+      state: enabled ? "armed" : "off",
+      enabled,
+      running: false,
+      interval_seconds: 900,
+      limit: 2,
+      due_channel_count: 0,
+      next_due_at: null,
+      due_channels: [],
+      last_started_at: null,
+      last_completed_at: null,
+      last_error: null,
+      last_result_status: null,
+      next_tick_at: enabled ? now : null,
+    },
+    scheduler_ticks: [],
+    metadata_sync_ticks: [],
+    binaries: [
+      { name: "yt-dlp", command: "yt-dlp", available: true, resolved_path: "/usr/bin/yt-dlp" },
+      { name: "ffprobe", command: "ffprobe", available: true, resolved_path: "/usr/bin/ffprobe" },
+    ],
+  };
+}
+
+async function setupFirstBackupRoutes(
+  page: Page,
+  options: { workerEnabled: boolean; policyPatchFails?: boolean },
+) {
   const calls: string[] = [];
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "ko");
@@ -179,6 +248,36 @@ async function setupFirstBackupRoutes(page: Page, options: { workerEnabled: bool
     }
     if (path === "/api/events/recent") {
       await route.fulfill({ contentType: "application/json", body: "[]" });
+      return;
+    }
+    if (path === "/api/settings/runtime" && method === "GET") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(runtimeSettings(false)) });
+      return;
+    }
+    if (path === "/api/settings/runtime" && method === "PATCH") {
+      const payload = request.postDataJSON() as {
+        download_worker_scheduler_interval_seconds?: number;
+        download_worker_scheduler_limit?: number;
+      };
+      const interval = payload.download_worker_scheduler_interval_seconds ?? 300;
+      const limit = payload.download_worker_scheduler_limit ?? 5;
+      calls.push(`runtime:${interval}:${limit}`);
+      const runtime = runtimeSettings(true, interval, limit);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          applied: true,
+          restart_required: false,
+          changed_keys: [
+            "CVN_DOWNLOAD_WORKER_ENABLED",
+            "CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED",
+            "CVN_METADATA_SYNC_SCHEDULER_ENABLED",
+          ],
+          managed_env_file: runtime.managed_env_file,
+          restart_command: runtime.restart_command,
+          runtime,
+        }),
+      });
       return;
     }
     if (path === "/api/jobs/downloads" && !url.searchParams.get("channel_id")) {
@@ -213,12 +312,40 @@ async function setupFirstBackupRoutes(page: Page, options: { workerEnabled: bool
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(channel) });
       return;
     }
-    if (path === `/api/channels/${channelId}/policy`) {
+    if (path === `/api/channels/${channelId}/policy` && method === "GET") {
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           channel_id: channelId,
           auto_download: false,
+          max_quality: "1080p",
+          audio_only: false,
+          subtitles_enabled: true,
+          subtitle_languages: ["ko"],
+          retention_policy: "keep_all",
+          worker_paused: false,
+          worker_pause_reason: null,
+          created_at: now,
+          updated_at: now,
+        }),
+      });
+      return;
+    }
+    if (path === `/api/channels/${channelId}/policy` && method === "PATCH") {
+      calls.push("policy");
+      if (options.policyPatchFails) {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "policy update failed" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          channel_id: channelId,
+          auto_download: true,
           max_quality: "1080p",
           audio_only: false,
           subtitles_enabled: true,
@@ -330,6 +457,17 @@ async function setupFirstBackupRoutes(page: Page, options: { workerEnabled: bool
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(jobs) });
       return;
     }
+    if (path === "/api/jobs/downloads/bulk" && method === "POST") {
+      calls.push("bulk-queue");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          updated: jobs.length,
+          jobs: jobs.map((job) => ({ ...job, status: "queued", priority: 85 })),
+        }),
+      });
+      return;
+    }
     if (path === "/api/library" && url.searchParams.get("channel_id") === String(channelId)) {
       await route.fulfill({
         contentType: "application/json",
@@ -356,46 +494,94 @@ async function setupFirstBackupRoutes(page: Page, options: { workerEnabled: bool
   return calls;
 }
 
-test("first backup wizard analyzes a channel and opens confirmation without running downloads", async ({ page }) => {
+test("channel registration previews then saves a channel without starting downloads", async ({ page }) => {
   const calls = await setupFirstBackupRoutes(page, { workerEnabled: true });
 
   await page.goto("/");
 
-  const wizard = page.getByLabel("첫 채널 백업");
-  await expect(wizard).toBeVisible();
-  await wizard.getByLabel("YouTube 채널 URL, 핸들, 채널 ID").fill("https://youtube.com/@wingnut987s4?si=LZr7f3vNJZsuoRo1");
-  await wizard.getByRole("button", { name: "채널 분석" }).click();
+  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
 
-  await expect(wizard).toContainText("Wingnut Archive Lab");
-  await expect(wizard).toContainText("백업할 영상");
-  await expect(wizard).toContainText("3.4 GB");
-  await expect(wizard).toContainText("/downfolder/channels/@wingnut987s4");
-  await expect(wizard).toContainText("The first vault pass");
-  await expect(wizard).toContainText("안전 확인");
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await expect(registrationPanel).toBeVisible();
+  await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4?si=LZr7f3vNJZsuoRo1");
+  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
 
-  await wizard.getByRole("button", { name: "첫 채널 백업 시작" }).click();
+  await expect(registrationPanel).toContainText("Wingnut Archive Lab");
+  await expect(registrationPanel.locator(".channel-registration-facts dd").first()).toHaveText("3");
+  await expect(registrationPanel).toContainText("3.4 GB");
+  await expect(registrationPanel).toContainText("channels/@wingnut987s4");
+  await expect(registrationPanel).toContainText("The first vault pass");
 
-  const confirm = page.getByLabel("수동 1회 테스트");
-  await expect(confirm).toBeVisible();
-  await expect(confirm.getByRole("button", { name: "최대 5개 시작" })).toBeEnabled();
-  expect(calls.filter((call) => call !== "probe").slice(0, 4)).toEqual(["register", "sync", "candidates", "worker-plan"]);
+  await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
+
+  await expect(page.locator(".channel-detail-panel")).toContainText("Wingnut Archive Lab");
+  const backupOverview = page.locator(".channel-backup-overview");
+  await expect(backupOverview).toContainText("남은 영상 3개를 자동으로 백업합니다");
+  await expect(backupOverview.getByRole("button", { name: "자동 백업 시작" })).toBeVisible();
+  expect(calls.filter((call) => call === "register")).toHaveLength(1);
+  expect(calls).not.toContain("sync");
+  expect(calls).not.toContain("candidates");
   expect(calls).not.toContain("worker-run");
 });
 
-test("first backup confirmation stays locked when the download engine is disabled", async ({ page }) => {
+test("channel registration keeps empty input errors inside the registration panel", async ({ page }) => {
   const calls = await setupFirstBackupRoutes(page, { workerEnabled: false });
 
   await page.goto("/");
 
-  const wizard = page.getByLabel("첫 채널 백업");
-  await wizard.getByLabel("YouTube 채널 URL, 핸들, 채널 ID").fill("UCmLADXQtWVuzOnOK5TNrWaw");
-  await wizard.getByRole("button", { name: "채널 분석" }).click();
-  await expect(wizard).toContainText("Wingnut Archive Lab");
-  await wizard.getByRole("button", { name: "첫 채널 백업 시작" }).click();
+  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
 
-  const confirm = page.getByLabel("수동 1회 테스트");
-  await expect(confirm).toBeVisible();
-  await expect(confirm.getByRole("button", { name: "최대 5개 시작" })).toBeDisabled();
-  await expect(confirm.getByRole("button", { name: "다운로드 설정 열기" })).toBeVisible();
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+
+  await expect(registrationPanel).toContainText("먼저 채널 URL, @handle, UC 채널 ID를 붙여넣어 주세요");
+  expect(calls).not.toContain("probe");
+  expect(calls).not.toContain("register");
   expect(calls).not.toContain("worker-run");
+});
+
+test("automatic backup queues only missing videos and hot-applies the scheduler", async ({ page }) => {
+  const calls = await setupFirstBackupRoutes(page, { workerEnabled: true });
+
+  await page.goto("/");
+  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
+
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4");
+  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
+
+  const backupOverview = page.locator(".channel-backup-overview");
+  await backupOverview.getByLabel("다운로드 간격").selectOption("30");
+  await backupOverview.getByLabel("한 번에").selectOption("5");
+  await backupOverview.getByRole("button", { name: "자동 백업 시작" }).click();
+
+  await expect(backupOverview).toContainText("자동 백업 켜짐");
+  await expect(backupOverview).toContainText("다음 실행");
+  await expect(backupOverview.getByRole("button", { name: "새 영상 확인" })).toHaveCount(1);
+  expect(calls).toContain("policy");
+  expect(calls).toContain("candidates");
+  expect(calls).toContain("bulk-queue");
+  expect(calls).toContain("runtime:1800:5");
+  expect(calls).not.toContain("worker-run");
+});
+
+test("automatic backup does not report success when the channel policy cannot be enabled", async ({ page }) => {
+  const calls = await setupFirstBackupRoutes(page, { workerEnabled: true, policyPatchFails: true });
+
+  await page.goto("/");
+  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
+
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4");
+  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
+
+  const backupOverview = page.locator(".channel-backup-overview");
+  await backupOverview.getByRole("button", { name: "자동 백업 시작" }).click();
+
+  await expect(backupOverview).toContainText("policy update failed");
+  expect(calls).toContain("policy");
+  expect(calls).not.toContain("candidates");
+  expect(calls).not.toContain("runtime:300:5");
 });

@@ -5,103 +5,84 @@
 <h1 align="center">Channel Vault NAS</h1>
 
 <p align="center">
-  <strong>Back up and manage every video from your own YouTube channels on your NAS.</strong><br>
-  A guarded self-hosted console for yt-dlp metadata sync, archive.txt-style skips, download queues, and disk-aware library recovery.
+  <strong>English</strong> · <a href="README.ko.md">한국어</a>
+</p>
+
+<p align="center">
+  <strong>Turn your YouTube channel into a recoverable NAS archive.</strong><br>
+  Paste a channel URL. Channel Vault reuses what is already on disk, downloads only what is missing, and keeps new uploads backed up with <code>yt-dlp</code>.
 </p>
 
 <p align="center">
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases"><img alt="Release" src="https://img.shields.io/github/v/release/hyeonsangjeon/channel-vault-nas?include_prereleases&label=release"></a>
-  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api"><img alt="Docker Hub" src="https://img.shields.io/badge/Docker%20Hub-multi--arch-2496ED?logo=docker"></a>
+  <a href="https://hub.docker.com/r/modenaf360/channel-vault-nas-api"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/modenaf360/channel-vault-nas-api?logo=docker&label=pulls"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/hyeonsangjeon/channel-vault-nas"></a>
   <a href="https://hyeonsangjeon.github.io/channel-vault-nas/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-0ea5e9"></a>
 </p>
 
 <p align="center">
   <a href="docs/assets/demo/channel-vault-public-alpha.gif">
-    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS product tour showing dashboard, channel workflow, queue, library, insights, and settings" width="100%">
+    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS product tour showing archive status, automatic channel backup, existing archive import, and the indexed library" width="100%">
   </a>
 </p>
 
 <p align="center">
-  From the maker of <a href="https://github.com/hyeonsangjeon/youtube-dl-nas"><strong>youtube-dl-nas</strong></a>
-  · <strong>5 languages</strong>
-  · <strong>Docker in 60 seconds</strong>
-  · <strong>guarded downloads by default</strong>
+  <a href="#quick-start"><strong>Quick start</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/usage/migrate-existing-archive.md"><strong>Bring an existing archive</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/about/comparison.md"><strong>Is it for me?</strong></a>
 </p>
 
-<p align="center">
-  <a href="#watch-the-5-minute-guide"><strong>▶&nbsp; Watch the 5-minute getting-started guide</strong></a>
-  &nbsp;·&nbsp; EN · KO · JA · ZH · HI
-</p>
+## The part other download queues leave out
 
-## Why It's Different
+- **Keep your current archive.** Scan existing video folders, thumbnails,
+  subtitles, and `info.json` sidecars without downloading them again.
+- **See what `archive.txt` knows.** Downloaded, missing, queued, and skipped
+  videos are visible in the UI instead of disappearing inside a command flag.
+- **Recover from disk.** Media stays the source of truth; SQLite is a searchable
+  index that can be rebuilt from the NAS folders.
+- **Set it once.** Choose a download interval and batch size, start automatic
+  backup, and pause it from the same channel screen.
 
-- **Index existing NAS folders without re-downloading** — read media files,
-  thumbnails, subtitles, and `info.json` sidecars from disk first.
-- **`archive.txt`-native workflow** — already archived, missing, queued, and
-  skipped videos are visible instead of hidden inside downloader flags.
-- **Recoverable by design** — the filesystem stays the durable archive; SQLite
-  is the searchable index you can rebuild.
-- **Safe first run** — load a local demo workspace with no YouTube calls and no
-  downloads, then opt into bounded worker passes when ready.
+From the maker of
+[`youtube-dl-nas`](https://github.com/hyeonsangjeon/youtube-dl-nas), rebuilt for
+long-lived channel archives rather than one-off URL downloads.
 
-The target use case is creator-owned media, user-authorized channel backups,
-`archive.txt` ledgers, and existing NAS folders. You are responsible for
-ensuring you have the rights and permissions to archive any content.
+## Quick Start
 
-## Start In 60 Seconds
-
-Use the published Docker Hub images when you want the fastest Docker path:
+Run the published multi-architecture images. No repository clone and no local
+build are required:
 
 ```bash
-git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
-cd channel-vault-nas
-cp .env.example .env
-mkdir -p metadata downfolder runtime
-
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
-docker compose pull
-docker compose up -d --no-build
+mkdir channel-vault-nas && cd channel-vault-nas
+curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml
+docker compose -f compose.release.yml up -d
 ```
 
-Open `http://127.0.0.1:5173/`, go to the **Channels** tab, paste a YouTube
-channel URL, `@handle`, or `UC...` channel ID, click **Preview**, then
-**Register channel**. Open the channel and **Register schedule** on the automatic
-download schedule to archive the remaining videos. To explore without touching
-YouTube, expand the secondary **Safe demo and advanced import options** panel
-instead.
+Open **`http://127.0.0.1:5173/`**, then:
+
+1. Open **Channels**, paste a channel URL or `@handle`, and click **Preview**.
+2. Confirm the channel and click **Register channel**.
+3. Choose the download interval and videos per run, then click **Start automatic
+   backup**.
+
+Already have files or an `archive.txt`? Follow
+[Bring an existing archive](docs/usage/migrate-existing-archive.md) first so
+Channel Vault can index them and skip unnecessary downloads.
+
+See the [compatibility matrix and real NAS report
+thread](docs/install/compatibility.md) before installing on new hardware.
 
 > Guardrail: this self-hosted release is built for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose it directly to the public internet.
 
-## Watch The 5-Minute Guide
+## How the archive survives the app
 
-New here? This click-by-click screencast takes you from a fresh Docker install to
-a completed channel backup — recorded on the real UI, with on-screen
-step markers the whole way.
-
-<p align="center">
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4">
-    <img src="docs/assets/demo/tutorial-poster.png" alt="Watch the 5-minute Channel Vault NAS getting-started guide: install, register a channel, and watch the backup reach 100%" width="100%">
-  </a>
-</p>
-
-<p align="center">
-  <strong>▶ Watch / download:</strong>
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-en.mp4">English</a> ·
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ko.mp4">한국어</a> ·
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-ja.mp4">日本語</a> ·
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-zh.mp4">中文</a> ·
-  <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/download/v0.1.0-alpha.1/channel-vault-nas-guide-hi.mp4">हिन्दी</a>
-</p>
-
-<sub>Chapters: install → register a channel → review the backup plan → start the backup → watch the download queue reach 100% → library, insights, and settings. Same walkthrough in every language, hosted on the <a href="https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.1">v0.1.0-alpha.1 release</a>. ~5 min · 1440×1000.</sub>
-
-## Visual Preview
-
-The GIF above is recorded from the real demo UI fixture, not from a static
-mockup.
+The filesystem is durable data. The database is the index and operation log.
+That means a future rescan can rebuild library state from media and sidecars
+instead of forcing a second download.
 
 <p align="center">
   <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive console" width="100%">
@@ -119,6 +100,8 @@ mockup.
   [`ghcr.io/hyeonsangjeon/channel-vault-nas-web`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-web)
 - Documentation (install + usage manual, EN/KO):
   [`hyeonsangjeon.github.io/channel-vault-nas`](https://hyeonsangjeon.github.io/channel-vault-nas/)
+- NAS compatibility reports:
+  [`GitHub Discussions #7`](https://github.com/hyeonsangjeon/channel-vault-nas/discussions/7)
 
 ## Why It Exists
 
@@ -134,7 +117,8 @@ archive.
 
 ## Current Status
 
-This is an active self-hosted release. The core loop is working locally:
+This is an active self-hosted release. The core loop is working in Docker and
+local development:
 
 - Channel registration and source probing
 - Metadata sync and automatic metadata scheduler
@@ -148,10 +132,8 @@ This is an active self-hosted release. The core loop is working locally:
 - Library index with media files, sidecar fidelity, codec/profile filters, in-app preview, and portable saved views
 - React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
-- Versioned Docker Hub and GHCR images for the guarded prerelease,
+- Versioned Docker Hub and GHCR images,
   with Docker Hub pull-based Compose smoke verified
-- Guided 5-minute getting-started video (install → register a channel → watch the
-  backup), narrated in English, Korean, Japanese, and Chinese
 
 Not ready yet:
 
@@ -175,6 +157,8 @@ This is a guarded self-hosted release. Knowing the boundaries up front keeps dep
   direct public internet exposure.
 - Downloads depend on `yt-dlp` behavior and source availability; most failures
   reflect upstream changes rather than app state.
+- There is no supported cookies/private-video workflow yet. Sources that require
+  authenticated browser state may not be available.
 - There is no multi-user account system yet. Access is a single shared operator
   view.
 - The optional `CVN_AUTH_TOKEN` is an operator gate, not a full identity
@@ -189,6 +173,9 @@ This is a guarded self-hosted release. Knowing the boundaries up front keeps dep
 See [`docs/roadmap.md`](docs/roadmap.md) for non-goals and
 [`SECURITY.md`](SECURITY.md) for exposure and token boundaries.
 
+For a practical fit check, see [Is Channel Vault NAS for
+me?](docs/about/comparison.md).
+
 ## Preview
 
 These screenshots are generated from the seeded browser smoke fixture, not from
@@ -196,7 +183,11 @@ static mockups.
 
 | Dashboard overview | Channel backup schedule |
 | --- | --- |
-| ![Dashboard showing today's archive status, the next useful action, and the guided first-archive path](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel detail showing the automatic download schedule, remaining-video counts, and worker controls](docs/assets/screenshots/channel-downloads.png) |
+| ![Dashboard showing today's archive status and next useful action](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel detail showing remaining-video counts and one automatic backup action](docs/assets/screenshots/channel-downloads.png) |
+
+| Add a channel | Bring an existing archive |
+| --- | --- |
+| ![Channel registration with preview before saving](docs/assets/screenshots/channel-registration.png) | ![Import kit for existing NAS folders and archive.txt](docs/assets/screenshots/existing-archive-import.png) |
 
 | Queue console | Library shelf | Runtime guide |
 | --- | --- | --- |
@@ -223,27 +214,28 @@ reviewed final asset is ready to publish.
 
 ### Dashboard
 
-The dashboard is an archive overview. It shows the current archive score, the
-next useful action, worker/scheduler/storage/library state, recent events, and
-operator tasks. It intentionally avoids deep controls.
+The dashboard is a three-step archive overview: add a source, start automatic
+backup, and verify the library. Detailed mount, access, diagnostic, and
+readiness checks stay collapsed until an operator needs them.
 
 ### Channels
 
-The Channels tab is the start point. The top **Channel management** card is an
-informational summary; the work happens in registration and the channel detail:
+The Channels tab is the start point. Registration and automatic backup are the
+two primary surfaces:
 
 1. Register a channel — paste a URL / `@handle` / `UC…` ID, click **Preview**,
    review it, then **Register channel**.
 2. Review the remaining videos (Total / Downloaded / Remaining).
-3. Start the automatic download schedule to archive the remaining videos.
-4. Use the `archive.txt` import path when you already have a ledger.
+3. Choose interval and per-run count, then click **Start automatic backup**.
+4. Bring in existing NAS folders or `archive.txt` before downloading when you
+   already have an archive.
 
 ### Queue
 
 The queue console shows all candidate, queued, running, completed, failed, and
 cancelled jobs. It leads with the current Visible jobs; stale failures for
-already-archived videos are hidden. Real downloads are guarded by a confirmation
-flow and the configured Downloads-per-pass batch size.
+already-archived videos are hidden. Automatic passes are bounded by the
+configured per-run count; the advanced manual pass keeps its confirmation step.
 
 ### Library
 
@@ -267,10 +259,10 @@ orphan sidecars.
 Settings is the runtime console: worker flags, scheduler flags, binary paths,
 restart adapters, tick logs, worker summaries, and runtime audit events.
 
-## Quickstart: Docker Compose Alpha
+## Source Build (Advanced)
 
 This section shows the source-build path. For the fastest no-build install, use
-[Start In 60 Seconds](#start-in-60-seconds) or
+[Quick Start](#quick-start) or
 [Run a published image](#run-a-published-image-no-build).
 
 Both paths store archive data in bind-mounted folders.
@@ -394,17 +386,10 @@ CVN_DEPLOYMENT_SMOKE_FORBIDDEN_API_URL=http://vault.example.test:8000 \
 scripts/deployment-smoke.sh
 ```
 
-Real downloads remain disabled until you edit `.env`:
-
-```env
-CVN_DOWNLOAD_WORKER_ENABLED=true
-```
-
-Then restart:
-
-```bash
-docker compose up -d --build
-```
+Real downloads remain disabled until **Start automatic backup** is clicked in a
+channel. The UI hot-applies the worker and scheduler settings; no container
+restart is required. Operators can still set
+`CVN_DOWNLOAD_WORKER_ENABLED=true` in `.env` and restart manually.
 
 The Compose profile also sets `CVN_RESTART_ADAPTER=docker-compose` and
 `CVN_RESTART_SERVICE_NAME=api` so the Settings tab can show the correct restart
@@ -419,26 +404,19 @@ triggered on `v*` tags or manually with `workflow_dispatch`). Docker Hub is the
 most familiar pull path for NAS operators; GHCR remains the GitHub-linked
 release registry.
 
-For `v0.1.0-alpha.1` and later, run the app without building from source by
-pointing Compose at the published Docker Hub images:
+Run the published Docker Hub images without cloning or building the repository:
 
 ```bash
-git clone https://github.com/hyeonsangjeon/channel-vault-nas.git
-cd channel-vault-nas
-cp .env.example .env
-mkdir -p metadata downfolder runtime
-
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
-docker compose pull
-docker compose up -d --no-build
+mkdir channel-vault-nas && cd channel-vault-nas
+curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml
+docker compose -f compose.release.yml up -d
 ```
 
 Equivalent GHCR image overrides:
 
 ```bash
-export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
+CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
 ```
 
 Direct `docker run` is also possible. Compose is still recommended because it
@@ -553,20 +531,15 @@ outside your private network.
 Deployment examples for private LAN or tunnel access are in
 [`docs/deployment-security.md`](docs/deployment-security.md).
 
-### First-Run Flow And Safe Demo
+### First Backup And Safe Demo
 
-On the **Channels** tab, the top **Channel management** card summarizes the
-channel, and its **Add another channel** button opens the registration composer;
-the work happens in the registration panel and the channel detail below
-it. Paste a channel URL, `@handle`, or `UC...` channel ID, click **Preview** to
-inspect the source, then **Register channel**. Open the channel and use the
-**automatic download schedule** — pick how often it runs and how many videos per
-pass, then **Register schedule** to archive the remaining videos (registering also
-enables real downloads and the scheduler). Adjust the interval or batch size later
-and **Update schedule** applies it to the running schedule; **Stop schedule**
-halts future passes. An advanced **Manual one-pass test** runs a single
-guarded pass behind a confirmation modal. If a channel is already fully archived,
-the guide says so — that is a completed state, not a failure.
+On **Channels**, paste a URL, `@handle`, or `UC...` ID, click **Preview**, then
+**Register channel**. The channel screen shows Total / Downloaded / Remaining
+once. Pick the download interval and videos per run, then click **Start automatic
+backup**. The button enables the worker, metadata sync, and scheduler together.
+**Save schedule** applies later changes and **Pause** stops future passes. An
+advanced manual test remains available for one bounded pass. A fully archived
+channel is a completed state, not a failure.
 
 The secondary safe demo workspace action seeds a deterministic `Signal Lab`
 channel, one archived media item, missing-video candidates, queue history,
@@ -638,22 +611,22 @@ still required.
 
 Worker passes are intentionally bounded:
 
-- Starting the automatic download schedule enables real downloads; each pass
-  claims only the configured **Downloads per pass** batch size.
+- Starting automatic backup enables real downloads; each pass claims only the
+  configured **Per run** batch size (5 by default).
 - The advanced Manual one-pass test runs up to that same batch size once, behind
   a confirmation modal.
 - API `run-once` limits are capped.
 - Per-channel policy can pause worker claims.
 - Candidate creation can continue even when workers are paused.
 
-## 5-Minute Demo Flow
+## Demo And Release Verification Flow
 
 1. Start with Docker Compose or the local development commands above.
 2. Open Dashboard and confirm the release readiness card, live event pill, and clean-install gate.
 3. Go to the Channels tab, paste a channel URL, `@handle`, or `UC...` channel ID, and click **Preview** to inspect the source before anything is registered.
 4. Review the channel name, video count, estimated size, save folder, first preview videos, and safety notes, then click **Register channel**.
-5. Open the channel, review Total / Downloaded / Remaining, and use the automatic download schedule (interval + downloads per pass); click **Register schedule** to archive the remaining videos.
-6. Real downloads run only if the schedule is registered (or you run the advanced Manual one-pass test) — both go through the confirmation modal.
+5. Open the channel, review Total / Downloaded / Remaining, select interval and per-run count, then click **Start automatic backup**.
+6. Real downloads run only after automatic backup starts (or you confirm the advanced manual test).
 7. For a no-network walkthrough, expand the secondary safe demo panel and load `Signal Lab` without external calls.
 8. Open Queue to watch the current Visible jobs — progress, failures, retries, and worker audit detail (stale failures for already-archived videos are hidden).
 9. Open Library and confirm completed media/index coverage changed.
@@ -719,7 +692,7 @@ CVN_DB_MIGRATE_ON_STARTUP=true
 CVN_DOWNLOAD_WORKER_ENABLED=false
 CVN_DOWNLOAD_WORKER_SCHEDULER_ENABLED=false
 CVN_DOWNLOAD_WORKER_SCHEDULER_INTERVAL_SECONDS=300
-CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT=1
+CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT=5
 CVN_METADATA_SYNC_SCHEDULER_ENABLED=false
 CVN_METADATA_SYNC_SCHEDULER_INTERVAL_SECONDS=900
 CVN_METADATA_SYNC_SCHEDULER_LIMIT=2
@@ -841,7 +814,7 @@ For each guarded public release:
 - Record/share a short demo video or GIF with `scripts/capture-public-demo.sh`.
 - Keep the safe first-run demo and runtime error copy polished.
 - Run full backend, frontend build, and browser smoke tests.
-- Tag a guarded prerelease, such as `v0.1.0-alpha.1`.
+- Tag a reviewed prerelease, such as `v0.1.0-alpha.3`.
 
 ## Relationship To youtube-dl-nas
 

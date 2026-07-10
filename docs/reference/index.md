@@ -37,3 +37,5 @@ architecture, security, and recovery in depth — see the
 - [Archive priorities](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/archive-priorities.md)
 - [Use boundaries](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/use-boundaries.md)
 - [Channel registration recommendations](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/channel-registration-recommendations.md)
+- [Bring an existing archive](../usage/migrate-existing-archive.md)
+- [Is Channel Vault NAS for me?](../about/comparison.md)

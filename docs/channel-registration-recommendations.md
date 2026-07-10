@@ -11,7 +11,7 @@
 > **참고 (2026 업데이트):** 이 문서는 초기 등록 UX의 **디자인 비전/권고**이며 현재
 > 출시된 UI를 그대로 설명하지 않습니다. 실제 출시된 흐름은 단순합니다 —
 > **채널 URL/handle/ID 붙여넣기 → 미리보기(Preview) → 검토 → 채널 등록(Register
-> channel)**. 아래의 "점화(ignite)/constellation" 같은 표현은 지향점 언어이며,
+> channel)**. 아래의 초기 비전 표현은 지향점 언어이며,
 > 사용자용 설치·사용 안내는 `usage/first-backup.md`를 따르세요.
 
 ## 현재 코드 기준 (이 위에서 올린다)
@@ -144,7 +144,7 @@ probe를 WebSocket 잡으로: flat 목록이 enumerate되며 **영상 카운터�
 3. yt-dlp flat probe 서비스 (async subprocess) → 미리보기 payload
 4. 프론트 등록 플로우: command bar → probe preview 카드 (mock 자리 교체)
 5. 정책 선택 + `storage_guard` 실제 forecast
-6. commit → 영속화 → constellation ignite + Channels 목록 실데이터
+6. commit → 영속화 → Channels 목록/시각화 실데이터 반영
 7. Channel Detail: coverage·cadence·타임라인 (실데이터)
 8. WebSocket 라이브 probe / 폴더 구조 미리보기 (시간 남으면 Extension)
 

@@ -275,7 +275,9 @@ test("registration command bar can probe and commit without external YouTube cal
   await page.getByRole("button", { name: "미리보기", exact: true }).click();
   await expect(page.getByText("E2E Vault Signal").first()).toBeVisible();
   await page.getByRole("button", { name: "채널 등록", exact: true }).click();
-  await expect(page.getByRole("button", { name: "등록 완료", exact: true })).toBeVisible();
+  await expect(page.locator(".channel-registration-panel")).toBeHidden();
+  await expect(page.locator(".channel-backup-overview")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "남은 영상 2개를 자동으로 백업합니다" })).toBeVisible();
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "다운로드" }).click();
   await expect(page.getByText("다운로드 묶음 미리보기")).toBeVisible();
   expect(errors).toEqual([]);

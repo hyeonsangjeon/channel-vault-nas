@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     download_worker_timeout_seconds: int = 14400
     download_worker_scheduler_enabled: bool = False
     download_worker_scheduler_interval_seconds: int = 300
-    download_worker_scheduler_limit: int = 1
+    download_worker_scheduler_limit: int = 5
     metadata_sync_scheduler_enabled: bool = False
     metadata_sync_scheduler_interval_seconds: int = 900
     metadata_sync_scheduler_limit: int = 2

@@ -1,7 +1,8 @@
-# Your first channel backup
+# Start your first channel backup
 
 This is the click-by-click walkthrough from an empty workspace to a verified,
-self-updating archive. It matches the [5-minute video guide](../index.md#watch-the-5-minute-guide).
+self-updating archive. Registration and automatic backup now stay on one channel
+screen.
 
 !!! info "Sample channel"
     The screenshots register a real channel handle
@@ -12,9 +13,8 @@ self-updating archive. It matches the [5-minute video guide](../index.md#watch-t
 
 ## Step 1 — Open the console
 
-Open **`http://127.0.0.1:5173/`**. The Dashboard is a read-only overview: it
-shows your archive score and the next useful action, then points you to the
-**Channels** tab to do the work.
+Open **`http://127.0.0.1:5173/`**, then open **Channels**. On a phone, Channels is
+in the fixed bottom navigation; on desktop it is in the left sidebar.
 
 <figure markdown="span">
   ![Dashboard first-run overview](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
@@ -22,47 +22,43 @@ shows your archive score and the next useful action, then points you to the
 </figure>
 
 !!! note "What to click"
-    Open **Channels** in the left sidebar. The top **Channel management** card is
-    an informational summary of the current channel — the buttons you actually
-    click are in the **Channel registration** panel and the **Channel detail**
-    below it.
+    Click **Channels**, then use the large registration panel. The current
+    channel selector and **Add channel** button stay at the top after the first
+    channel is registered.
 
 ---
 
 ## Step 2 — Register the channel
 
-In the **Channel registration** panel, paste the channel URL, an `@handle`, or a
-`UC…` channel ID, choose a quality (`720p` / `1080p` / `best`), toggle
-**Subtitles** / **Audio only** as needed, then click **Preview** to inspect the
-source before anything is saved. Review the preview, then click **Register
-channel** to add it to the vault.
+In the registration panel, paste the channel URL, an `@handle`, or a `UC…`
+channel ID and click **Preview**. Review the channel, video count, estimated
+storage, and save folder, then click **Register channel**. Quality, subtitles,
+and audio-only are available under **Optional settings**.
 
 <figure markdown="span">
   ![Channel management and registration](../assets/user-manual/en/03-download-launch-control.png){ loading=lazy }
-  <figcaption>Channels — the Channel management card's **Add another channel** button opens the registration composer; registration is the paste → Preview → Register channel flow, and the channel detail below drives the backup.</figcaption>
+  <figcaption>Channels — paste → Preview → Register channel, with optional quality and sidecar settings kept out of the main path.</figcaption>
 </figure>
 
 !!! note "What to click"
     1. Paste the channel URL / `@handle` / `UC…` ID.
-    2. Pick **1080p** (or your preferred quality) and enable **Subtitles**.
-    3. Click **Preview** to inspect the source.
-    4. Click **Register channel** to save it. Use **Add another channel** later to
-       register more without losing the current one.
+    2. Click **Preview** to inspect the source.
+    3. If needed, open **Optional settings** to change quality or sidecars.
+    4. Click **Register channel** to save it. Use the top **Add channel** button
+       later to register more without losing the current one.
 
 ---
 
 ## Step 3 — Review the remaining videos
 
-Open the registered channel. The **Channel backup** guide leads with
-**"Archive the remaining videos automatically"** and three counts — **Total
+Open the registered channel. It leads with
+**"Back up the remaining videos automatically"** and three counts — **Total
 videos**, **Downloaded**, and **Remaining** — so you always know how much work
 is left.
 
 !!! note "What to check"
     - **Total / Downloaded / Remaining** — how many videos still need archiving.
-    - **Save folder** — where media will land (see
-      [Filesystem contract](../reference/filesystem.md)).
-    - Click **Check again** any time to refresh the source and archive state.
+    - Click **Check for new videos** any time to refresh the source and archive state.
 
 !!! success "Already fully archived?"
     If everything is saved, the guide reads **"This channel is fully archived"**
@@ -71,32 +67,31 @@ is left.
 
 ---
 
-## Step 4 — Register the automatic download schedule { #step-4-start-the-automatic-download-schedule }
+## Step 4 — Start automatic backup { #step-4-start-the-automatic-download-schedule }
 
-This is the main backup flow. Click **Configure automatic downloads** to open the
-**Automatic download schedule**, then choose:
+This is the main backup flow. On the same channel card, choose:
 
-- **Run every N minutes** — how often the scheduler wakes up.
-- **Downloads per pass** — how many videos each pass claims.
+- **Download interval** — how often queued work is picked up.
+- **Per run** — how many videos each pass claims (the default is 5).
 
-Click **Register schedule** to turn it on. Registering enables real downloads and
-the scheduler in one step, then queues **only the remaining videos** at the
-interval you chose — already-downloaded videos are skipped. It is set-and-forget:
-you don't need to press anything else.
+Click **Start automatic backup**. This enables real downloads, metadata sync,
+and the scheduler in one step, then queues **only the remaining videos**.
+Already-downloaded videos are skipped. You do not need to press a separate
+worker or container button.
 
-Changed the interval or batch size later? Adjust the fields and click **Update
-schedule** to apply the new settings to the running schedule, and **Stop
-schedule** halts future passes. When every video is already archived the button
-reads **Fully archived** and there is no remaining work to schedule.
+Changed the interval or batch size later? Adjust the fields and click **Save
+schedule**. **Pause** stops future passes. When every video is already archived,
+the same control can stay on to collect future uploads; zero remaining work is a
+completed state, not a failed run.
 
 <figure markdown="span">
   ![Automatic download schedule](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
-  <figcaption>Automatic download schedule — interval and batch size, live status (On / Off / Running), next run, and Total / Downloaded / Remaining counts. Hover the info (i) hint for a plain-language explanation.</figcaption>
+  <figcaption>One channel card — Total / Downloaded / Remaining, automatic backup, download interval, videos per run, next run, and pause.</figcaption>
 </figure>
 
 !!! warning "Safe by default"
     Registering the *channel* and previewing never download anything. Nothing
-    transfers until you **Register schedule** (or run the advanced manual test
+    transfers until you **Start automatic backup** (or run the advanced manual test
     below). See [Enable real downloads](enable-downloads.md).
 
 ---
@@ -130,7 +125,7 @@ state, and path integrity.
 
 !!! success "Done"
     You've registered a channel, reviewed the remaining videos, and registered the
-    automatic download schedule that keeps the archive current. Next: explore
+    automatic backup that keeps the archive current. Next: explore
     [Insights](product-tour.md#insights) and lock down
     [Settings](product-tour.md#settings).
 

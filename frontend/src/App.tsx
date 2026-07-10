@@ -31,6 +31,7 @@ import {
   Languages,
   Link2,
   ListFilter,
+  Plus,
   Rocket,
   RotateCcw,
   Save,
@@ -172,6 +173,8 @@ import {
   type SyncJob,
 } from "./api/channels";
 import { ChannelConstellation } from "./components/ChannelConstellation";
+import { ChannelBackupOverview } from "./components/channel/ChannelBackupOverview";
+import { ChannelRegistrationPanel } from "./components/channel/ChannelRegistrationPanel";
 import { MetricTile } from "./components/MetricTile";
 import { QueueFlow } from "./components/QueueFlow";
 import {
@@ -200,7 +203,6 @@ const qualityOptions = ["720p", "1080p", "best"];
 const DEMO_WORKSPACE_EXTERNAL_ID = "UC_CVN_DEMO_SIGNAL";
 const workerSlowRunThresholdSeconds = 10;
 type WorkflowStatus = "idle" | "syncing" | "candidates" | "queueing" | "preflight" | "bulk" | "downloading" | "error";
-type FirstBackupWizardStatus = "idle" | "analyzing" | "ready" | "planning" | "planned" | "error";
 type NavId = "dashboard" | "channels" | "library" | "queue" | "insights" | "settings";
 
 const navItems: { key: TranslationKey; id: NavId }[] = [
@@ -210,6 +212,15 @@ const navItems: { key: TranslationKey; id: NavId }[] = [
   { key: "nav.queue", id: "queue" },
   { key: "nav.insights", id: "insights" },
   { key: "nav.settings", id: "settings" },
+];
+
+const mobileNavItems: { key: TranslationKey; id: NavId; icon: typeof Gauge }[] = [
+  { key: "nav.dashboard", id: "dashboard", icon: Gauge },
+  { key: "nav.channels", id: "channels", icon: Link2 },
+  { key: "nav.library", id: "library", icon: BookOpen },
+  { key: "nav.queue", id: "queue", icon: Download },
+  { key: "nav.insights", id: "insights", icon: HardDrive },
+  { key: "nav.settings", id: "settings", icon: Settings },
 ];
 
 type ChannelDetailTab = "overview" | "downloads" | "library" | "logs" | "policy";
@@ -495,7 +506,6 @@ function App() {
   const [probe, setProbe] = useState<ChannelProbeResult | null>(null);
   const [registration, setRegistration] = useState<ChannelRegistrationResult | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<"idle" | "probing" | "ready" | "committing" | "registered" | "error">("idle");
-  const [firstBackupStatus, setFirstBackupStatus] = useState<FirstBackupWizardStatus>("idle");
   const [registrationError, setRegistrationError] = useState("");
   const [registrationComposerOpen, setRegistrationComposerOpen] = useState(false);
   const [channelDetail, setChannelDetail] = useState<ChannelDetail | null>(null);
@@ -720,16 +730,6 @@ function App() {
   const isDemoWorkspace = channelDetail?.external_id === DEMO_WORKSPACE_EXTERNAL_ID;
   const activeInitials = getInitials(activeTitle);
   const activeCounts = channelDetail ?? registration?.channel;
-  const registrationPanelCompact = Boolean(
-    registeredChannelId &&
-      !registrationComposerOpen &&
-      !activeProbe &&
-      !registrationError &&
-      registrationStatus !== "probing" &&
-      registrationStatus !== "ready" &&
-      registrationStatus !== "committing" &&
-      sourceValueTrimmed.length === 0,
-  );
   const activeArchivedCount = library?.archived ?? activeCounts?.archived_count ?? 0;
   const activeMissingCount = library?.missing ?? activeCounts?.missing_count ?? 0;
   const activeBackupStats = activeCounts
@@ -1147,22 +1147,6 @@ function App() {
   const liveDownloadEngineBlocked = workerPlan ? !workerPlan.enabled || Boolean(workerPlan.locked_reason) : false;
   const liveDownloadBlocked =
     !workerPlan || liveDownloadEngineBlocked || liveRunLimit === 0 || liveDownloadStatus === "running";
-  const firstBackupStepIndex =
-    firstBackupStatus === "planned"
-      ? 3
-      : firstBackupStatus === "planning"
-        ? 2
-        : activeProbe
-          ? 1
-          : firstBackupStatus === "analyzing"
-            ? 0
-            : 0;
-  const firstBackupAnalyzeDisabled =
-    !sourceValueTrimmed || firstBackupStatus === "analyzing" || firstBackupStatus === "planning";
-  const firstBackupPlanDisabled =
-    !activeProbe || firstBackupStatus === "analyzing" || firstBackupStatus === "planning";
-  const firstBackupPreviewVideos = activeProbe?.videos.slice(0, 3) ?? [];
-  const firstBackupFolderLabel = activeProbe ? `/downfolder/${activeProbe.folder_preview.channel_dir}` : t("firstBackup.folder.pending");
   const actionableQueueJobs = useMemo(() => currentDownloadJobs.filter(isSelectableQueueJob), [currentDownloadJobs]);
   const preflightPlanStatusByJobId = useMemo(() => {
     const statuses = new Map<number, string>();
@@ -1638,8 +1622,8 @@ function App() {
       },
       {
         key: "CVN_DOWNLOAD_WORKER_SCHEDULER_LIMIT",
-        value: String(runtimeSettings?.download_worker_scheduler_limit ?? 1),
-        recommended: runtimeDraft.schedulerLimit || "1",
+        value: String(runtimeSettings?.download_worker_scheduler_limit ?? 5),
+        recommended: runtimeDraft.schedulerLimit || "5",
         tone: "idle",
       },
       {
@@ -2044,39 +2028,31 @@ function App() {
     setWorkflowMessage("");
   }
 
-  async function runChannelProbe(mode: "registration" | "first-backup") {
+  async function runChannelProbe() {
     if (!sourceValueTrimmed) {
-      setRegistrationError(t("firstBackup.error.empty"));
+      setRegistrationError(t("registration.error.empty"));
       setRegistrationStatus("error");
-      if (mode === "first-backup") setFirstBackupStatus("error");
       return null;
     }
     setRegistrationStatus("probing");
-    if (mode === "first-backup") setFirstBackupStatus("analyzing");
     setRegistrationError("");
-    resetChannelDraftState();
+    setRegistration(null);
+    setProbe(null);
     try {
       const result = await probeChannel(registrationPayload);
       setProbe(result);
       setRegistrationStatus("ready");
-      if (mode === "first-backup") setFirstBackupStatus("ready");
       return result;
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : t("registration.error.generic"));
       setRegistrationStatus("error");
-      if (mode === "first-backup") setFirstBackupStatus("error");
       return null;
     }
   }
 
   async function handleProbe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await runChannelProbe("registration");
-  }
-
-  async function handleFirstBackupAnalyze(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await runChannelProbe("first-backup");
+    await runChannelProbe();
   }
 
   async function handleCommit() {
@@ -2089,72 +2065,16 @@ function App() {
       setSelectedChannelId(result.channel.id);
       setRegistrationStatus("registered");
       await loadChannelState(result.channel.id);
+      setRegistration(null);
+      setProbe(null);
+      setSourceValue("");
+      setRegistrationStatus("idle");
+      setRegistrationComposerOpen(false);
+      setActiveChannelTab("overview");
+      pushAppRoute({ nav: "channels", channelTab: "overview", channelId: result.channel.id });
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : t("registration.error.generic"));
       setRegistrationStatus("error");
-    }
-  }
-
-  async function handleStartFirstBackupPlan() {
-    let probeResult = activeProbe;
-    if (!probeResult) {
-      probeResult = await runChannelProbe("first-backup");
-      if (!probeResult) return;
-    }
-
-    setFirstBackupStatus("planning");
-    setRegistrationError("");
-    setWorkflowStatus("syncing");
-    setWorkflowMessage("");
-    setLiveDownloadStatus("idle");
-    try {
-      let channelId = registration?.channel.id ?? probeResult.existing_channel_id ?? null;
-      let registrationResult: ChannelRegistrationResult | null = null;
-      if (!channelId) {
-        setRegistrationStatus("committing");
-        registrationResult = await registerChannel(registrationPayload);
-        channelId = registrationResult.channel.id;
-        setRegistrationStatus("registered");
-      }
-
-      await syncChannel(channelId, {
-        max_quality: maxQuality,
-        audio_only: audioOnly,
-        subtitles_enabled: subtitlesEnabled,
-      });
-      const candidateResult = await createDownloadCandidates(channelId, maxQuality);
-      applyDownloadJobs(candidateResult.jobs);
-      setPreflightPlan(null);
-      setSelectedJobIds(candidateResult.jobs.filter(isLaunchableJob).map((job) => job.id));
-      const workerSnapshot = await getDownloadWorkerPlan(channelId, 5);
-      setWorkerPlan(workerSnapshot);
-      if (registrationResult) {
-        setRegistration(registrationResult);
-        setProbe(registrationResult.probe);
-      } else {
-        setRegistrationStatus("registered");
-      }
-      setSelectedChannelId(channelId);
-      await loadChannelState(channelId);
-      setWorkerPlan(workerSnapshot);
-      setActiveNavId("channels");
-      setActiveChannelTab("downloads");
-      writeAppHash({ nav: "channels", channelTab: "downloads", channelId }, "push");
-      setFirstBackupStatus("planned");
-      setWorkflowStatus("idle");
-      setWorkflowMessage(
-        t("firstBackup.planned").replace(
-          "{count}",
-          String(candidateResult.total_candidates || candidateResult.candidates_created || candidateResult.jobs.length),
-        ),
-      );
-      setLiveDownloadConfirmOpen(true);
-    } catch (error) {
-      if (handleAuthFailure(error)) return;
-      setFirstBackupStatus("error");
-      setWorkflowStatus("error");
-      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
-      setRegistrationError(error instanceof Error ? error.message : t("registration.error.generic"));
     }
   }
 
@@ -2985,7 +2905,7 @@ function App() {
     }
 
     const intervalMinutes = Math.max(1, Math.round(Number(nextDraft.schedulerIntervalSeconds) / 60));
-    const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 1);
+    const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 5);
     const registerForFuture = channelScheduleComplete;
     setRuntimeDraft(nextDraft);
     setRuntimeApplyStatus("applying");
@@ -2995,12 +2915,8 @@ function App() {
 
     try {
       if (channelPolicy && !channelPolicy.auto_download) {
-        try {
-          const policy = await updateChannelPolicy(registeredChannelId, { auto_download: true });
-          setChannelPolicy(policy);
-        } catch {
-          /* non-fatal: schedule still registers even if the policy toggle fails */
-        }
+        const policy = await updateChannelPolicy(registeredChannelId, { auto_download: true });
+        setChannelPolicy(policy);
       }
       const quality = channelPolicy?.max_quality ?? maxQuality;
       let candidatesCreated = 0;
@@ -3093,7 +3009,7 @@ function App() {
     }
 
     const intervalMinutes = Math.max(1, Math.round(Number(nextDraft.schedulerIntervalSeconds) / 60));
-    const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 1);
+    const limit = Math.max(1, Number.parseInt(nextDraft.schedulerLimit, 10) || 5);
     setRuntimeDraft(nextDraft);
     setRuntimeApplyStatus("applying");
     setRuntimeApplyMessage("");
@@ -4889,7 +4805,7 @@ function App() {
       pushAppRoute({ nav: "channels", channelTab: "overview" });
       setWorkflowStatus("idle");
       setWorkflowMessage(t("channel.workbench.noChannel"));
-      window.setTimeout(() => scrollToAppSection(".registration-panel"), 0);
+      window.setTimeout(() => scrollToAppSection(".channel-registration-panel"), 0);
       return;
     }
     setActiveNavId("library");
@@ -5166,7 +5082,7 @@ function App() {
     }
     if (mission.action_kind === "register") {
       setActiveNavId("channels");
-      scrollToAppSection(".registration-panel");
+      scrollToAppSection(".channel-registration-panel");
       return;
     }
     if (mission.action_kind === "library") {
@@ -5280,11 +5196,32 @@ function App() {
   function openChannelWorkspace(tab: ChannelDetailTab = "overview", selector = ".channel-detail-panel") {
     setActiveNavId("channels");
     setActiveChannelTab(tab);
-    if (selector === ".registration-panel") {
+    if (selector === ".channel-registration-panel") {
       setRegistrationComposerOpen(true);
     }
     pushAppRoute({ nav: "channels", channelTab: tab });
     window.setTimeout(() => scrollToAppSection(selector), 0);
+  }
+
+  function openChannelRegistration() {
+    setActiveNavId("channels");
+    setRegistrationComposerOpen(true);
+    setRegistration(null);
+    setProbe(null);
+    setRegistrationError("");
+    setRegistrationStatus("idle");
+    setSourceValue("");
+    pushAppRoute({ nav: "channels", channelTab: "overview" });
+    window.setTimeout(() => scrollToAppSection(".channel-registration-panel"), 0);
+  }
+
+  function closeChannelRegistration() {
+    setRegistrationComposerOpen(false);
+    setRegistration(null);
+    setProbe(null);
+    setRegistrationError("");
+    setRegistrationStatus("idle");
+    setSourceValue("");
   }
 
   function openQueueWorkspace() {
@@ -5312,7 +5249,7 @@ function App() {
       detailKey: "operatorGuide.step.source.detail",
       outcomeKey: "operatorGuide.step.source.outcome",
       actionKey: "operatorGuide.step.source.action",
-      action: () => openChannelWorkspace("overview", ".registration-panel"),
+      action: () => openChannelWorkspace("overview", ".channel-registration-panel"),
     },
     {
       id: "downloads",
@@ -5392,7 +5329,7 @@ function App() {
       detailKey: "commandPalette.register.detail",
       groupKey: "commandPalette.group.channel",
       keywords: ["channel", "source", "register", "url", "채널", "등록"],
-      run: () => openChannelWorkspace("overview", ".registration-panel"),
+      run: () => openChannelWorkspace("overview", ".channel-registration-panel"),
     },
     {
       id: "channel-overview",
@@ -5543,28 +5480,25 @@ function App() {
   const cockpitMissions = operationsReadiness?.missions.filter((mission) => mission.action_kind !== "none").slice(0, 3) ?? [];
   const cockpitQueueWork = queueConsoleCounts.candidate + queueConsoleCounts.queued + queueConsoleCounts.running;
   const cockpitStorageIssues = storageDriftTotal + (storageScan?.orphan_sidecars.length ?? 0);
-  const cockpitStorageTone = cockpitStorageIssues > 0 || storagePressureTrend?.warning ? "warn" : "good";
-  const cockpitRuntimeTone = runtimeSettings?.pending_restart
-    ? "warn"
-    : runtimeSettings?.download_worker_enabled
-      ? "good"
-      : "active";
-  const cockpitQueueTone = queueConsoleCounts.failed ? "bad" : cockpitQueueWork ? "active" : "good";
   const sidebarRuntimeTone = !runtimeSettings
     ? "checking"
     : runtimeSettings.pending_restart
       ? "warn"
-      : runtimeSettings.download_worker_enabled
+      : channelSchedulerEnabled
         ? "good"
         : "locked";
   const sidebarRuntimeTitle = !runtimeSettings
     ? t("sidebar.status.title")
     : runtimeSettings.pending_restart
       ? t("runtime.restart.pending")
-      : `${t("runtime.worker")} ${workerRuntimeLabel}`;
+      : channelSchedulerEnabled
+        ? t("sidebar.backup.on")
+        : t("sidebar.backup.off");
   const sidebarRuntimeDetail = !runtimeSettings
     ? t("runtime.checking")
-    : `${t("runtime.scheduler")} ${schedulerRuntimeLabel} · ${t("runtime.metadataScheduler")} ${metadataSchedulerRuntimeLabel}`;
+    : channelSchedulerEnabled
+      ? t("sidebar.backup.onDetail")
+      : t("sidebar.backup.offDetail");
   const sidebarNavBadges = useMemo<Record<NavId, NavStatusBadge>>(
     () => ({
       dashboard: {
@@ -5630,8 +5564,6 @@ function App() {
         ? t("topbar.live.last").replace("{time}", formatEventTime(events[0].occurred_at))
         : t("topbar.live.waiting")
       : eventStreamStatusDetail(eventStreamStatus, t);
-  const launchRunwayCandidateCount = Math.max(launchableJobs.length, queueConsoleCounts.candidate);
-  const launchRunwayQueuedCount = Math.max(simpleFlowStats.queued + simpleFlowStats.running, queueConsoleCounts.queued + queueConsoleCounts.running);
   const launchRunwayLibraryCount = library?.archived ?? activeArchivedCount;
   const launchRunwaySteps: {
     id: string;
@@ -5652,49 +5584,22 @@ function App() {
       detailKey: "launch.runway.source.detail",
       actionKey: "launch.runway.source.action",
       metric: registeredChannelId ? activeTitle : t("launch.runway.source.metric"),
-      action: () => openChannelWorkspace("overview", ".registration-panel"),
+      action: () => openChannelWorkspace("overview", registeredChannelId ? ".channel-backup-overview" : ".channel-registration-panel"),
     },
     {
-      id: "sync",
-      icon: RotateCcw,
-      state: !registeredChannelId ? "locked" : channelDetail?.last_synced_at || channelVideos.length ? "ready" : "active",
-      titleKey: "launch.runway.sync.title",
-      detailKey: "launch.runway.sync.detail",
-      actionKey: "launch.runway.sync.action",
-      metric: String(simpleFlowStats.seen),
-      disabled: !registeredChannelId || workflowStatus === "syncing",
-      action: () => {
-        openChannelWorkspace("overview");
-        if (registeredChannelId) void handleManualSync();
-      },
-    },
-    {
-      id: "candidates",
-      icon: ClipboardList,
-      state: !registeredChannelId || !channelVideos.length ? "locked" : launchRunwayCandidateCount ? "ready" : "active",
-      titleKey: "launch.runway.candidates.title",
-      detailKey: "launch.runway.candidates.detail",
-      actionKey: "launch.runway.candidates.action",
-      metric: String(launchRunwayCandidateCount),
-      disabled: !registeredChannelId || !channelVideos.length || workflowStatus === "candidates",
-      action: () => {
-        openChannelWorkspace("downloads", ".launch-control-panel");
-        if (registeredChannelId && channelVideos.length) void handleBuildCandidates();
-      },
-    },
-    {
-      id: "download",
+      id: "backup",
       icon: Download,
-      state: !registeredChannelId || !launchRunwayCandidateCount ? "locked" : launchRunwayQueuedCount || queueConsoleCounts.completed ? "ready" : "active",
+      state: !registeredChannelId
+        ? "locked"
+        : channelSchedulerEnabled || channelScheduleComplete
+          ? "ready"
+          : "active",
       titleKey: "launch.runway.download.title",
       detailKey: "launch.runway.download.detail",
       actionKey: "launch.runway.download.action",
-      metric: String(Math.max(launchRunwayQueuedCount, queueConsoleCounts.completed)),
-      disabled: !registeredChannelId || liveDownloadStatus === "running",
-      action: () => {
-        openChannelWorkspace("downloads", ".launch-control-panel");
-        if (registeredChannelId) window.setTimeout(() => handleOpenLiveDownloadConfirm(), 0);
-      },
+      metric: channelScheduleComplete ? t("detail.automation.complete") : String(channelScheduleRemainingCount),
+      disabled: !registeredChannelId,
+      action: () => openChannelWorkspace("overview", ".channel-backup-overview"),
     },
     {
       id: "library",
@@ -5731,7 +5636,7 @@ function App() {
       titleKey: "release.readiness.source.title",
       detailKey: "release.readiness.source.detail",
       actionKey: "release.readiness.source.action",
-      action: () => openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".registration-panel"),
+      action: () => openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".channel-registration-panel"),
     },
     {
       id: "security",
@@ -5755,7 +5660,7 @@ function App() {
       actionKey: "release.readiness.sync.action",
       action: () => {
         if (registeredChannelId) void handleManualSync();
-        else openChannelWorkspace("overview", ".registration-panel");
+        else openChannelWorkspace("overview", ".channel-registration-panel");
       },
     },
     {
@@ -6002,6 +5907,24 @@ function App() {
         </div>
       </aside>
 
+      <nav className="mobile-nav" aria-label={t("brand.title")}>
+        {mobileNavItems.map((item) => {
+          const MobileNavIcon = item.icon;
+          return (
+            <button
+              aria-current={activeNavId === item.id ? "page" : undefined}
+              className={activeNavId === item.id ? "active" : ""}
+              key={item.id}
+              onClick={() => handleSelectNav(item.id)}
+              type="button"
+            >
+              <MobileNavIcon size={18} />
+              <span>{t(item.key)}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       <section className="workspace">
         <header className="topbar">
           <div>
@@ -6029,12 +5952,18 @@ function App() {
               </label>
               <small>{activeChannelContextDetail}</small>
               <button
-                aria-label={registeredChannelId ? t("channel.switcher.open") : t("channel.switcher.add")}
-                onClick={() => openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".registration-panel")}
+                aria-label={showChannelWorkspace ? t("channel.switcher.add") : registeredChannelId ? t("channel.switcher.open") : t("channel.switcher.add")}
+                onClick={() => {
+                  if (showChannelWorkspace) {
+                    openChannelRegistration();
+                    return;
+                  }
+                  openChannelWorkspace("overview", registeredChannelId ? ".channel-detail-panel" : ".channel-registration-panel");
+                }}
                 type="button"
               >
-                {registeredChannelId ? <ExternalLink size={14} /> : <Link2 size={14} />}
-                {registeredChannelId ? t("channel.switcher.open") : t("channel.switcher.add")}
+                {showChannelWorkspace ? <Plus size={14} /> : registeredChannelId ? <ExternalLink size={14} /> : <Link2 size={14} />}
+                {showChannelWorkspace ? t("channel.switcher.add") : registeredChannelId ? t("channel.switcher.open") : t("channel.switcher.add")}
               </button>
             </div>
           </div>
@@ -6276,71 +6205,6 @@ function App() {
                 </div>
               </div>
 
-              <div className="cockpit-route-grid" aria-label={t("dashboard.route.aria")}>
-                <button
-                  onClick={() => {
-                    openChannelWorkspace("overview", ".channel-detail-panel");
-                  }}
-                  type="button"
-                >
-                  <RotateCcw size={16} />
-                  <span>{t("dashboard.route.sync")}</span>
-                  <strong>{simpleFlowStats.fresh}</strong>
-                  <small>{t("dashboard.route.syncDetail")}</small>
-                </button>
-                <button onClick={() => handleSelectNav("queue")} type="button">
-                  <Rocket size={16} />
-                  <span>{t("dashboard.route.queue")}</span>
-                  <strong>{cockpitQueueWork}</strong>
-                  <small>{t("dashboard.route.queueDetail")}</small>
-                </button>
-                <button onClick={() => handleSelectNav("insights")} type="button">
-                  <HardDrive size={16} />
-                  <span>{t("dashboard.route.storage")}</span>
-                  <strong>{cockpitStorageIssues}</strong>
-                  <small>{t("dashboard.route.storageDetail")}</small>
-                </button>
-                <button onClick={() => handleSelectNav("settings")} type="button">
-                  <Settings size={16} />
-                  <span>{t("dashboard.route.runtime")}</span>
-                  <strong>{runtimeSettings?.pending_restart ? "!" : workerRuntimeLabel}</strong>
-                  <small>{t("dashboard.route.runtimeDetail")}</small>
-                </button>
-              </div>
-
-              <div className="cockpit-system-rail" aria-label={t("dashboard.system.aria")}>
-                <article className={cockpitRuntimeTone}>
-                  <ShieldCheck size={16} />
-                  <span>{t("runtime.worker")}</span>
-                  <strong>{workerRuntimeLabel}</strong>
-                  <small>{schedulerRuntimeLabel} · {metadataSchedulerRuntimeLabel}</small>
-                </article>
-                <article className={cockpitQueueTone}>
-                  <Activity size={16} />
-                  <span>{t("queue.console.title")}</span>
-                  <strong>{cockpitQueueWork}</strong>
-                  <small>
-                    {queueConsoleCounts.queued} {t("queue.queued")} · {queueConsoleCounts.running} {t("queue.running")} ·{" "}
-                    {queueConsoleCounts.failed} {t("queue.failed")}
-                  </small>
-                </article>
-                <article className={cockpitStorageTone}>
-                  <Database size={16} />
-                  <span>{t("panel.storage.title")}</span>
-                  <strong>{storageVolume?.archive_label ?? "0 MB"}</strong>
-                  <small>
-                    {storageVolume
-                      ? t("storage.scan.free").replace("{free}", storageVolume.free_label).replace("{total}", storageVolume.total_label)
-                      : t("runtime.checking")}
-                  </small>
-                </article>
-                <article className={activeMissingCount > 0 ? "active" : "good"}>
-                  <BookOpen size={16} />
-                  <span>{t("nav.library")}</span>
-                  <strong>{activeArchivedCount}/{activeCounts?.video_count ?? activeTimeline.length}</strong>
-                  <small>{t("detail.flow.skipSummary").replace("{archived}", String(activeArchivedCount)).replace("{fresh}", String(activeMissingCount))}</small>
-                </article>
-              </div>
             </section>
 
             <section className="launch-runway" aria-label={t("launch.runway.aria")}>
@@ -6393,200 +6257,27 @@ function App() {
             ) : null}
 
             {!hasAnyRegisteredChannel ? (
-              <section className="first-source-panel first-source-panel-focus first-backup-wizard" aria-label={t("firstBackup.aria")}>
-                <div className="first-backup-head">
+              <section className="first-source-panel first-source-panel-focus" aria-label={t("firstRun.empty.aria")}>
+                <div className="first-source-head">
                   <div>
-                    <p className="panel-kicker">{t("firstBackup.kicker")}</p>
-                    <h2>{t("firstBackup.title")}</h2>
-                    <span>{t("firstBackup.subtitle")}</span>
+                    <p className="panel-kicker">{t("firstRun.empty.kicker")}</p>
+                    <h2>{t("firstRun.empty.title")}</h2>
+                    <span>{t("firstRun.empty.subtitle")}</span>
                   </div>
-                  <div className="first-backup-stepper" aria-label={t("firstBackup.steps.aria")}>
-                    {[0, 1, 2].map((step) => (
-                      <span className={firstBackupStepIndex >= step ? "active" : ""} key={step}>
-                        {step + 1}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <form className="first-backup-command" onSubmit={handleFirstBackupAnalyze}>
-                  <label className="source-input-shell" aria-label={t("firstBackup.input.aria")}>
-                    <Link2 size={18} />
-                    <input
-                      onChange={(event) => {
-                        setSourceValue(event.target.value);
-                        if (firstBackupStatus === "error") setFirstBackupStatus("idle");
-                      }}
-                      placeholder={t("firstBackup.input.placeholder")}
-                      value={sourceValue}
-                    />
-                  </label>
-                  <button className="primary-action" disabled={firstBackupAnalyzeDisabled} type="submit">
-                    <Search size={16} />
-                    {firstBackupStatus === "analyzing" ? t("firstBackup.analyzing") : t("firstBackup.analyze")}
-                  </button>
-                </form>
-                <div className="first-backup-hints">
-                  <span>
-                    <CheckCircle2 size={13} />
-                    {t("firstBackup.sample")}
-                  </span>
-                  <span>
-                    <ShieldCheck size={13} />
-                    {t("firstBackup.noAutoDownload")}
-                  </span>
-                </div>
-                <details className="first-backup-advanced">
-                  <summary>
-                    <SlidersHorizontal size={14} />
-                    {t("firstBackup.advanced")}
-                  </summary>
-                  <div className="first-backup-options">
-                    <span>{t("registration.quality")}</span>
-                    <div className="quality-segment">
-                      {qualityOptions.map((quality) => (
-                        <button
-                          className={quality === maxQuality ? "active" : ""}
-                          key={quality}
-                          onClick={() => setMaxQuality(quality)}
-                          type="button"
-                        >
-                          {quality}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      className={`registration-toggle ${audioOnly ? "active" : ""}`}
-                      onClick={() => setAudioOnly((value) => !value)}
-                      type="button"
-                    >
-                      <Waves size={15} />
-                      {t("registration.audioOnly")}
-                    </button>
-                    <button
-                      className={`registration-toggle ${subtitlesEnabled ? "active" : ""}`}
-                      onClick={() => setSubtitlesEnabled((value) => !value)}
-                      type="button"
-                    >
-                      <FileText size={15} />
-                      {t("registration.subtitles")}
-                    </button>
-                  </div>
-                </details>
-                {workflowMessage ? (
-                  <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
-                ) : null}
-                {registrationError ? <span className="workflow-message first-source-message error">{registrationError}</span> : null}
-                <div className={`first-backup-plan ${activeProbe ? "ready" : "idle"}`} aria-live="polite">
-                  {activeProbe ? (
-                    <>
-                      <div className="first-backup-channel-card">
-                        <div className="channel-avatar">{activeInitials}</div>
-                        <div>
-                          <p className="panel-kicker">{t("firstBackup.plan.kicker")}</p>
-                          <h3>{activeProbe.title}</h3>
-                          <span>
-                            {activeProbe.handle ?? activeProbe.external_id ?? activeProbe.normalized.identifier} · {activeProbe.normalized.identifier_type}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="first-backup-metrics">
-                        <article>
-                          <span>{t("firstBackup.metric.videos")}</span>
-                          <strong>{activeProbe.video_count}</strong>
-                        </article>
-                        <article>
-                          <span>{t("firstBackup.metric.toBackUp")}</span>
-                          <strong>{activeProbe.video_count}</strong>
-                        </article>
-                        <article>
-                          <span>{t("firstBackup.metric.storage")}</span>
-                          <strong>{activeProbe.storage_forecast.estimated_label}</strong>
-                        </article>
-                        <article>
-                          <span>{t("firstBackup.metric.folder")}</span>
-                          <strong>{firstBackupFolderLabel}</strong>
-                        </article>
-                      </div>
-                      <div className="first-backup-safety">
-                        <ShieldCheck size={16} />
-                        <div>
-                          <strong>{t("firstBackup.safety.title")}</strong>
-                          <span>{t("firstBackup.safety.detail")}</span>
-                        </div>
-                      </div>
-                      <div className="first-backup-video-list" aria-label={t("firstBackup.preview.aria")}>
-                        {firstBackupPreviewVideos.map((video) => (
-                          <span key={video.external_id}>
-                            <Film size={13} />
-                            {video.title}
-                          </span>
-                        ))}
-                        {firstBackupPreviewVideos.length === 0 ? <p className="empty-copy">{t("firstBackup.preview.empty")}</p> : null}
-                      </div>
-                      <button
-                        className="primary-action first-backup-start"
-                        disabled={firstBackupPlanDisabled}
-                        onClick={() => void handleStartFirstBackupPlan()}
-                        type="button"
-                      >
-                        <Rocket size={16} />
-                        {firstBackupStatus === "planning" ? t("firstBackup.planning") : t("firstBackup.start")}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="first-backup-idle-copy">
-                        <Sparkles size={18} />
-                        <div>
-                          <strong>{t("firstBackup.idle.title")}</strong>
-                          <span>{t("firstBackup.idle.detail")}</span>
-                        </div>
-                      </div>
-                      <div className="first-backup-idle-steps">
-                        <article>
-                          <Search size={15} />
-                          <strong>{t("firstBackup.step.analyze")}</strong>
-                          <span>{t("firstBackup.step.analyzeDetail")}</span>
-                        </article>
-                        <article>
-                          <ShieldCheck size={15} />
-                          <strong>{t("firstBackup.step.review")}</strong>
-                          <span>{t("firstBackup.step.reviewDetail")}</span>
-                        </article>
-                        <article>
-                          <Rocket size={15} />
-                          <strong>{t("firstBackup.step.confirm")}</strong>
-                          <span>{t("firstBackup.step.confirmDetail")}</span>
-                        </article>
-                      </div>
-                    </>
-                  )}
-                </div>
-                <details className="first-backup-secondary">
-                  <summary>
-                    <ChevronRight size={14} />
-                    {t("firstBackup.secondary")}
-                  </summary>
-                  <article className="first-source-hero demo-seed-card">
-                    <div>
-                      <Database size={20} />
-                      <div>
-                        <strong>{t("firstRun.demo.title")}</strong>
-                        <span>{t("firstRun.demo.detail")}</span>
-                      </div>
-                    </div>
-                    <button disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
-                      {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
-                      <ChevronRight size={15} />
-                    </button>
-                  </article>
                   <div className="first-source-action-row">
-                    <button className="first-source-secondary" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                    <button className="primary-action" disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
+                      <Database size={16} />
+                      {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
+                    </button>
+                    <button className="first-source-secondary" onClick={() => openChannelWorkspace("overview", ".channel-registration-panel")} type="button">
                       <Link2 size={15} />
                       {t("firstRun.empty.primary")}
                     </button>
                   </div>
-                </details>
+                </div>
+                {workflowMessage ? (
+                  <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
+                ) : null}
                 <section className={`operator-checks-panel ${operatorChecksOpen ? "open" : ""}`} aria-label={t("firstRun.operatorChecks.aria")}>
                   <button className="operator-checks-toggle" onClick={() => setOperatorChecksOpen((open) => !open)} type="button">
                     <span>
@@ -7378,7 +7069,7 @@ function App() {
                     <div className="queue-console-empty-actions">
                       {currentGlobalDownloadJobs.length === 0 ? (
                         <>
-                          <button className="primary-action" onClick={() => openChannelWorkspace("overview", ".registration-panel")} type="button">
+                          <button className="primary-action" onClick={() => openChannelWorkspace("overview", ".channel-registration-panel")} type="button">
                             <Link2 size={15} />
                             {t("queue.console.empty.noJobsPrimary")}
                           </button>
@@ -7573,238 +7264,30 @@ function App() {
         </section>
         ) : null}
 
-        {showChannelWorkspace ? (
-        <section className="channel-workbench" aria-label={t("channel.workbench.aria")}>
-          <article className="channel-workbench-intro">
-            <p className="panel-kicker">{t("channel.workbench.kicker")}</p>
-            <h2>{t("channel.workbench.title")}</h2>
-            <span>{registeredChannelId ? `${activeTitle} · ${activeHandle}` : t("channel.workbench.noChannel")}</span>
-          </article>
-          <button
-            className="channel-workbench-card channel-workbench-action register"
-            aria-label={registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}
-            onClick={() => {
-              setRegistrationComposerOpen(true);
-              window.setTimeout(() => scrollToAppSection(".registration-panel"), 0);
-            }}
-            type="button"
-          >
-            <Link2 size={16} />
-            <span>{registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}</span>
-            <strong>{registeredChannelId ? t("registration.addAnother") : t("channel.workbench.register")}</strong>
-            <small>{registeredChannelId ? t("registration.addAnotherDetail") : t("channel.workbench.registerDetail")}</small>
-          </button>
-          <button
-            className="channel-workbench-card channel-workbench-action sync"
-            disabled={!registeredChannelId}
-            onClick={() => {
-              handleSelectChannelTab("overview");
-              scrollToAppSection(".channel-detail-panel");
-            }}
-            type="button"
-          >
-            <RotateCcw size={16} />
-            <span>{t("channel.workbench.sync")}</span>
-            <strong>{channelScheduleRemainingCount}</strong>
-            <small>{t("channel.workbench.syncDetail")}</small>
-          </button>
-          <button
-            className="channel-workbench-card channel-workbench-action downloads"
-            disabled={!registeredChannelId}
-            onClick={() => {
-              handleSelectChannelTab("overview");
-              scrollToAppSection(".channel-automation-panel");
-            }}
-            type="button"
-          >
-            <Rocket size={16} />
-            <span>{t("channel.workbench.downloads")}</span>
-            <strong>{channelSchedulerStatusLabel}</strong>
-            <small>{t("channel.workbench.downloadsDetail")}</small>
-          </button>
-        </section>
-        ) : null}
-
-        {showChannelWorkspace && (!registrationPanelCompact || registrationComposerOpen) ? (
-        <section className={`panel registration-panel ${registrationPanelCompact ? "is-compact" : ""}`}>
-          {registeredChannelId ? (
-            <div className="registration-compact-summary">
-              <div>
-                <p className="panel-kicker">{t("registration.kicker")}</p>
-                <h2>{t("registration.addAnother")}</h2>
-                <span>{t("registration.addAnotherDetail")}</span>
-              </div>
-              <button
-                className="command-button"
-                onClick={() => {
-                  setRegistrationComposerOpen((open) => !open);
-                  if (registrationComposerOpen) {
-                    setProbe(null);
-                    setRegistrationError("");
-                    setSourceValue("");
-                    setRegistrationStatus("idle");
-                  }
-                }}
-                type="button"
-              >
-                {registrationComposerOpen ? <X size={15} /> : <Link2 size={15} />}
-                {registrationComposerOpen ? t("registration.hideComposer") : t("registration.addAnother")}
-              </button>
-            </div>
-          ) : null}
-          <div className="registration-panel-body" hidden={registrationPanelCompact}>
-          <div className="registration-copy">
-            <p className="panel-kicker">{t("registration.kicker")}</p>
-            <h2>{t("registration.title")}</h2>
-          </div>
-          <form className="registration-command" onSubmit={handleProbe}>
-            <div className="source-input-shell">
-              <Link2 size={18} />
-              <input
-                aria-label={t("registration.input.aria")}
-                value={sourceValue}
-                onChange={(event) => setSourceValue(event.target.value)}
-                placeholder={t("registration.input.placeholder")}
-              />
-            </div>
-            <div className="registration-actions">
-              <div className="quality-segment" aria-label={t("registration.quality")}>
-                {qualityOptions.map((quality) => (
-                  <button
-                    className={quality === maxQuality ? "active" : ""}
-                    key={quality}
-                    type="button"
-                    onClick={() => setMaxQuality(quality)}
-                  >
-                    {quality}
-                  </button>
-                ))}
-              </div>
-              <label className="registration-toggle">
-                <input
-                  type="checkbox"
-                  checked={audioOnly}
-                  onChange={(event) => setAudioOnly(event.target.checked)}
-                />
-                {t("registration.audioOnly")}
-              </label>
-              <label className="registration-toggle">
-                <input
-                  type="checkbox"
-                  checked={subtitlesEnabled}
-                  onChange={(event) => setSubtitlesEnabled(event.target.checked)}
-                />
-                {t("registration.subtitles")}
-              </label>
-              <button className="command-button registration-probe" disabled={registrationStatus === "probing"} type="submit">
-                <Sparkles size={16} />
-                {registrationStatus === "probing" ? t("registration.probing") : t("registration.probe")}
-              </button>
-            </div>
-          </form>
-
-          {registrationError ? (
-            <div className="registration-error">
-              <AlertTriangle size={16} />
-              {registrationError}
-            </div>
-          ) : null}
-
-          {activeProbe ? (
-            <motion.div
-              className="probe-preview"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.32 }}
-            >
-              <div className="probe-identity">
-                <div className="probe-avatar">{getInitials(activeProbe.title)}</div>
-                <div>
-                  <p>{activeProbe.handle ?? activeProbe.normalized.identifier}</p>
-                  <h3>{activeProbe.title}</h3>
-                  <span>{activeProbe.external_id ?? activeProbe.source_url}</span>
-                </div>
-              </div>
-              <div className="probe-stats">
-                <span><Zap size={15} /> {activeProbe.video_count} {t("registration.videos")}</span>
-                <span><HardDrive size={15} /> {activeProbe.storage_forecast.estimated_label}</span>
-                <span><FolderTree size={15} /> {activeProbe.folder_preview.channel_dir}</span>
-                {activeProbe.already_registered ? <span><CheckCircle2 size={15} /> {t("registration.already")}</span> : null}
-              </div>
-              <div className="probe-videos">
-                {activeProbe.videos.slice(0, 3).map((video) => (
-                  <a href={video.url} key={video.external_id} rel="noreferrer" target="_blank">
-                    <strong>{video.title}</strong>
-                    <span>{video.external_id}</span>
-                  </a>
-                ))}
-              </div>
-              <button
-                className="primary-action ignite-action"
-                disabled={registrationStatus === "committing" || registrationStatus === "registered"}
-                onClick={handleCommit}
-                type="button"
-              >
-                {registrationStatus === "committing" ? <RotateCcw size={16} /> : registrationStatus === "registered" ? <CheckCircle2 size={16} /> : <Zap size={16} />}
-                {registrationStatus === "committing"
-                  ? t("registration.committing")
-                  : registrationStatus === "registered"
-                    ? t("registration.registered")
-                    : t("registration.commit")}
-              </button>
-              {registeredChannelId ? (
-                <div className="post-registration-actions">
-                  <button
-                    className="command-button"
-                    disabled={workflowStatus === "syncing"}
-                    onClick={handleManualSync}
-                    type="button"
-                  >
-                    <RotateCcw size={16} />
-                    {workflowStatus === "syncing" ? t("sync.running") : t("sync.now")}
-                  </button>
-                  <button
-                    className="command-button"
-                    disabled={workflowStatus === "candidates" || channelVideos.length === 0}
-                    onClick={handleBuildCandidates}
-                    type="button"
-                  >
-                    <Download size={16} />
-                    {workflowStatus === "candidates" ? t("queue.candidates.running") : t("queue.candidates.action")}
-                  </button>
-                  <button
-                    className="command-button"
-                    disabled={workflowStatus === "queueing" || channelVideos.length === 0}
-                    onClick={handleQueueOne}
-                    type="button"
-                  >
-                    <Zap size={16} />
-                    {workflowStatus === "queueing" ? t("queue.one.running") : t("queue.one.action")}
-                  </button>
-                  {workflowMessage ? <span className={`workflow-message ${workflowStatus}`}>{workflowMessage}</span> : null}
-                </div>
-              ) : null}
-            </motion.div>
-          ) : null}
-          </div>
-        </section>
+        {showChannelWorkspace && (!registeredChannelId || registrationComposerOpen) ? (
+          <ChannelRegistrationPanel
+            audioOnly={audioOnly}
+            error={registrationError}
+            isAdditionalChannel={Boolean(registeredChannelId)}
+            maxQuality={maxQuality}
+            onAudioOnlyChange={setAudioOnly}
+            onClose={closeChannelRegistration}
+            onCommit={() => void handleCommit()}
+            onMaxQualityChange={setMaxQuality}
+            onSourceValueChange={setSourceValue}
+            onSubmit={handleProbe}
+            onSubtitlesChange={setSubtitlesEnabled}
+            probe={activeProbe}
+            qualityOptions={qualityOptions}
+            sourceValue={sourceValue}
+            status={registrationStatus}
+            subtitlesEnabled={subtitlesEnabled}
+            t={t}
+          />
         ) : null}
 
         {showChannelWorkspace && registeredChannelId ? (
           <section className="panel channel-detail-panel">
-            <div className="panel-header compact">
-              <div>
-                <p className="panel-kicker">{t("detail.kicker")}</p>
-                <h2>{activeTitle}</h2>
-              </div>
-              <span className="detail-sync-stamp">
-                <Clock3 size={15} />
-                {formatDateLabel(channelDetail?.last_synced_at)}
-              </span>
-            </div>
-            {workflowMessage && !activeProbe ? (
-              <span className={`workflow-message channel-workflow-message ${workflowStatus}`}>{workflowMessage}</span>
-            ) : null}
             {isDemoWorkspace ? (
               <div className="demo-workspace-banner" role="status">
                 <div>
@@ -7820,243 +7303,39 @@ function App() {
                 </button>
               </div>
             ) : null}
-            <section className="channel-backup-guide" aria-label={t("detail.guide.aria")}>
-              <div className="channel-backup-guide-copy">
-                <p>{t("detail.guide.kicker")}</p>
-                <h3>{channelScheduleRemainingCount > 0 ? t("detail.guide.title") : t("detail.guide.completeTitle")}</h3>
-                <span>
-                  {(channelScheduleRemainingCount > 0 ? t("detail.guide.subtitle") : t("detail.guide.completeSubtitle"))
-                    .replace("{remaining}", String(channelScheduleRemainingCount))
-                    .replace("{downloaded}", String(channelScheduleDownloadedCount))}
-                </span>
-              </div>
-              <div className="channel-backup-guide-counts">
-                <article>
-                  <span>{t("detail.automation.totalVideos")}</span>
-                  <strong>{channelScheduleTotalCount}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.downloadedVideos")}</span>
-                  <strong>{channelScheduleDownloadedCount}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.remainingVideos")}</span>
-                  <strong>{channelScheduleRemainingCount}</strong>
-                </article>
-              </div>
-              <div className="channel-backup-guide-actions">
-                <button
-                  className="primary-action"
-                  onClick={() => {
-                    if (channelScheduleRemainingCount > 0) {
-                      scrollToAppSection(".channel-automation-panel");
-                      return;
-                    }
-                    setActiveChannelTab("library");
-                    scrollToAppSection(".channel-tab-rail");
-                  }}
-                  type="button"
-                >
-                  {channelScheduleRemainingCount > 0 ? <TimerReset size={14} /> : <BookOpen size={14} />}
-                  {channelScheduleRemainingCount > 0 ? t("detail.guide.primary") : t("detail.guide.library")}
-                </button>
-                <button
-                  className="command-button"
-                  disabled={workflowStatus === "syncing"}
-                  onClick={() => {
-                    setActiveChannelTab("overview");
-                    void handleManualSync();
-                  }}
-                  type="button"
-                >
-                  <RotateCcw size={14} />
-                  {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.guide.checkAgain")}
-                </button>
-              </div>
-            </section>
-            <details className="channel-quick-actions">
-              <summary>
-                <span>{t("detail.quickActions.title")}</span>
-                <small>{t("detail.quickActions.subtitle")}</small>
-              </summary>
-              <div className="channel-start-flow" aria-label={t("detail.flow.title")}>
-                <article>
-                  <span>{t("detail.flow.check")}</span>
-                  <strong>{simpleFlowStats.seen}</strong>
-                  <small>{formatDateTimeLabel(channelDetail?.last_synced_at, t("detail.syncOps.autoNoRun"))}</small>
-                  <button
-                    disabled={workflowStatus === "syncing"}
-                    onClick={() => {
-                      setActiveChannelTab("overview");
-                      void handleManualSync();
-                    }}
-                    type="button"
-                  >
-                    <RotateCcw size={13} />
-                    {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.flow.check")}
-                  </button>
-                </article>
-                <article>
-                  <span>{t("detail.flow.manualTest")}</span>
-                  <strong>{Math.min(5, Math.max(simpleFlowStats.queued || simpleFlowStats.fresh, 1))}</strong>
-                  <small>
-                    {t("detail.flow.manualHint").replace(
-                      "{limit}",
-                      String(Math.min(5, Math.max(simpleFlowStats.queued || simpleFlowStats.fresh, 1))),
-                    )}
-                  </small>
-                  <button
-                    disabled={liveDownloadStatus === "running" || workflowStatus === "downloading"}
-                    onClick={handleOpenLiveDownloadConfirm}
-                    type="button"
-                  >
-                    <Download size={13} />
-                    {workflowStatus === "downloading" ? t("detail.flow.downloading") : t("detail.flow.manualTest")}
-                  </button>
-                </article>
-              </div>
-            </details>
-            <details className="channel-automation-panel" open>
-              <summary>
-                <div>
-                  <strong>
-                    {t("detail.automation.title")}
-                    <InfoHint label={t("help.scheduler")} />
-                  </strong>
-                  <span>{t("detail.automation.subtitle")}</span>
-                </div>
-                <em>{channelSchedulerSummaryLabel}</em>
-              </summary>
-              <div className="channel-automation-count-grid" aria-label={t("detail.automation.counts")}>
-                <article>
-                  <span>{t("detail.automation.totalVideos")}</span>
-                  <strong>{channelScheduleTotalCount}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.downloadedVideos")}</span>
-                  <strong>{channelScheduleDownloadedCount}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.remainingVideos")}</span>
-                  <strong>{channelScheduleRemainingCount}</strong>
-                </article>
-              </div>
-              <div className={`channel-automation-status-grid ${channelSchedulerEnabled ? "is-on" : "is-off"}`}>
-                <article>
-                  <span>{t("detail.automation.status")}</span>
-                  <strong>{channelSchedulerStatusLabel}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.nextRun")}</span>
-                  <strong>{channelSchedulerNextLabel}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.interval")}</span>
-                  <strong>{t("detail.automation.minutes").replace("{minutes}", String(channelSchedulerDisplayIntervalMinutes))}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.batch")}</span>
-                  <strong>{t("detail.automation.items").replace("{count}", String(channelSchedulerDisplayLimit))}</strong>
-                </article>
-                <article>
-                  <span>{t("detail.automation.lastRun")}</span>
-                  <strong>{channelSchedulerLastLabel}</strong>
-                </article>
-              </div>
-              <div className="channel-automation-grid">
-                <label>
-                  <span>{t("detail.automation.intervalMinutes")}</span>
-                  <input
-                    min={1}
-                    onChange={(event) => {
-                      const minutes = Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1);
-                      setRuntimeDraft((draft) => ({ ...draft, schedulerIntervalSeconds: String(minutes * 60) }));
-                    }}
-                    type="number"
-                    value={channelSchedulerIntervalMinutes}
-                  />
-                </label>
-                <label>
-                  <span>{t("detail.automation.limitPerPass")}</span>
-                  <input
-                    max={20}
-                    min={1}
-                    onChange={(event) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: event.target.value }))}
-                    type="number"
-                    value={runtimeDraft.schedulerLimit}
-                  />
-                </label>
-              </div>
-              <div className="channel-automation-footer">
-                <span>
-                  {channelSchedulerEnabled
-                    ? channelSchedulerDirty
-                      ? t("detail.automation.updateHint")
-                      : channelSchedulerSummary
-                    : channelScheduleComplete
-                      ? t("detail.automation.registerCompleteHint")
-                          .replace("{minutes}", String(channelSchedulerDisplayIntervalMinutes))
-                          .replace("{limit}", String(channelSchedulerDisplayLimit))
-                      : t("detail.automation.registerHint")}
-                </span>
-                {channelSchedulerEnabled ? (
-                  <>
-                    {channelSchedulerDirty ? (
-                      <button
-                        className="primary-action"
-                        disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
-                        onClick={() => void handleUpdateDownloadSchedule()}
-                        type="button"
-                      >
-                        <RotateCcw size={14} />
-                        {runtimeApplyStatus === "applying" ? t("detail.automation.updating") : t("detail.automation.update")}
-                      </button>
-                    ) : null}
-                    <button
-                      className="danger-action"
-                      disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
-                      onClick={() => void handleStopDownloadSchedule()}
-                      type="button"
-                    >
-                      <CirclePause size={14} />
-                      {runtimeApplyStatus === "applying" ? t("detail.automation.stopping") : t("detail.automation.stop")}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      className="primary-action"
-                      disabled={runtimeApplyStatus === "applying" || !runtimeDraftValid}
-                      onClick={() => void handleStartDownloadSchedule()}
-                      type="button"
-                    >
-                      <Rocket size={14} />
-                      {runtimeApplyStatus === "applying" ? t("detail.automation.registering") : t("detail.automation.register")}
-                    </button>
-                    {channelScheduleComplete ? (
-                      <button
-                        className="command-button"
-                        disabled={workflowStatus === "syncing"}
-                        onClick={() => {
-                          setActiveChannelTab("overview");
-                          void handleManualSync();
-                        }}
-                        type="button"
-                      >
-                        <RotateCcw size={14} />
-                        {workflowStatus === "syncing" ? t("detail.flow.checking") : t("detail.guide.checkAgain")}
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </div>
-              {runtimeApplyMessage ? (
-                <div className={`runtime-copy-status ${runtimeApplyStatus === "error" ? "error" : "copied"}`}>
-                  {runtimeApplyMessage}
-                </div>
-              ) : null}
-              {runtimePendingOverrides.length ? <small className="channel-automation-note">{t("detail.automation.restartHint")}</small> : null}
-            </details>
+            <ChannelBackupOverview
+              applying={runtimeApplyStatus === "applying" || workflowStatus === "syncing"}
+              complete={channelScheduleComplete}
+              dirty={channelSchedulerDirty}
+              downloaded={channelScheduleDownloadedCount}
+              handle={activeHandle}
+              initials={activeInitials}
+              intervalMinutes={channelSchedulerIntervalMinutes}
+              lastRun={channelSchedulerLastLabel}
+              limit={runtimeDraftLimitNumber || 5}
+              manualDisabled={liveDownloadStatus === "running" || workflowStatus === "downloading"}
+              nextRun={channelSchedulerNextLabel}
+              onCheckNow={() => void handleManualSync()}
+              onIntervalChange={(minutes) =>
+                setRuntimeDraft((draft) => ({ ...draft, schedulerIntervalSeconds: String(minutes * 60) }))
+              }
+              onLimitChange={(limit) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: String(limit) }))}
+              onManualTest={handleOpenLiveDownloadConfirm}
+              onOpenLibrary={() => {
+                setActiveChannelTab("library");
+                window.setTimeout(() => scrollToAppSection(".channel-tab-rail"), 0);
+              }}
+              onStart={() => void handleStartDownloadSchedule()}
+              onStop={() => void handleStopDownloadSchedule()}
+              onUpdate={() => void handleUpdateDownloadSchedule()}
+              remaining={channelScheduleRemainingCount}
+              schedulerEnabled={channelSchedulerEnabled}
+              schedulerRunning={Boolean(schedulerStatus?.running)}
+              statusMessage={runtimeApplyMessage || workflowMessage}
+              t={t}
+              title={activeTitle}
+              total={channelScheduleTotalCount}
+            />
             <div className="channel-tab-rail" aria-label={t("detail.tabs.aria")}>
               {channelDetailTabs.map((tab) => {
                 const TabIcon = tab.icon;
@@ -9673,7 +8952,7 @@ function App() {
                   <strong>{registeredChannelId ? activeTitle : t("archiveTxt.path.noSource")}</strong>
                   <button
                     onClick={() => {
-                      openChannelWorkspace("overview", ".registration-panel");
+                      openChannelWorkspace("overview", ".channel-registration-panel");
                     }}
                     type="button"
                   >
@@ -10661,7 +9940,7 @@ function App() {
             {workerPlan?.locked_reason ? (
               <code className="worker-lock">{workerPlan.locked_reason}</code>
             ) : workerPlan && !workerPlan.enabled ? (
-              <code className="worker-lock">{t("firstBackup.engine.disabled")}</code>
+              <code className="worker-lock">{t("worker.liveEngineDisabled")}</code>
             ) : null}
             <div className="download-confirm-actions">
               <button className="command-button" onClick={() => setLiveDownloadConfirmOpen(false)} type="button">
@@ -10670,7 +9949,7 @@ function App() {
               {liveDownloadEngineBlocked ? (
                 <button className="command-button" onClick={handleOpenDownloadSettings} type="button">
                   <Settings size={14} />
-                  {t("firstBackup.openSettings")}
+                  {t("worker.openDownloadSettings")}
                 </button>
               ) : null}
               <button
@@ -11922,7 +11201,7 @@ function App() {
                   <input
                     min={1}
                     onChange={(event) => void handleSchedulerNumericFilter("limit", event.target.value)}
-                    placeholder={String(runtimeSettings?.download_worker_scheduler_limit ?? 1)}
+                    placeholder={String(runtimeSettings?.download_worker_scheduler_limit ?? 5)}
                     type="number"
                     value={schedulerLimitFilter}
                   />
@@ -14019,7 +13298,7 @@ function defaultRuntimeDraft(): RuntimeDraft {
     downloadWorkerEnabled: false,
     schedulerEnabled: false,
     schedulerIntervalSeconds: "300",
-    schedulerLimit: "1",
+    schedulerLimit: "5",
     metadataSchedulerEnabled: false,
     metadataSchedulerIntervalSeconds: "900",
     metadataSchedulerLimit: "2",

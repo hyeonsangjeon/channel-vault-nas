@@ -4,6 +4,45 @@ All notable changes to Channel Vault NAS will be tracked here.
 
 The project is in active alpha. Dates use Korea Standard Time.
 
+## Unreleased
+
+### Added
+
+- Release-only `compose.release.yml`: published Docker Hub images start without
+  cloning or building the repository, and only the web port is exposed.
+- Migration guide for reconciling existing NAS media and `archive.txt` before
+  automatic backup begins.
+- Workflow comparison guide for choosing between Channel Vault NAS and other
+  self-hosted archivers.
+- Mobile bottom navigation for direct access to all six workspaces.
+- Korean repository README, a public NAS compatibility matrix/discussion, and a
+  hardware-report good-first-issue for community verification.
+
+### Changed
+
+- Replaced the multi-panel channel workbench with one registration path
+  (**Preview → Register channel**) and one automatic-backup card.
+- Channel backup now shows Total / Downloaded / Remaining once, then interval,
+  per-run count, Start/Save/Pause, and advanced manual testing in that order.
+- New installs claim 5 videos per scheduler pass by default instead of 1; the
+  value remains configurable from 1 to 20.
+- README, GitHub Pages, Docker Hub copy, public screenshots, and demo recording
+  now lead with existing-archive reuse and disk-first recovery.
+- Dashboard now keeps only the archive score and three-step path (source,
+  automatic backup, library); repeated runtime/storage/queue cards moved out of
+  the first impression.
+- README demo focuses on the missing-only backup decision, channel registration,
+  existing archive import, and the indexed library instead of touring every
+  operator screen.
+
+### Fixed
+
+- Mobile layouts no longer render the full desktop sidebar above the channel
+  workflow.
+- Starting automatic backup is covered end-to-end: only missing candidates are
+  queued, scheduler settings hot-apply, and channel registration alone never
+  starts a download.
+
 ## 0.1.0-alpha.2 - 2026-07-06
 
 Simplified-UX refresh focused on star-ready first impressions: a set-and-forget

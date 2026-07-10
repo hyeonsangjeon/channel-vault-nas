@@ -48,14 +48,36 @@ test("capture public screenshots", async ({ page }) => {
   const cockpit = page.getByLabel("Dashboard overview");
   await expect(cockpit).toBeVisible();
   await expect(page.getByText("Today’s archive status.")).toBeVisible();
+  await expect(page.locator(".launch-runway-step")).toHaveCount(3);
+  await expect(page.locator(".cockpit-route-grid")).toHaveCount(0);
   await capture(page, "dashboard-cockpit.png");
 
-  await page.goto("/#/channels/downloads?channel=1");
+  await page.locator(".launch-runway-step").first().getByRole("button", { name: "Open source" }).click();
+  await expect(page.locator(".channel-registration-panel")).toHaveCount(0);
+  await expect(page.locator(".channel-backup-overview")).toBeVisible();
   const channelTabs = page.getByLabel("Channel detail tabs");
-  await expect(channelTabs.getByRole("button", { name: "Downloads" })).toHaveClass(/active/);
-  await expect(page.getByText("Preview the download batch")).toBeVisible();
-  await expect(page.getByLabel("Queue radar")).toBeVisible();
+  await expect(channelTabs.getByRole("button", { name: "Overview" })).toHaveClass(/active/);
+  const backupOverview = page.locator(".channel-backup-overview");
+  await expect(backupOverview).toBeVisible();
+  await expect(backupOverview).toContainText("Total videos");
+  await expect(backupOverview).toContainText("Downloaded");
+  await expect(backupOverview).toContainText("Remaining");
+  await expect(backupOverview.getByRole("button", { name: /automatic backup/i })).toBeVisible();
   await capture(page, "channel-downloads.png");
+
+  await page.getByRole("button", { name: "Add channel" }).click();
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await expect(registrationPanel).toBeVisible();
+  await expect(registrationPanel.getByRole("heading", { name: "Add another channel" })).toBeVisible();
+  await capture(page, "channel-registration.png");
+  await registrationPanel.locator(".icon-button").click();
+
+  const importKit = page.locator(".quick-panel");
+  await expect(importKit).toBeVisible();
+  await importKit.scrollIntoViewIfNeeded();
+  await expect(importKit).toContainText("Import kit");
+  await expect(importKit).toContainText("Existing NAS folder");
+  await importKit.screenshot({ path: resolve(screenshotDir, "existing-archive-import.png") });
 
   await page.goto("/#/queue?channel=1");
   const queueConsole = page.getByLabel("Download queue").first();

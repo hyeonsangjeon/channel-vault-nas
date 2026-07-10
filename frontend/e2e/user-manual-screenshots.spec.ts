@@ -90,15 +90,18 @@ test("capture user-manual screenshots", async ({ page }) => {
   await expect(page.getByLabel(t("detail.tabs.aria")).getByRole("button", { name: t("detail.tabs.overview") })).toHaveClass(/active/);
   await capture(page, "02-channel-overview.png");
 
-  await openEnglishVault(page, "/#/channels/downloads?channel=1", t("launch.title"));
-  await expect(page.getByLabel(t("launch.signal.title"))).toBeVisible();
+  await page.getByRole("button", { name: t("channel.switcher.add") }).click();
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await expect(registrationPanel).toBeVisible();
+  await expect(page.getByRole("heading", { name: t("registration.addAnother") })).toBeVisible();
   await capture(page, "03-download-launch-control.png");
 
-  const schedulePanel = page.locator(".channel-automation-panel");
-  await schedulePanel.scrollIntoViewIfNeeded();
-  await expect(page.getByText(t("detail.automation.title")).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: t("detail.automation.register") })).toBeVisible();
-  await schedulePanel.screenshot({
+  await registrationPanel.locator(".icon-button").click();
+  const backupOverview = page.locator(".channel-backup-overview");
+  await backupOverview.scrollIntoViewIfNeeded();
+  await expect(backupOverview).toBeVisible();
+  await expect(backupOverview.getByRole("button", { name: new RegExp(t("detail.simple.start"), "i") })).toBeVisible();
+  await backupOverview.screenshot({
     animations: "disabled",
     path: resolve(screenshotDir, "04-download-confirm-modal.png"),
   });

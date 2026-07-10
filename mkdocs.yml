@@ -1,8 +1,9 @@
 site_name: Channel Vault NAS
 site_url: https://hyeonsangjeon.github.io/channel-vault-nas/
 site_description: >-
-  Self-hosted NAS console that archives your own YouTube channels with yt-dlp.
-  Install guide and screen-by-screen usage manual.
+  Back up YouTube channels to Synology, QNAP, or any Docker NAS. Reuse
+  archive.txt and existing media, download only what is missing, and recover
+  the index from disk.
 site_author: Hyeon Sang Jeon
 copyright: Copyright &copy; 2026 Hyeon Sang Jeon
 
@@ -74,17 +75,20 @@ plugins:
             Overview: 개요
             Docker: Docker
             NAS (Synology / QNAP): NAS (Synology / QNAP)
+            Compatibility: 호환성
             Local development: 로컬 개발
             Access token: 액세스 토큰
             Usage: 사용법
-            First backup: 첫 백업
+            Channel backup: 채널 백업 시작
             Enable real downloads: 실제 다운로드 켜기
             Product tour: 화면 둘러보기
             archive.txt import: archive.txt 가져오기
+            Bring an existing archive: 기존 아카이브 가져오기
             Reference: 레퍼런스
             Runtime flags: 런타임 플래그
             Filesystem contract: 파일시스템 규칙
             About: 소개
+            Is it for me?: 나에게 맞을까요?
 
 markdown_extensions:
   - abbr
@@ -136,6 +140,7 @@ exclude_docs: |
   nas-install.md
   product-brief.en.md
   product-brief.md
+  public-launch-posts.md
   public-alpha-demo.md
   roadmap.md
   storage-recovery.md
@@ -148,16 +153,20 @@ nav:
       - Overview: install/index.md
       - Docker: install/docker.md
       - NAS (Synology / QNAP): install/nas.md
+      - Compatibility: install/compatibility.md
       - Local development: install/local-dev.md
       - Access token: install/access-token.md
   - Usage:
       - Overview: usage/index.md
-      - First backup: usage/first-backup.md
+      - Channel backup: usage/first-backup.md
       - Enable real downloads: usage/enable-downloads.md
       - Product tour: usage/product-tour.md
       - archive.txt import: usage/archive-txt.md
+      - Bring an existing archive: usage/migrate-existing-archive.md
   - Reference:
       - Overview: reference/index.md
       - Runtime flags: reference/runtime-flags.md
       - Filesystem contract: reference/filesystem.md
-  - About: about/index.md
+  - About:
+      - Overview: about/index.md
+      - Is it for me?: about/comparison.md

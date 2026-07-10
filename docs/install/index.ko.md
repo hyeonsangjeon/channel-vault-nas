@@ -18,7 +18,7 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
     ---
 
     Container Manager / Container Station, 분리된 호스트 폴더, 리버스 프록시,
-    선택적 인앱 재시작 어댑터.
+    공개 호환성 리포트 스레드를 안내합니다.
 
     [:octicons-arrow-right-24: NAS 설치](nas.md)
 
@@ -37,7 +37,7 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
 === "Docker / NAS"
 
     - Compose 플러그인이 포함된 Docker (`docker compose`)
-    - 이미지용 약 250 MB, 그리고 아카이브용 디스크 공간
+    - 이미지용 약 300 MB, 그리고 아카이브용 디스크 공간
 
 === "로컬 개발"
 
@@ -62,12 +62,16 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
     서로 다른 호스트 폴더**에 두어 각각 독립적으로 백업할 수 있게 하세요.
     [NAS 설치](nas.md#before-you-start)를 참고하세요.
 
+    검증된 아키텍처와 커뮤니티 테스트 장비는 [호환성과 실제 NAS
+    리포트](compatibility.md)에서 확인하세요.
+
 ## 설치 후
 
 1. 웹 콘솔을 `http://127.0.0.1:5173/` 에서 엽니다.
-2. [첫 채널 백업](../usage/first-backup.md)을 따라 첫 채널을 아카이브합니다.
-3. 실제 다운로드는 자동 다운로드 스케줄을 시작(그때 [워커가 켜집니다](../usage/enable-downloads.md))
-   하거나 고급 수동 테스트를 실행하기 전까지 꺼져 있습니다.
+2. [채널 백업 시작](../usage/first-backup.md)을 따라 첫 채널을 아카이브합니다.
+3. 실제 다운로드는 **자동 백업 시작**을 누르거나(그때 [워커가
+   켜집니다](../usage/enable-downloads.md)) 고급 수동 테스트를 실행하기 전까지
+   꺼져 있습니다.
 
 !!! question "`{\"detail\":\"Not Found\"}` 만 보이나요?"
     **웹** 콘솔 대신 원시 **API** 포트를 연 것입니다. 웹 포트(`CVN_WEB_PORT`,

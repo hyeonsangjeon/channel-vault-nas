@@ -7,7 +7,7 @@ Channel Vault NAS에는 원본에서 검증된 미디어까지 이어지는 하�
 flowchart LR
   A[채널 등록] --> B[미리보기와 등록]
   B --> C[남은 영상 검토]
-  C --> D[자동 다운로드 스케줄 등록]
+  C --> D[자동 백업 시작]
   D --> E[라이브러리에서 검증]
 ```
 
@@ -20,14 +20,14 @@ flowchart LR
 
 <div class="grid cards" markdown>
 
--   :material-play-box:{ .lg .middle } __첫 백업__
+-   :material-play-box:{ .lg .middle } __채널 백업 시작__
 
     ---
 
-    클릭 단위 안내: 채널을 붙여넣고, 미리 보고, 등록한 뒤, 남은 영상을 자동으로
-    보관하는 자동 다운로드 스케줄을 등록합니다.
+    클릭 단위 안내: 채널을 붙여넣고 미리 보고 등록한 뒤, 간격과 한 번에 받을
+    개수를 고르고 자동 백업을 시작합니다.
 
-    [:octicons-arrow-right-24: 첫 백업](first-backup.md)
+    [:octicons-arrow-right-24: 채널 백업 시작](first-backup.md)
 
 -   :material-download-lock:{ .lg .middle } __실제 다운로드 켜기__
 
@@ -56,6 +56,15 @@ flowchart LR
 
     [:octicons-arrow-right-24: archive.txt 가져오기](archive-txt.md)
 
+-   :material-folder-sync:{ .lg .middle } __기존 아카이브 가져오기__
+
+    ---
+
+    다운로드 전에 NAS 폴더와 `archive.txt`를 대조해서 기존 미디어를 색인하고
+    건너뜁니다.
+
+    [:octicons-arrow-right-24: 가져오기 가이드](migrate-existing-archive.md)
+
 </div>
 
 ## 내비게이션 지도
@@ -63,7 +72,7 @@ flowchart LR
 | 탭 | 용도 |
 | --- | --- |
 | **Dashboard** | 아카이브 개요와 다음에 할 유용한 작업. 깊은 제어는 없음. |
-| **Channels** | 시작점: 채널 등록(미리보기 → 채널 등록), 남은 영상 검토, 자동 다운로드 스케줄 등록. |
+| **채널** | 시작점: 미리보기 → 채널 등록, 남은 영상 검토, 자동 백업 시작. |
 | **Queue** | 모든 후보, 대기, 실행 중, 완료, 실패, 취소된 작업. 이미 보관된 영상의 과거 실패는 현재 작업에서 숨깁니다. |
 | **Library** | 아카이브된 영상과 누락 영상을 코덱/사이드카/경로 무결성과 함께 한 화면에. |
 | **Insights** | 실제 아카이브 루트에서 읽은 스토리지 압박, 폴더 구조, 드리프트, 고아 사이드카. |
@@ -73,5 +82,5 @@ flowchart LR
     대시보드의 보조 **Safe demo and advanced import options** 패널을 펼쳐
     결정론적 `Signal Lab` 픽스처를 로드하세요 — 외부 호출도, 다운로드도
     없습니다. 첫 둘러보기에 좋습니다.
-    [첫 백업 → Safe demo](first-backup.md#optional-explore-with-the-safe-demo)
+    [채널 백업 시작 → Safe demo](first-backup.md#optional-explore-with-the-safe-demo)
     참고.

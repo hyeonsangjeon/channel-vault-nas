@@ -1,8 +1,14 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Questions and ideas
+    url: https://github.com/hyeonsangjeon/channel-vault-nas/discussions
+    about: Ask for help, show your NAS setup, or discuss an archive workflow before opening an issue.
   - name: Use boundaries
     url: https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/use-boundaries.md
     about: Read the archive-use boundaries before requesting downloader behavior.
   - name: Public alpha demo runbook
     url: https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/public-alpha-demo.md
     about: Follow the safe demo and release-candidate check path.
+  - name: Installation and first backup guide
+    url: https://hyeonsangjeon.github.io/channel-vault-nas/install/
+    about: Start with the two-container Compose install and first channel backup.

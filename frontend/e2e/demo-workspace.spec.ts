@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.skip(process.env.CVN_E2E_SKIP_SEED !== "true", "Set CVN_E2E_SKIP_SEED=true to test the empty first-run demo flow.");
 
-test("empty first run leads with the first backup wizard and can still load the safe demo workspace", async ({ page }) => {
+test("empty first run leads with simple demo and channel-registration choices", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "ko");
     localStorage.removeItem("cvn.authToken");
@@ -10,12 +10,11 @@ test("empty first run leads with the first backup wizard and can still load the 
 
   await page.goto("/");
 
-  const firstRun = page.getByLabel("첫 채널 백업");
+  const firstRun = page.getByLabel("첫 소스 빈 상태");
   await expect(firstRun).toBeVisible();
-  await expect(firstRun).toContainText("첫 채널 백업 시작");
-  await expect(firstRun).toContainText("채널 분석");
-  await expect(firstRun).toContainText("마지막 확인 창에서 승인하기 전에는 아무것도 다운로드하지 않습니다");
-  await expect(firstRun).toContainText("안전 데모와 고급 가져오기 옵션");
+  await expect(firstRun).toContainText("10초 안에 전체 NAS 콘솔을 먼저 보세요");
+  await expect(firstRun.getByRole("button", { name: "안전 데모 불러오기" })).toBeVisible();
+  await expect(firstRun.getByRole("button", { name: "내 채널 추가" })).toBeVisible();
   await expect(firstRun).toContainText("운영 점검");
   await expect(firstRun.getByLabel("클린 설치 점검")).toHaveCount(0);
 
@@ -41,7 +40,7 @@ test("empty first run leads with the first backup wizard and can still load the 
   await page.getByRole("button", { name: "데모 제거" }).click();
 
   await expect(page.getByText(/Signal Lab 데모를 정리했습니다/)).toBeVisible();
-  const resetFirstRun = page.getByLabel("첫 채널 백업");
+  const resetFirstRun = page.getByLabel("첫 소스 빈 상태");
   await expect(resetFirstRun).toBeVisible();
-  await expect(resetFirstRun).toContainText("첫 채널 백업 시작");
+  await expect(resetFirstRun).toContainText("10초 안에 전체 NAS 콘솔을 먼저 보세요");
 });

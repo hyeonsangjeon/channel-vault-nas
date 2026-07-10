@@ -61,18 +61,18 @@
       "route": "firstrun",
       "min": 22,
       "caption": {
-        "en": "Step 2 — Start your first channel backup: paste your channel URL or @handle, then click Analyze channel",
-        "ko": "2단계 — 첫 채널 백업 시작: 채널 주소나 @핸들을 붙여넣고 “Analyze channel”을 누르세요",
-        "ja": "ステップ2 — 最初のチャンネルバックアップ: URL か @ハンドルを貼り付け、“Analyze channel” を押す",
-        "zh": "第 2 步 — 开始首次频道备份：粘贴频道网址或 @用户名，然后点击 “Analyze channel”",
-        "hi": "चरण 2 — पहला channel backup शुरू करें: चैनल URL या @handle पेस्ट करें, फिर “Analyze channel” दबाएँ"
+        "en": "Step 2 — Add your channel: paste a URL or @handle, then click Preview",
+        "ko": "2단계 — 채널 등록: 채널 주소나 @핸들을 붙여넣고 “미리보기”를 누르세요",
+        "ja": "ステップ2 — チャンネル登録: URL か @ハンドルを貼り付け、“Preview” を押す",
+        "zh": "第 2 步 — 添加频道：粘贴频道网址或 @用户名，然后点击 Preview",
+        "hi": "चरण 2 — अपना channel जोड़ें: URL या @handle paste करें, फिर Preview दबाएँ"
       },
       "narration": {
-        "en": "On the first run, the console opens the first backup wizard. Paste your own channel — a URL, an at-handle, or a UC channel ID — then click Analyze channel. Nothing downloads yet; Channel Vault only inspects the source. A safe demo is tucked below if you would rather explore with sample data first.",
-        "ko": "처음 실행하면 콘솔이 첫 백업 위저드를 열어요. 내 채널을 붙여넣으세요. 주소나 @핸들, 또는 UC 채널 아이디면 돼요. 그리고 Analyze channel 을 누르세요. 아직 아무것도 다운로드되지 않고, 소스만 확인해요. 샘플로 먼저 둘러보고 싶으면 아래에 안전한 데모가 숨어 있어요.",
-        "ja": "初回起動では、コンソールが最初のバックアップウィザードを開きます。自分のチャンネルを貼り付けます。URL でも、@ハンドルでも、UC チャンネル ID でも構いません。そして Analyze channel を押します。まだ何もダウンロードされず、ソースを確認するだけです。まずサンプルで試したい場合は、下に安全なデモがあります。",
-        "zh": "首次运行时，控制台会打开首次备份向导。粘贴你自己的频道——网址、@用户名，或 UC 频道 ID 都可以，然后点击 Analyze channel。此时不会下载任何东西，Channel Vault 只是检查来源。如果你想先用示例数据体验，下方还藏着一个安全演示。",
-        "hi": "पहली बार चलाने पर, console, first backup wizard खोलता है। अपना चैनल पेस्ट करें — URL, @handle, या UC channel ID। फिर Analyze channel दबाएँ। अभी कुछ भी download नहीं होता; Channel Vault सिर्फ़ source की जाँच करता है। अगर आप पहले sample data के साथ देखना चाहें, तो नीचे एक safe demo भी छिपा है।"
+        "en": "On the first run, keep it simple: load the safe demo or add your own channel. When you add a channel, paste a URL, an at-handle, or a UC channel ID, then click Preview. Nothing downloads yet; Channel Vault only checks the source and shows what it found.",
+        "ko": "처음 실행하면 선택지는 단순합니다. 안전 데모를 보거나 내 채널을 추가하세요. 채널을 추가할 때는 주소, @핸들, UC 채널 ID 중 하나를 붙여넣고 미리보기를 누르면 됩니다. 아직 아무것도 다운로드하지 않고, 소스와 찾은 영상만 보여줍니다.",
+        "ja": "初回起動ではシンプルです。安全 demo を読み込むか、自分のチャンネルを追加します。追加するときは URL、@ハンドル、UC チャンネル ID のどれかを貼り付け、Preview を押します。まだ何もダウンロードせず、ソースと見つかった動画だけを確認します。",
+        "zh": "首次运行时很简单：加载安全演示，或添加你自己的频道。添加频道时，粘贴网址、@用户名或 UC 频道 ID，然后点击 Preview。此时不会下载任何内容，只会检查来源并显示找到的视频。",
+        "hi": "पहली बार flow simple है: safe demo load करें या अपना channel जोड़ें. Channel जोड़ते समय URL, @handle, या UC channel ID paste करें और Preview दबाएँ. अभी कुछ download नहीं होता; Channel Vault सिर्फ source check करके मिले videos दिखाता है."
       }
     },
     {
@@ -80,18 +80,18 @@
       "route": "overview",
       "min": 26,
       "caption": {
-        "en": "Channel Vault shows the full plan first — videos to back up, estimated storage, save folder, and a safety check",
-        "ko": "Channel Vault가 전체 계획을 먼저 보여줘요 — 백업할 영상, 예상 용량, 저장 폴더, 안전 확인",
-        "ja": "Channel Vault はまず全体プランを表示 — 保存する動画、推定容量、保存フォルダ、安全確認",
-        "zh": "Channel Vault 先展示完整计划 — 待备份视频、预计存储、保存文件夹和安全检查",
-        "hi": "Channel Vault पहले पूरी plan दिखाता है — backup होने वाले videos, अनुमानित storage, save folder, और safety check"
+        "en": "Preview confirms the channel, video count, estimated storage, archive folder, and sample videos",
+        "ko": "미리보기에서 채널, 영상 개수, 예상 용량, 보관 폴더, 샘플 영상을 먼저 확인합니다",
+        "ja": "Preview でチャンネル、動画数、推定容量、保存フォルダ、サンプル動画を確認します",
+        "zh": "Preview 会先确认频道、视频数量、预计容量、归档文件夹和示例视频",
+        "hi": "Preview पहले channel, video count, estimated storage, archive folder, और sample videos दिखाता है"
       },
       "narration": {
-        "en": "Before anything downloads, the wizard lays out the whole plan: how many videos it found, how much storage they will need, the exact save folder, and a safety check. You can review every video in the preview list, so there are no surprises.",
-        "ko": "다운로드 전에 위저드가 전체 계획을 펼쳐 보여줘요. 찾은 영상 수, 필요한 저장 용량, 정확한 저장 폴더, 그리고 안전 확인이에요. 미리보기 목록에서 모든 영상을 확인할 수 있어서 놀랄 일이 없어요.",
-        "ja": "ダウンロードの前に、ウィザードが全体プランを示します。見つかった動画数、必要な容量、正確な保存フォルダ、そして安全確認です。プレビュー一覧で各動画を確認できるので、驚くことはありません。",
-        "zh": "在下载之前，向导会展开完整计划：找到多少视频、需要多少存储、确切的保存文件夹，以及一次安全检查。你可以在预览列表中逐一查看每个视频，不会有意外。",
-        "hi": "कुछ भी download होने से पहले, wizard पूरी plan दिखाता है: कितने videos मिले, कितना storage चाहिए, सटीक save folder, और एक safety check। आप preview list में हर video देख सकते हैं, इसलिए कोई surprise नहीं होता।"
+        "en": "Before registration, Channel Vault shows the basics that matter: the resolved channel, how many videos it sees, the storage estimate, the folder path, and a few sample videos. It is still only a preview, so there are no surprise downloads.",
+        "ko": "등록 전에는 꼭 필요한 것만 먼저 보여줍니다. 해석된 채널, 찾은 영상 수, 예상 용량, 폴더 경로, 샘플 영상 몇 개입니다. 이 단계는 여전히 미리보기라서 갑자기 다운로드가 시작되지 않습니다.",
+        "ja": "登録前に必要な情報だけを確認します。解決されたチャンネル、見つかった動画数、容量見積もり、フォルダパス、サンプル動画です。まだ Preview なので、予期しない download は起きません。",
+        "zh": "注册前只显示关键内容：解析后的频道、找到的视频数量、容量估算、文件夹路径和几个示例视频。这仍然只是 Preview，不会突然开始下载。",
+        "hi": "Registration से पहले ज़रूरी बातें दिखती हैं: resolved channel, video count, storage estimate, folder path, और sample videos. यह अभी भी सिर्फ Preview है, इसलिए अचानक download शुरू नहीं होता."
       }
     },
     {
@@ -99,18 +99,18 @@
       "route": "register",
       "min": 40,
       "caption": {
-        "en": "Step 3 — Click Start first backup. A confirmation dialog opens — nothing downloads until you press Start up to 5",
-        "ko": "3단계 — Start first backup 을 누르면 확인 창이 떠요. Start up to 5 를 누르기 전엔 아무것도 다운로드되지 않아요",
-        "ja": "ステップ3 — Start first backup を押すと確認ダイアログが開く。Start up to 5 を押すまで何もダウンロードされません",
-        "zh": "第 3 步 — 点击 Start first backup，弹出确认对话框 — 在你按下 Start up to 5 之前不会下载任何东西",
-        "hi": "चरण 3 — Start first backup दबाएँ। एक confirmation dialog खुलता है — जब तक आप Start up to 5 न दबाएँ, कुछ भी download नहीं होता"
+        "en": "Step 3 — Click Register channel, then use the automatic download schedule for the real backup",
+        "ko": "3단계 — 채널 등록을 누른 뒤, 실제 백업은 자동 다운로드 스케줄에서 시작합니다",
+        "ja": "ステップ3 — Register channel を押し、実際のバックアップは automatic download schedule から始めます",
+        "zh": "第 3 步 — 点击 Register channel，然后用自动下载计划开始真正备份",
+        "hi": "चरण 3 — Register channel दबाएँ, फिर real backup automatic download schedule से शुरू करें"
       },
       "narration": {
-        "en": "When the plan looks right, click Start first backup. Channel Vault registers the channel and opens a confirmation dialog. This is the guardrail: the worker stays off until you arm it, and each pass downloads at most five videos. Real transfers begin only when you press Start up to five, so you are always in control.",
-        "ko": "계획이 괜찮으면 Start first backup 을 누르세요. Channel Vault가 채널을 등록하고 확인 창을 열어요. 이게 안전장치예요. 워커는 여러분이 켜기 전까진 꺼져 있고, 한 번에 최대 다섯 개만 다운로드해요. 실제 다운로드는 Start up to five 를 눌러야 시작되니, 항상 여러분이 주도권을 쥐고 있어요.",
-        "ja": "プランで良ければ Start first backup を押します。Channel Vault がチャンネルを登録し、確認ダイアログを開きます。これが安全装置です。ワーカーはあなたが有効にするまでオフのままで、一回のパスで最大五本だけダウンロードします。実際の転送は Start up to five を押したときにだけ始まるので、常にあなたが主導権を握っています。",
-        "zh": "计划无误后，点击 Start first backup。Channel Vault 会注册频道并打开确认对话框。这就是安全阀：工作器在你启用之前始终关闭，每一轮最多只下载五个视频。只有当你按下 Start up to five 时，真正的传输才会开始，主动权始终在你手中。",
-        "hi": "जब plan सही लगे, Start first backup दबाएँ। Channel Vault चैनल register करता है और एक confirmation dialog खोलता है। यही guardrail है: worker तब तक बंद रहता है जब तक आप उसे चालू न करें, और हर pass में ज़्यादा से ज़्यादा पाँच videos download होते हैं। असली download तभी शुरू होता है जब आप Start up to five दबाते हैं, इसलिए नियंत्रण हमेशा आपके हाथ में रहता है।"
+        "en": "When the preview looks right, click Register channel. The channel detail opens with a clear schedule panel: total videos, downloaded, remaining, interval, and downloads per pass. Real transfers start from that schedule, while the manual one-pass button stays available only as an advanced test.",
+        "ko": "미리보기가 맞으면 채널 등록을 누릅니다. 그러면 채널 상세가 열리고 총 영상, 다운받음, 남은 영상, 실행 간격, 한 번에 받을 개수가 보이는 스케줄 패널이 나옵니다. 실제 전송은 이 스케줄에서 시작하고, 수동 1회 실행은 고급 테스트로만 남겨둡니다.",
+        "ja": "Preview が正しければ Register channel を押します。チャンネル詳細では、総動画数、ダウンロード済み、残り、実行間隔、1回あたりの件数が見える schedule panel が開きます。実際の転送はこの schedule から始め、manual one-pass は高度なテストとして残します。",
+        "zh": "Preview 没问题后，点击 Register channel。频道详情会打开清晰的计划面板：总视频、已下载、剩余、间隔和每轮下载数量。真正传输从这个计划开始，手动单次按钮只作为高级测试保留。",
+        "hi": "Preview सही लगे तो Register channel दबाएँ. Channel detail में साफ schedule panel खुलता है: total videos, downloaded, remaining, interval, और downloads per pass. असली transfer उसी schedule से शुरू होता है; manual one-pass सिर्फ advanced test रहता है."
       }
     },
     {
