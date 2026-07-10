@@ -41,6 +41,9 @@ jobs:
       - name: Build site (strict)
         run: mkdocs build --strict
 
+      - name: Verify public search metadata
+        run: scripts/check-docs-site.sh site
+
       - name: Configure Pages
         uses: actions/configure-pages@v6
 

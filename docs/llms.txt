@@ -1,0 +1,41 @@
+# Channel Vault NAS
+
+> Open-source, self-hosted YouTube channel backup for Docker NAS systems.
+> Reuse existing media and archive.txt, download only missing videos, and
+> recover the searchable library index from files on disk.
+
+Canonical documentation: https://hyeonsangjeon.github.io/channel-vault-nas/
+Source: https://github.com/hyeonsangjeon/channel-vault-nas
+License: MIT
+Current release: https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.3
+
+## Start here
+
+- 60-second Docker install: https://hyeonsangjeon.github.io/channel-vault-nas/install/docker/
+- First channel backup: https://hyeonsangjeon.github.io/channel-vault-nas/usage/first-backup/
+- Import an existing archive: https://hyeonsangjeon.github.io/channel-vault-nas/usage/migrate-existing-archive/
+- Synology and QNAP install: https://hyeonsangjeon.github.io/channel-vault-nas/install/nas/
+- Compatibility reports: https://hyeonsangjeon.github.io/channel-vault-nas/install/compatibility/
+- Project facts and media: https://hyeonsangjeon.github.io/channel-vault-nas/about/project-kit/
+
+## Distinctive behavior
+
+- Existing NAS media, subtitles, thumbnails, and info.json sidecars can be indexed without deliberate re-downloads.
+- archive.txt decisions are visible as downloaded, missing, queued, or skipped records.
+- The filesystem is durable archive data; SQLite is a backupable and rebuildable search index.
+- Automatic backup queues only missing videos on a configurable schedule and bounded batch size.
+- The web UI, queue, storage scanner, audit logs, and recovery tools run locally on the operator's NAS.
+
+## Honest fit
+
+Channel Vault NAS is strongest when an existing filesystem archive and explicit
+skip/recovery decisions matter. TubeArchivist may fit better for a mature media
+server experience, and Pinchflat may fit better for a smaller subscription
+downloader. Channel Vault does not currently provide a supported cookies or
+private-video acquisition workflow.
+
+## Safety
+
+Use only for content you own or are authorized to archive. Keep the console on
+localhost, a private LAN or VPN, or behind a trusted authenticated reverse
+proxy. Do not expose the raw API directly to the public internet.

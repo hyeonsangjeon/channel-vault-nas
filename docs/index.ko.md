@@ -1,5 +1,5 @@
 ---
-title: Channel Vault NAS
+title: NAS용 YouTube 채널 백업
 description: >-
   YouTube 채널을 Docker NAS에 백업합니다. archive.txt와 기존 미디어를
   재사용하고 없는 영상만 다운로드하며 디스크에서 색인을 복구합니다.
@@ -15,6 +15,7 @@ hide:
 
 [60초 만에 설치 :material-rocket-launch:](install/index.md){ .md-button .md-button--primary }
 [기존 아카이브 가져오기 :material-folder-sync:](usage/migrate-existing-archive.md){ .md-button }
+[GitHub에서 소스 보기 :fontawesome-brands-github:](https://github.com/hyeonsangjeon/channel-vault-nas){ .md-button }
 
 ---
 
@@ -85,6 +86,14 @@ Channel Vault NAS는 NAS 운영자의 질문에 답합니다.
 
 파일시스템이 영구 아카이브로 남고 SQLite는 그 위의 색인입니다. 기존 NAS 폴더를
 다시 스캔하면 파일을 하나도 옮기지 않고 색인됩니다.
+
+### 모든 다운로더를 대신하려는 앱은 아닙니다
+
+성숙한 미디어 서버 경험이 가장 중요하면 TubeArchivist, 단순한 구독 다운로드가
+중요하면 Pinchflat, 기존 NAS 아카이브와 건너뜀 판단, 디스크 복구가 중요하면
+Channel Vault가 잘 맞습니다.
+
+[워크플로 솔직하게 비교하기 :material-compare:](about/comparison.md){ .md-button }
 
 !!! warning "셀프 호스팅 가드레일"
     이 셀프 호스팅 릴리스는 localhost, 사설 LAN, VPN, 또는 신뢰할 수 있는

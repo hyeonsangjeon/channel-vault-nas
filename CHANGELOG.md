@@ -6,6 +6,18 @@ The project is in active alpha. Dates use Korea Standard Time.
 
 ## Unreleased
 
+### Changed
+
+- GitHub Pages now publishes search-focused English/Korean titles, Open Graph
+  and large social-card metadata, structured software data, `robots.txt`, a
+  sitemap verification gate, and an `llms.txt` product summary.
+- Replaced the stale illustrated social card with a reproducible 1280x640 image
+  built from the current missing-only automatic-backup screen.
+- The documentation homepage now links directly to GitHub and explains where
+  Channel Vault fits beside TubeArchivist and Pinchflat.
+- Added an English/Korean project-facts and media page with verified directory
+  copy, current assets, deployment facts, differentiators, and limitations.
+
 ## 0.1.0-alpha.3 - 2026-07-10
 
 The first-backup release: one preview-and-register path, one automatic-backup

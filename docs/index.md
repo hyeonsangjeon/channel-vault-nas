@@ -1,5 +1,5 @@
 ---
-title: Channel Vault NAS
+title: YouTube Channel Backup for NAS
 description: >-
   Back up YouTube channels to a Docker NAS. Reuse archive.txt and existing
   media, download only what is missing, and recover the index from disk.
@@ -16,6 +16,7 @@ searchable SQLite index must be rebuilt.
 
 [Install in 60 seconds :material-rocket-launch:](install/index.md){ .md-button .md-button--primary }
 [Bring an existing archive :material-folder-sync:](usage/migrate-existing-archive.md){ .md-button }
+[View source on GitHub :fontawesome-brands-github:](https://github.com/hyeonsangjeon/channel-vault-nas){ .md-button }
 
 ---
 
@@ -87,6 +88,15 @@ Channel Vault NAS answers the NAS operator question:
 
 The filesystem remains the durable archive. SQLite is the index over that archive
 — rescan an existing NAS folder and it gets indexed without moving a single file.
+
+### A deliberate fit, not the only downloader
+
+Choose TubeArchivist when an established media-server experience matters most,
+Pinchflat when you want a focused subscription downloader, and Channel Vault
+when an existing NAS archive, visible skip decisions, and disk-first recovery
+matter most.
+
+[Compare the workflows honestly :material-compare:](about/comparison.md){ .md-button }
 
 !!! warning "Self-hosted guardrail"
     This self-hosted release is built for localhost, private LAN, VPN, or a

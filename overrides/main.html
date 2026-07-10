@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% set social_title = page.meta.title if page and page.meta and page.meta.title else config.site_name %}
+  {% set social_description = page.meta.description if page and page.meta and page.meta.description else config.site_description %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Channel Vault NAS">
+  <meta property="og:title" content="{{ social_title }}">
+  <meta property="og:description" content="{{ social_description }}">
+  <meta property="og:url" content="{{ page.canonical_url }}">
+  <meta property="og:image" content="https://hyeonsangjeon.github.io/channel-vault-nas/assets/social-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="Channel Vault NAS automatic backup screen">
+  {% if config.theme.language == "ko" %}
+    <meta property="og:locale" content="ko_KR">
+    <meta property="og:locale:alternate" content="en_US">
+  {% else %}
+    <meta property="og:locale" content="en_US">
+    <meta property="og:locale:alternate" content="ko_KR">
+  {% endif %}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ social_title }}">
+  <meta name="twitter:description" content="{{ social_description }}">
+  <meta name="twitter:image" content="https://hyeonsangjeon.github.io/channel-vault-nas/assets/social-preview.png">
+  <meta name="twitter:image:alt" content="Channel Vault NAS automatic backup screen">
+  {% if page and page.is_homepage %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://hyeonsangjeon.github.io/channel-vault-nas/#software",
+            "name": "Channel Vault NAS",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Docker, Linux, Synology DSM, QNAP QTS",
+            "description": "Back up YouTube channels to a NAS, reuse archive.txt and existing media, download only what is missing, and recover the index from disk.",
+            "url": "{{ page.canonical_url }}",
+            "image": "https://hyeonsangjeon.github.io/channel-vault-nas/assets/social-preview.png",
+            "screenshot": "https://hyeonsangjeon.github.io/channel-vault-nas/assets/screenshots/channel-downloads.png",
+            "softwareVersion": "0.1.0-alpha.3",
+            "downloadUrl": "https://hub.docker.com/r/modenaf360/channel-vault-nas-api",
+            "license": "https://opensource.org/license/mit",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "sameAs": [
+              "https://github.com/hyeonsangjeon/channel-vault-nas",
+              "https://hub.docker.com/r/modenaf360/channel-vault-nas-api"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://hyeonsangjeon.github.io/channel-vault-nas/#website",
+            "name": "Channel Vault NAS documentation",
+            "url": "{{ page.canonical_url }}",
+            "inLanguage": ["en", "ko"]
+          }
+        ]
+      }
+    </script>
+  {% endif %}
+{% endblock %}

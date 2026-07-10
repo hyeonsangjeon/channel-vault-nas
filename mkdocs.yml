@@ -16,6 +16,7 @@ site_dir: site
 
 theme:
   name: material
+  custom_dir: overrides
   language: en
   logo: assets/producthunt-thumbnail.png
   favicon: assets/producthunt-thumbnail.png
@@ -89,6 +90,7 @@ plugins:
             Filesystem contract: 파일시스템 규칙
             About: 소개
             Is it for me?: 나에게 맞을까요?
+            Project facts & media: 프로젝트 정보와 미디어
 
 markdown_extensions:
   - abbr
@@ -170,3 +172,4 @@ nav:
   - About:
       - Overview: about/index.md
       - Is it for me?: about/comparison.md
+      - Project facts & media: about/project-kit.md

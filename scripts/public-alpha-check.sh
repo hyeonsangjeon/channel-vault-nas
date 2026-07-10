@@ -75,8 +75,14 @@ check_public_surface() {
     "docs/assets/user-manual/ko/11-mobile-dashboard.png"
     "docs/install/compatibility.md"
     "docs/install/compatibility.ko.md"
+    "docs/about/project-kit.md"
+    "docs/about/project-kit.ko.md"
+    "docs/assets/social-preview.png"
+    "docs/robots.txt"
+    "docs/llms.txt"
+    "overrides/main.html"
     "frontend/public/favicon.svg"
-    "frontend/public/social-preview.svg"
+    "frontend/public/social-preview.png"
     "frontend/public/site.webmanifest"
   )
 
