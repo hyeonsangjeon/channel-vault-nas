@@ -1,4 +1,8 @@
-FROM node:22-alpine AS build
+# syntax=docker/dockerfile:1.7
+
+# The Vite bundle is architecture-independent. Build it on the native runner so
+# multi-platform releases do not run npm under slow QEMU emulation.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 
 WORKDIR /app
 
