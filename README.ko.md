@@ -60,6 +60,10 @@ curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/ma
 docker compose -f compose.release.yml up -d
 ```
 
+구형 Synology Docker 패키지에서는 `docker compose` 대신 `docker-compose`를
+사용하세요. 릴리스 파일은 Compose v2와 레거시 Compose 1.28.5에서 모두
+검증했습니다.
+
 브라우저에서 **`http://127.0.0.1:5173/`**을 연 다음:
 
 1. **채널**에서 URL 또는 `@handle`을 붙여넣고 **미리보기**를 누릅니다.

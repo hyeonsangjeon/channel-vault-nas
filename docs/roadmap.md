@@ -74,8 +74,9 @@ Focus: NAS deployment confidence.
 
 - [x] Versioned container images — `Release images` workflow publishes
   multi-arch `api`/`web` to Docker Hub and GHCR on `v*` tags
-  (`0.1.0-alpha.2` is public on Docker Hub and GHCR; Docker Hub pull-based
-  Compose smoke is verified).
+  (`0.1.0-alpha.3` is public on Docker Hub; Docker Hub pull-based Compose smoke
+  is verified on Docker 20.10 with legacy Compose 1.28.5; GHCR currently
+  requires package authentication).
 - [x] Node 24 launch workflows — CI, release-image publishing, and docs Pages
   workflows use current GitHub/Docker action major versions.
 - [x] Synology/QNAP-oriented install notes — [`docs/nas-install.md`](nas-install.md).

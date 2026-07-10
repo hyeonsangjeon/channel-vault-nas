@@ -33,7 +33,7 @@ actually have on the NAS.
 
     ---
 
-    [`v0.1.0-alpha.2`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.2)
+    [`v0.1.0-alpha.3`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.3)
     — versioned Docker Hub and GHCR images.
 
 -   :octicons-mark-github-16:{ .lg .middle } __Source__

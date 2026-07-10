@@ -21,6 +21,10 @@ curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/ma
 docker compose -f compose.release.yml up -d
 ```
 
+구형 Synology Docker 패키지에서는 `docker compose` 대신 `docker-compose`를
+사용하세요. 같은 릴리스 파일을 Compose v2와 레거시 Compose 1.28.5에서 모두
+검증했습니다.
+
 그런 다음 **`http://127.0.0.1:5173/`** 을 열고
 [채널 백업 시작](../usage/first-backup.md)으로 이동하세요.
 
@@ -28,13 +32,13 @@ docker compose -f compose.release.yml up -d
     `compose.release.yml` 옆에 `.env`를 만들고 두 이미지 오버라이드를 지정하세요:
 
     ```bash
-    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.3
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
     ```
 
-    `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. 하나만
-    설정하세요. `docker compose pull`이 권한 오류를 내면 읽기 권한이 있는
-    토큰으로 `docker login ghcr.io`를 실행하세요.
+    `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. GHCR은 현재
+    인증이 필요하므로 패키지 읽기 권한이 있는 토큰으로 `docker login ghcr.io`를
+    실행하세요. 기본 Docker Hub 이미지는 로그인 없이 받을 수 있습니다.
 
 ## 소스에서 빌드 { #build-from-source }
 
@@ -77,8 +81,8 @@ Compose 스택은 다음을 실행합니다:
 별칭이 필요합니다.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.3
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.3
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

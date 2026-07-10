@@ -6,6 +6,12 @@ The project is in active alpha. Dates use Korea Standard Time.
 
 ## Unreleased
 
+## 0.1.0-alpha.3 - 2026-07-10
+
+The first-backup release: one preview-and-register path, one automatic-backup
+control, no-clone Docker installation, and visible reuse of existing NAS media
+and `archive.txt` ledgers.
+
 ### Added
 
 - Release-only `compose.release.yml`: published Docker Hub images start without

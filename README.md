@@ -61,6 +61,10 @@ curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/ma
 docker compose -f compose.release.yml up -d
 ```
 
+On older Synology Docker packages, use `docker-compose` in place of
+`docker compose`. The release file is verified with both Compose v2 and legacy
+Compose 1.28.5.
+
 Open **`http://127.0.0.1:5173/`**, then:
 
 1. Open **Channels**, paste a channel URL or `@handle`, and click **Preview**.
@@ -415,8 +419,8 @@ docker compose -f compose.release.yml up -d
 Equivalent GHCR image overrides:
 
 ```bash
-CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.3
+CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
 ```
 
 Direct `docker run` is also possible. Compose is still recommended because it
@@ -426,15 +430,15 @@ commands are useful for registry smoke tests.
 Choose Docker Hub:
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.3
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.3
 ```
 
 Or choose GHCR:
 
 ```bash
-export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.3
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
 ```
 
 Then run both containers on one Docker network. The `api` network alias is

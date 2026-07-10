@@ -20,6 +20,10 @@ curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/ma
 docker compose -f compose.release.yml up -d
 ```
 
+Older Synology Docker packages expose `docker-compose` instead of
+`docker compose`. The same release file is verified with Compose v2 and legacy
+Compose 1.28.5.
+
 Then open **`http://127.0.0.1:5173/`** and jump to
 [Your first channel backup](../usage/first-backup.md).
 
@@ -27,13 +31,13 @@ Then open **`http://127.0.0.1:5173/`** and jump to
     Create a `.env` beside `compose.release.yml` and set both image overrides:
 
     ```bash
-    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.2
-    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.2
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.3
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
     ```
 
-    Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. If `docker
-    compose pull` returns a permission error, run `docker login ghcr.io` with a
-    token that can read the packages.
+    Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. GHCR currently
+    requires authentication; run `docker login ghcr.io` with a token that can
+    read the packages. The default Docker Hub images support anonymous pulls.
 
 ## Build from source
 
@@ -76,8 +80,8 @@ one Docker network. The `api` network alias is required because the web image
 proxies `/api` and `/ws` to `http://api:8000`.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.2
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.2
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.3
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.3
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

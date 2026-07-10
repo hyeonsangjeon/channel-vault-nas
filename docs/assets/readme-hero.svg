@@ -58,7 +58,7 @@
     <text x="104" y="34" fill="#c7d2e0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" font-weight="700">docker pull, then archive with intent</text>
 
     <text x="34" y="96" fill="#38bdf8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">$ export CVN_API_IMAGE=modenaf360/</text>
-    <text x="34" y="124" fill="#8bdcf7" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">  channel-vault-nas-api:0.1.0-alpha.2</text>
+    <text x="34" y="124" fill="#8bdcf7" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">  channel-vault-nas-api:0.1.0-alpha.3</text>
     <text x="34" y="166" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">$ docker compose pull</text>
     <text x="34" y="206" fill="#f59e0b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" font-weight="700">$ docker compose up -d --no-build</text>
 
