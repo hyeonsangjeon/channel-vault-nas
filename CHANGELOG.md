@@ -17,6 +17,8 @@ The project is in active alpha. Dates use Korea Standard Time.
   Channel Vault fits beside TubeArchivist and Pinchflat.
 - Added an English/Korean project-facts and media page with verified directory
   copy, current assets, deployment facts, differentiators, and limitations.
+- Published both GHCR packages for anonymous pulls and verified the API and web
+  `linux/amd64` and `linux/arm64` manifests without registry credentials.
 
 ## 0.1.0-alpha.3 - 2026-07-10
 

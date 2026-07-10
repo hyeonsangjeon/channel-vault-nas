@@ -36,9 +36,8 @@ docker compose -f compose.release.yml up -d
     CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
     ```
 
-    `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. GHCR은 현재
-    인증이 필요하므로 패키지 읽기 권한이 있는 토큰으로 `docker login ghcr.io`를
-    실행하세요. 기본 Docker Hub 이미지는 로그인 없이 받을 수 있습니다.
+    `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. GHCR 미러와
+    기본 Docker Hub 이미지 모두 로그인 없이 받을 수 있습니다.
 
 ## 소스에서 빌드 { #build-from-source }
 

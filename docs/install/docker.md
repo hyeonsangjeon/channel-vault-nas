@@ -35,9 +35,8 @@ Then open **`http://127.0.0.1:5173/`** and jump to
     CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
     ```
 
-    Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. GHCR currently
-    requires authentication; run `docker login ghcr.io` with a token that can
-    read the packages. The default Docker Hub images support anonymous pulls.
+    Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. Both the GHCR
+    mirror and the default Docker Hub images support anonymous pulls.
 
 ## Build from source
 

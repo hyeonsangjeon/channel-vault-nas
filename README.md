@@ -483,10 +483,9 @@ Notes:
   and `modenaf360/channel-vault-nas-web`.
 - Publishing to Docker Hub requires repository Actions secrets:
   `DOCKERHUB_USERNAME=modenaf360` and `DOCKERHUB_TOKEN=<Docker Hub access token>`.
-- GHCR packages are private by default. If anonymous `docker compose pull`
-  returns a permission error, the maintainer still needs to set both packages to
-  Public and link them to this repo. Until then, run `docker login ghcr.io` with
-  a token that can read the packages.
+- Docker Hub and GHCR packages are public and support anonymous pulls. The
+  `0.1.0-alpha.3` manifests are verified for both `linux/amd64` and
+  `linux/arm64`.
 - `manifest unknown` means the requested tag has not been published. Use a
   listed release tag or build from source.
 - Set `CVN_API_IMAGE` and `CVN_WEB_IMAGE` together. If only one is set, Compose
@@ -812,8 +811,8 @@ For each guarded public release:
 
 - Run `scripts/public-alpha-check.sh`.
 - Validate Docker Compose on macOS, Linux, and one NAS-like host.
-- Publish versioned container images and verify Docker Hub anonymous pulls.
-- Verify GHCR anonymous pulls after the GitHub packages are set Public.
+- Publish versioned container images and verify anonymous pulls from both
+  Docker Hub and GHCR.
 - Keep README screenshot assets current from the Playwright seeded fixture.
 - Record/share a short demo video or GIF with `scripts/capture-public-demo.sh`.
 - Keep the safe first-run demo and runtime error copy polished.
