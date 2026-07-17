@@ -30,7 +30,7 @@ downfolder/
 - Existing NAS folders can be **rescanned and indexed** without moving files.
 
 !!! note "Disk-aware coverage"
-    Archive counts across Library, Channel detail, and Dashboard coverage are
+    Archive counts across Saved videos, Channel detail, and the Home status are
     disk-aware: if a file is gone from the NAS, a stale database row shows as
     **missing media** instead of pretending the video is still archived.
 

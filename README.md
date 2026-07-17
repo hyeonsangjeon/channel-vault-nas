@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Turn your YouTube channel into a recoverable NAS archive.</strong><br>
-  Paste a channel URL. Channel Vault reuses what is already on disk, downloads only what is missing, and keeps new uploads backed up with <code>yt-dlp</code>.
+  Register a channel, start a schedule, and see the backup state at a glance. Channel Vault reuses what is already on disk and saves only what is missing with <code>yt-dlp</code>.
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@
 </p>
 
 <p align="center">
-  <a href="docs/assets/demo/channel-vault-public-alpha.gif">
-    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS product tour showing archive status, automatic channel backup, existing archive import, and the indexed library" width="100%">
+  <a href="docs/assets/user-manual/en/01-home.png">
+    <img src="docs/assets/user-manual/en/01-home.png" alt="Channel Vault NAS Home showing the three-step automatic backup flow" width="100%">
   </a>
 </p>
 
@@ -34,6 +34,26 @@
   &nbsp;·&nbsp;
   <a href="docs/about/comparison.md"><strong>Is it for me?</strong></a>
 </p>
+
+## Three steps, then check one clear status
+
+1. **Register a channel.** Paste its URL, `@handle`, or channel ID and confirm
+   the result.
+2. **Start a schedule.** Choose how often to check and how many videos to save
+   per run.
+3. **Check the status.** See what is saved, what remains, and when the next
+   check will run.
+
+<p align="center">
+  <a href="docs/assets/user-manual/en/02-channel-overview.png">
+    <img src="docs/assets/user-manual/en/02-channel-overview.png" alt="Channel screen showing saved and remaining counts, automatic backup status, and the next run" width="100%">
+  </a>
+</p>
+
+The default navigation stays focused on **Home**, **Channels**, **Saved
+videos**, and **Settings**. Queue inspection, storage diagnostics, runtime
+controls, and one-pass tools remain under **Advanced management** until you
+need them.
 
 ## The part other download queues leave out
 
@@ -67,10 +87,12 @@ Compose 1.28.5.
 
 Open **`http://127.0.0.1:5173/`**, then:
 
-1. Open **Channels**, paste a channel URL or `@handle`, and click **Preview**.
-2. Confirm the channel and click **Register channel**.
-3. Choose the download interval and videos per run, then click **Start automatic
-   backup**.
+1. On **Home**, select **Register channel**, paste a channel URL or `@handle`,
+   select **Check channel**, then confirm with **Register channel**.
+2. Choose the all-channel check interval and videos per run, then select
+   **Start automatic backup**.
+3. Confirm the channel shows **Automatic backup is on** or **Automatic backup
+   is running**. The same screen shows saved, remaining, and next-run details.
 
 Already have files or an `archive.txt`? Follow
 [Bring an existing archive](docs/usage/migrate-existing-archive.md) first so
@@ -87,10 +109,6 @@ thread](docs/install/compatibility.md) before installing on new hardware.
 The filesystem is durable data. The database is the index and operation log.
 That means a future rescan can rebuild library state from media and sidecars
 instead of forcing a second download.
-
-<p align="center">
-  <img src="docs/assets/readme-hero.svg" alt="Channel Vault NAS archive console" width="100%">
-</p>
 
 ## Registry Links
 
@@ -134,7 +152,8 @@ local development:
 - Runtime settings with `.env.runtime` apply/restart guidance
 - Storage scanner for real NAS folders, drift, pressure, and orphan sidecars
 - Library index with media files, sidecar fidelity, codec/profile filters, in-app preview, and portable saved views
-- React/Vite UI split into Dashboard, Channels, Library, Queue, Insights, and Settings
+- A simple default UI with Home, Channels, Saved videos, and Settings
+- Queue, Insights, runtime controls, and diagnostic tools separated under Advanced management
 - Safe in-app demo workspace for empty installs, without YouTube calls or downloads
 - Versioned Docker Hub and GHCR images,
   with Docker Hub pull-based Compose smoke verified
@@ -180,20 +199,19 @@ See [`docs/roadmap.md`](docs/roadmap.md) for non-goals and
 For a practical fit check, see [Is Channel Vault NAS for
 me?](docs/about/comparison.md).
 
-## Preview
+## More screens
 
-These screenshots are generated from the seeded browser smoke fixture, not from
-static mockups.
+The Home and channel-status screenshots above—and the supporting screens
+below—are generated from the seeded browser smoke fixture, not from static
+mockups.
 
-| Dashboard overview | Channel backup schedule |
+| Register a channel | Bring an existing archive |
 | --- | --- |
-| ![Dashboard showing today's archive status and next useful action](docs/assets/screenshots/dashboard-cockpit.png) | ![Channel detail showing remaining-video counts and one automatic backup action](docs/assets/screenshots/channel-downloads.png) |
+| ![Channel registration with a checked result before saving](docs/assets/user-manual/en/03-channel-registration.png) | ![Import kit for existing NAS folders and archive.txt](docs/assets/screenshots/existing-archive-import.png) |
 
-| Add a channel | Bring an existing archive |
-| --- | --- |
-| ![Channel registration with preview before saving](docs/assets/screenshots/channel-registration.png) | ![Import kit for existing NAS folders and archive.txt](docs/assets/screenshots/existing-archive-import.png) |
+Advanced management screens stay available without crowding the everyday flow:
 
-| Queue console | Library shelf | Runtime guide |
+| Queue | Saved videos | Technical settings |
 | --- | --- | --- |
 | ![Download queue with candidate and worker detail](docs/assets/screenshots/queue-console.png) | ![Global library shelf with saved views, sidecar fidelity, and filtered archive coverage](docs/assets/screenshots/library-shelf.png) | ![Runtime env guide with the public access guard token setup, restart adapter, and Compose smoke verification](docs/assets/screenshots/runtime-guide.png) |
 
@@ -216,52 +234,56 @@ reviewed final asset is ready to publish.
 
 ## Product Tour
 
-### Dashboard
+### Home
 
-The dashboard is a three-step archive overview: add a source, start automatic
-backup, and verify the library. Detailed mount, access, diagnostic, and
-readiness checks stay collapsed until an operator needs them.
+Home is the everyday three-step overview: register a channel, start its
+schedule, and read the current backup state. It keeps the next useful action,
+saved and remaining counts, and schedule together.
 
 ### Channels
 
-The Channels tab is the start point. Registration and automatic backup are the
-two primary surfaces:
+The Channels tab gives each registered channel the same focused schedule and
+status view:
 
-1. Register a channel — paste a URL / `@handle` / `UC…` ID, click **Preview**,
-   review it, then **Register channel**.
-2. Review the remaining videos (Total / Downloaded / Remaining).
-3. Choose interval and per-run count, then click **Start automatic backup**.
+1. Register a channel — paste a URL / `@handle` / `UC…` ID, select **Check
+   channel**, review it, then **Register channel**.
+2. Choose the interval and per-run count, then select **Start automatic
+   backup**.
+3. Read the backup state and Total / Downloaded / Remaining counts on the same
+   screen.
 4. Bring in existing NAS folders or `archive.txt` before downloading when you
    already have an archive.
 
 ### Queue
 
-The queue console shows all candidate, queued, running, completed, failed, and
-cancelled jobs. It leads with the current Visible jobs; stale failures for
-already-archived videos are hidden. Automatic passes are bounded by the
-configured per-run count; the advanced manual pass keeps its confirmation step.
+Queue is an **Advanced management** view for candidate, queued, running,
+completed, failed, and cancelled jobs. Stale failures for already-archived
+videos are hidden. Automatic passes are bounded by the configured per-run
+count; the advanced manual pass keeps its confirmation step.
 
-### Library
+### Saved videos
 
-The library shows archived and missing videos together. It indexes sidecars,
+Saved videos shows archived and missing videos together. It indexes sidecars,
 media files, codec/profile metadata, thumbnails, subtitles, queue state, and
 path integrity. Saved views make repeated NAS checks fast, and portable JSON
 export/import lets operators move useful views between installs. Media detail
 drawers can preview indexed files in-app through range-capable, per-file stream
-endpoints. Archive counts are disk-aware across Library, Channel detail, and
-Dashboard coverage, so stale DB rows show as missing media instead of pretending
-the file is still on the NAS.
+endpoints. Archive counts are disk-aware across Saved videos, channel detail,
+and the Home status, so stale DB rows show as missing media instead of
+pretending the file is still on the NAS.
 
 ### Insights
 
-Insights reads the actual archive root and reports storage pressure, folder
-structure, extension totals, unindexed media, indexed-but-missing files, and
-orphan sidecars.
+Insights is an **Advanced management** view. It reads the actual archive root
+and reports storage pressure, folder structure, extension totals, unindexed
+media, indexed-but-missing files, and orphan sidecars.
 
 ### Settings
 
-Settings is the runtime console: worker flags, scheduler flags, binary paths,
-restart adapters, tick logs, worker summaries, and runtime audit events.
+Settings leads with everyday choices such as language and automatic-backup
+readiness. Worker flags, scheduler flags, binary paths, restart adapters, tick
+logs, and runtime audit events stay inside the collapsed **Technical settings**
+section.
 
 ## Source Build (Advanced)
 
@@ -318,7 +340,7 @@ http://127.0.0.1:5173/
 ```
 
 If you see only `{"detail":"Not Found"}`, you opened the raw API port instead
-of the web console. Open the `web` port (`CVN_WEB_PORT`, default `5173`) or point
+of the web app. Open the `web` port (`CVN_WEB_PORT`, default `5173`) or point
 your reverse proxy at the web service. The API port is only for paths such as
 `/api/health`.
 
@@ -536,13 +558,13 @@ Deployment examples for private LAN or tunnel access are in
 
 ### First Backup And Safe Demo
 
-On **Channels**, paste a URL, `@handle`, or `UC...` ID, click **Preview**, then
-**Register channel**. The channel screen shows Total / Downloaded / Remaining
-once. Pick the download interval and videos per run, then click **Start automatic
-backup**. The button enables the worker, metadata sync, and scheduler together.
-**Save schedule** applies later changes and **Pause** stops future passes. An
-advanced manual test remains available for one bounded pass. A fully archived
-channel is a completed state, not a failure.
+On **Home**, select **Register channel**, paste a URL, `@handle`, or `UC...` ID,
+select **Check channel**, then **Register channel**. Pick the all-channel check
+interval and videos per run, then select **Start automatic backup**. The channel
+screen keeps Total / Downloaded / Remaining, the current status, and next run
+together. **Save schedule** applies later changes and **Pause** stops future
+passes. An advanced manual test remains available for one bounded pass. A fully
+archived channel is a completed state, not a failure.
 
 The secondary safe demo workspace action seeds a deterministic `Signal Lab`
 channel, one archived media item, missing-video candidates, queue history,
@@ -608,9 +630,9 @@ CVN_YTDLP_BINARY=yt-dlp
 CVN_FFPROBE_BINARY=ffprobe
 ```
 
-Restart the backend after changing runtime env. The Settings tab can persist
-non-secret runtime overrides into `.env.runtime` and shows whether a restart is
-still required.
+Restart the backend after changing runtime env. **Settings → Technical
+settings** can persist non-secret runtime overrides into `.env.runtime` and
+shows whether a restart is still required.
 
 Worker passes are intentionally bounded:
 
@@ -625,25 +647,17 @@ Worker passes are intentionally bounded:
 ## Demo And Release Verification Flow
 
 1. Start with Docker Compose or the local development commands above.
-2. Open Dashboard and confirm the release readiness card, live event pill, and clean-install gate.
-3. Go to the Channels tab, paste a channel URL, `@handle`, or `UC...` channel ID, and click **Preview** to inspect the source before anything is registered.
-4. Review the channel name, video count, estimated size, save folder, first preview videos, and safety notes, then click **Register channel**.
-5. Open the channel, review Total / Downloaded / Remaining, select interval and per-run count, then click **Start automatic backup**.
+2. Open Home and confirm the simple register → schedule → status flow.
+3. Select **Register channel**, paste a channel URL, `@handle`, or `UC...` channel ID, and select **Check channel** before anything is registered.
+4. Review the channel name and source, then select **Register channel**.
+5. Review Total / Downloaded / Remaining, select interval and per-run count, then select **Start automatic backup**.
 6. Real downloads run only after automatic backup starts (or you confirm the advanced manual test).
 7. For a no-network walkthrough, expand the secondary safe demo panel and load `Signal Lab` without external calls.
-8. Open Queue to watch the current Visible jobs — progress, failures, retries, and worker audit detail (stale failures for already-archived videos are hidden).
-9. Open Library and confirm completed media/index coverage changed.
-10. Open Insights to inspect storage pressure, drift, and orphan sidecars.
-11. Open Settings to inspect runtime flags, scheduler ticks, restart guidance, backup confidence, and support exports.
-12. Return to Dashboard and copy or download the onboarding proof JSON for a redacted readiness snapshot.
-
-Dashboard support export buttons request a server-generated redacted diagnostic
-bundle first, then fall back to the browser snapshot if the server endpoint is
-not available. The server bundle removes operator tokens, absolute paths,
-source URLs, channel/video titles, and generated download commands.
-The onboarding proof export is separate: it summarizes readiness, runtime,
-mount, queue, library, storage, and backup posture from the UI state while
-excluding titles, source URLs, absolute paths, generated commands, and tokens.
+8. Open **Advanced management → Queue** to inspect progress, failures, retries, and worker audit detail (stale failures for already-archived videos are hidden).
+9. Open **Saved videos** and confirm completed media/index coverage changed.
+10. Open **Advanced management → Insights** to inspect storage pressure, drift, and orphan sidecars.
+11. Open **Settings → Technical settings** to inspect runtime flags, scheduler ticks, restart guidance, and backup confidence.
+12. Return to **Home** and confirm that its single status matches the channel state.
 
 The `archive.txt` path supports the classic workflow:
 
@@ -746,7 +760,7 @@ CVN_E2E_AUTH_TOKEN=cvn-local-test-token npm run e2e:auth -- --project=chromium
 
 This starts the same isolated stack with `CVN_AUTH_TOKEN` enabled, verifies that
 unauthenticated API calls return `401`, verifies bearer and `X-CVN-Token`
-requests, and confirms the browser access gate unlocks the console.
+requests, and confirms the browser access gate unlocks the app.
 
 Public release gate:
 
@@ -828,4 +842,4 @@ This repository is a new product line. It is not a drop-in replacement for
 The new app reuses proven platform patterns from
 [`hyeonsangjeon/youtube-dl-nas`](https://github.com/hyeonsangjeon/youtube-dl-nas)
 but changes the product model from a URL download queue to a channel archive
-console.
+app.

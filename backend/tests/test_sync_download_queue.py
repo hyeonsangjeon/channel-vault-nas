@@ -506,7 +506,7 @@ async def test_queue_preflight_keeps_best_quality_in_review() -> None:
 
 
 @pytest.mark.asyncio
-async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_worker_paused(
+async def test_metadata_scheduler_detects_new_video_and_queues_download_when_worker_paused(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -663,7 +663,7 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
         videos = (await session.execute(select(Video).order_by(Video.published_at.desc()))).scalars().all()
         due_after = await find_due_sync_channels(db=session, now=datetime.now(UTC), limit=10)
         assert len(download_jobs) == 1
-        assert download_jobs[0].status == "candidate"
+        assert download_jobs[0].status == "queued"
         assert download_jobs[0].quality == "1080p"
         assert sync_job is not None
         assert sync_job.trigger == "scheduler"
@@ -671,8 +671,6 @@ async def test_metadata_scheduler_detects_new_video_and_stages_candidates_when_w
         assert [video.external_id for video in videos] == ["newArchive02", "oldArchive01"]
         assert due_after == []
 
-        download_jobs[0].status = "queued"
-        await session.commit()
         worker_plan = await build_download_worker_plan(db=session, channel_id=channel_id, limit=5)
 
     assert worker_plan.queued_count == 1

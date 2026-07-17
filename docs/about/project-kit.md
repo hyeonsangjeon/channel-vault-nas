@@ -13,15 +13,16 @@ than launch slogans.
 
 ## One sentence
 
-Channel Vault NAS is an open-source Docker console that backs up YouTube
-channels to a NAS, reuses existing media and `archive.txt`, downloads only
-missing videos, and can rebuild its searchable index from files on disk.
+Channel Vault NAS is an open-source Docker app that backs up YouTube channels
+to a NAS through three simple steps—register a channel, start a schedule, and
+check its status—while reusing existing media and `archive.txt`.
 
 ## Short directory description
 
-Back up YouTube channels to a Docker NAS. Import existing media and
-`archive.txt`, review every missing or skipped video, schedule bounded `yt-dlp`
-downloads, and recover the library index from mounted folders and sidecars.
+Back up YouTube channels to a Docker NAS: register a channel, start a bounded
+`yt-dlp` schedule, and check what is saved or remaining. Existing media and
+`archive.txt` can be imported, and the index can be recovered from mounted
+folders and sidecars.
 
 ## Verified facts
 
@@ -41,6 +42,9 @@ downloads, and recover the library index from mounted folders and sidecars.
 
 ## What is distinctive
 
+- The default UI focuses on channel registration, the backup schedule, and one
+  clear state. Queue inspection, storage diagnostics, and runtime controls stay
+  under Advanced management.
 - Existing NAS media, subtitles, thumbnails, and `info.json` sidecars can be
   indexed without deliberately downloading them again.
 - `archive.txt` decisions remain visible as downloaded, missing, queued, or
@@ -55,15 +59,16 @@ TubeArchivist, Pinchflat, TubeSync, or ytdl-sub may be a better fit.
 
 ## Media assets
 
-All assets below show the current `alpha.3` workflow and may be used when
-linking to the project with attribution.
+The first two assets show the current everyday workflow and should be preferred
+for listings and reviews. The remaining assets provide supporting context. They
+may be used when linking to the project with attribution.
 
+- [Simple Home and three-step flow](../assets/user-manual/en/01-home.png)
+- [Channel backup status](../assets/user-manual/en/02-channel-overview.png)
+- [Channel registration](../assets/user-manual/en/03-channel-registration.png)
 - [1280x640 social preview](../assets/social-preview.png)
 - [240x240 project icon](../assets/producthunt-thumbnail.png)
-- [Automatic backup screen](../assets/screenshots/channel-downloads.png)
-- [Channel registration screen](../assets/screenshots/channel-registration.png)
 - [Existing archive import](../assets/screenshots/existing-archive-import.png)
-- [Dashboard overview](../assets/screenshots/dashboard-cockpit.png)
 - [12-second product demo](../assets/demo/channel-vault-public-alpha.gif)
 
 ## Suggested directory fields

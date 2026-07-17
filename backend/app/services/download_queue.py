@@ -27,6 +27,7 @@ from app.services.ytdlp_format import ytdlp_format_selector
 
 ACTIVE_DOWNLOAD_STATUSES = ("candidate", "queued", "running")
 RETRYABLE_DOWNLOAD_STATUSES = ("candidate", "queued", "failed", "cancelled")
+AUTO_QUEUE_BLOCKING_STATUSES = (*ACTIVE_DOWNLOAD_STATUSES, "failed", "cancelled")
 
 
 class VideoNotFoundError(LookupError):
@@ -56,20 +57,66 @@ async def create_channel_download_candidates(
     created. With no ``download_dir`` configured the index is trusted, matching
     the disk-aware coverage fallback.
     """
+    return await _create_channel_download_jobs(
+        db=db,
+        channel_id=channel_id,
+        quality=quality,
+        limit=limit,
+        download_dir=download_dir,
+        initial_status="candidate",
+        blocking_job_statuses=ACTIVE_DOWNLOAD_STATUSES,
+    )
+
+
+async def queue_channel_auto_downloads(
+    *,
+    db: AsyncSession,
+    channel_id: int,
+    quality: str,
+    limit: int,
+    download_dir: str | Path | None = None,
+) -> DownloadCandidateResult | None:
+    """Queue missing videos that are not already active or awaiting recovery.
+
+    Candidate, queued, and running jobs keep repeated metadata ticks
+    idempotent. Failed and cancelled jobs remain under the explicit retry
+    control shown in the simple UI. A completed job does not block repair when
+    the indexed media is now missing from disk, so NAS file loss can be healed
+    automatically. Videos whose media is present on disk are always skipped.
+    """
+    return await _create_channel_download_jobs(
+        db=db,
+        channel_id=channel_id,
+        quality=quality,
+        limit=limit,
+        download_dir=download_dir,
+        initial_status="queued",
+        blocking_job_statuses=AUTO_QUEUE_BLOCKING_STATUSES,
+    )
+
+
+async def _create_channel_download_jobs(
+    *,
+    db: AsyncSession,
+    channel_id: int,
+    quality: str,
+    limit: int,
+    download_dir: str | Path | None,
+    initial_status: str,
+    blocking_job_statuses: tuple[str, ...],
+) -> DownloadCandidateResult | None:
     channel = await db.get(Channel, channel_id)
     if channel is None:
         return None
 
     root = resolve_archive_root(download_dir)
     archived_ids = await archived_video_ids_on_disk(db=db, root=root, channel_id=channel_id)
-    job_exists = (
+    existing_job_query = (
         select(DownloadJob.id)
-        .where(
-            DownloadJob.video_id == Video.id,
-            DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES),
-        )
-        .exists()
+        .where(DownloadJob.video_id == Video.id)
+        .where(DownloadJob.status.in_(blocking_job_statuses))
     )
+    job_exists = existing_job_query.exists()
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -84,7 +131,7 @@ async def create_channel_download_candidates(
             continue
         job = DownloadJob(
             video_id=video.id,
-            status="candidate",
+            status=initial_status,
             progress=0,
             quality=quality,
             priority=50,
@@ -107,6 +154,7 @@ async def create_channel_download_candidates(
                 "channel_title": channel.title,
                 "count": len(jobs),
                 "quality": quality,
+                "status": initial_status,
             },
         )
 

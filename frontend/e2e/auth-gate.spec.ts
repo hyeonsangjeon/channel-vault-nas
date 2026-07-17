@@ -35,16 +35,18 @@ test("operator token gate unlocks a protected NAS console", async ({ page }) => 
 
   await page.goto("/");
 
-  const gate = page.getByLabel("NAS 접근 토큰 게이트");
+  const gate = page.getByLabel("NAS 접근");
   await expect(gate).toBeVisible();
-  await expect(gate).toContainText("접근 토큰이 필요합니다.");
-  await expect(gate).toContainText("토큰이 없거나 올바르지 않아");
+  await expect(gate).toContainText("접근 토큰을 입력하세요");
+  await expect(gate).toContainText("접근 토큰이 없거나 올바르지 않습니다");
 
   await gate.getByPlaceholder("CVN_AUTH_TOKEN 붙여넣기").fill(token);
-  await gate.getByRole("button", { name: "콘솔 열기" }).click();
+  await gate.getByRole("button", { name: "Channel Vault 열기" }).click();
 
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
-  await expect(page.getByLabel("대시보드 개요")).toContainText("내 채널 백업 상태");
+  const home = page.locator(".simple-home");
+  await expect(home.getByRole("heading", { name: "내 채널을 자동으로 안전하게 보관하세요" })).toBeVisible();
+  await expect(home.locator(".simple-home-step")).toHaveCount(3);
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("cvn.authToken")))
     .toBe(token);

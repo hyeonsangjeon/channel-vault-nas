@@ -1,206 +1,183 @@
 # Channel Vault NAS Design Direction
 
-작성일: 2026-05-30
+Updated: 2026-07-16
 
 ## North Star
 
-Channel Vault NAS should feel like a beautiful archive console for a NAS:
-dense enough for daily operation, visual enough that the state of the archive is
-understood at a glance.
+Channel Vault NAS should feel like a small, dependable backup app that happens
+to run on a NAS. A first-time user should be able to register a channel, start a
+schedule, and understand the result without learning how the service works
+internally.
 
-This is not a plain admin panel. The UI should be genuinely polished, dynamic,
-and memorable while staying useful for repeated NAS management.
+The default experience is light, calm, and task-led. It is not an operations
+cockpit and it does not ask a general user to interpret infrastructure before
+their first backup.
 
-## Visual Reference
+The first screen should answer three questions:
 
-Reference:
+1. Which channel am I backing up?
+2. Is automatic backup on, and when will it run next?
+3. Does anything need my attention?
 
-- https://hyeonsangjeon.github.io/gdpval-realworks/
-- Local source reference: `/Users/hyeonsang/git/gdpval-realworks`
+Everything else is secondary.
 
-Useful patterns from that dashboard:
+## Product Promise
 
-- dark-first dashboard tokens
-- compact sticky header
-- translucent surfaces with subtle blur
-- KPI cards with thin accent bars
-- mono typography for numbers and operational metrics
-- color-coded tabs and animated active underline
-- compact data tables with hover states
-- chart tooltips tuned for dark mode
-- Framer Motion fade/slide entrance and subtle hover lift
+The primary flow has three steps and uses the same words everywhere in the app
+and manual:
 
-Channel Vault should borrow the polish, not the exact product layout.
+1. Paste a channel URL, select **Check channel**, then **Register channel**.
+2. Choose **All-channel check interval** and **Per run**, then select
+   **Start automatic backup**.
+3. Read one plain-language status: **Automatic backup is on**,
+   **Automatic backup is running**, **Automatic backup is paused**, or
+   **Needs attention**.
 
-## Visual Personality
+Each step should have one obvious primary action. A user should never need to
+open a separate control room to finish this flow.
 
-Keywords:
+## Default Mode
 
-- cinematic operations room
-- archive console
-- calm NAS operations
-- luminous data surfaces
-- beautiful but not decorative
-- dense, legible, alive
+Default mode is designed for people who want reliable backups, not a monitoring
+dashboard.
 
-The interface should make the user feel:
+- Use a light neutral canvas, generous whitespace, familiar form controls, and
+  one restrained blue or green accent.
+- Put the current channel, backup status, next check, and remaining-video count
+  in the first viewport.
+- Prefer a single open layout over grids of nested cards.
+- Use short, direct labels: **Register channel**, **Start automatic backup**,
+  **Pause**, and **Saved videos**.
+- Explain consequences next to the action. For example, checking and registration
+  do not download files; starting automatic backup does.
+- Show only information that helps the user choose or confirm the next action.
+- Use progressive disclosure for optional quality and subtitle choices.
+- Keep destructive or uncommon actions away from the primary button.
 
-- "I know what changed."
-- "I trust this archive."
-- "Failures are visible and fixable."
-- "Storage and channel health are tangible."
-- "This is my private media command center."
+The empty state should immediately show the channel URL field. The active state
+should immediately show the schedule and current result. The completed state
+should feel reassuring rather than empty.
 
-## Creator And Fan Questions
+## Status Language
 
-The first screen should answer the questions that YouTubers, channel operators,
-and serious fans will ask before they care about queue mechanics:
+Default mode uses four user-facing states:
 
-- How many videos exist on this channel or playlist?
-- How many are already mirrored locally, and what is still missing?
-- When was the latest upload, and what day or time does this channel usually
-  publish?
-- Where exactly are the downloaded media, subtitles, thumbnails, and metadata
-  stored on the NAS?
-- Is the folder naming structure predictable enough to trust outside the app?
-- If I lose access to YouTube tomorrow, how complete is my private copy?
+| Status | Meaning | User guidance |
+| --- | --- | --- |
+| **Automatic backup is on** | The channel is waiting for the next check. | Show the next check time. |
+| **Automatic backup is running** | Videos are being checked or saved now. | Show simple progress without internal stages. |
+| **Automatic backup is paused** | No new scheduled pass will start for this channel. | Offer **Start automatic backup** to resume. |
+| **Needs attention** | The app could not continue safely. | State the problem in plain language and offer one recovery action. |
 
-This means dashboard real estate should favor archive coverage, upload cadence,
-last upload, expected next upload, and folder structure before secondary
-operational detail.
+Completion is shown by the channel heading and remaining count, not as a
+conflicting scheduler state. When no videos remain, say that every discovered
+video is backed up while still showing whether automatic backup is on or paused.
 
-## Data Visualization Direction
+Color supports the label but never replaces it. Avoid exposing internal state
+names when a plain-language status is available.
 
-Dynamic visualizations are first-class UI, not an afterthought.
+## Progressive Disclosure
 
-Good candidates for D3.js:
+Advanced operator tools remain available, but they must not compete with the
+default path.
 
-- Channel constellation: channels as nodes sized by archive volume, colored by
-  health, with edges for shared keywords or playlists.
-- Sync timeline: new videos, failed syncs, policy changes, and completed
-  downloads on a horizontal time axis.
-- Storage pressure map: treemap or sunburst showing storage by channel,
-  playlist, quality, and age.
-- Subtitle keyword river: animated stream graph showing topic changes across a
-  channel timeline.
-- Queue flow: live Sankey-style flow from discovered video to metadata,
-  thumbnail, subtitle, download, media file, and library availability.
-- Policy simulator: forecast how much storage a channel will consume under
-  different quality/subtitle/retention settings.
+- Put detailed job history, logs, per-channel policy, storage analysis, runtime
+  controls, import tools, and diagnostic exports under **Advanced management**.
+- Keep **Advanced management** collapsed by default and out of first-run
+  guidance.
+- Preserve a direct URL for experienced operators and support staff.
+- Returning from an advanced screen should restore the selected channel and
+  default-mode context.
+- An advanced warning may surface in default mode only when the user must act;
+  translate it into a plain-language **Needs attention** message.
 
-Good candidates for Recharts or similar React chart libraries:
+Progressive disclosure is a hierarchy, not removal: the product stays capable
+without making every user carry its full operational complexity.
 
-- upload cadence line chart
-- video length distribution
-- success/failure trend
-- storage growth trend
-- download throughput
-- channel health score history
+## Screen Direction
 
-Use the simplest library that fits the visualization:
+### Home
 
-- Recharts for standard charts.
-- D3.js for custom, expressive, or highly interactive visuals.
-- SVG for crisp operational diagrams.
-- Canvas/WebGL only when data volume demands it.
+- Empty workspace: channel URL field, **Check channel**, and a short safety note.
+- Registered workspace: channel name, four-state backup status, remaining count,
+  next check, schedule summary, and the most relevant action.
+- Secondary actions: **Register channel**, **Saved videos**, and collapsed
+  **Advanced management**.
 
-## Screen Concepts
+### Channel registration
 
-`Dashboard`
+- One focused form: URL / `@handle` / channel ID.
+- **Check channel** confirms the channel identity before registration.
+- Optional download choices stay collapsed until requested.
+- Validation errors explain what to correct beside the field.
 
-- Above the fold: archive health, new videos, active sync, failed jobs, storage
-  pressure, recent completions.
-- Visual centerpiece: live sync/download flow or channel health matrix.
+### Automatic backup
 
-`Channels`
+- Keep interval and per-run count beside one primary start button.
+- After start, replace setup language with status, next check, and **Pause**.
+- Schedule edits should be reversible and should not silently start a download.
 
-- Dense list with status badges, sync age, policy, new count, archived count,
-  storage, failures.
-- Optional Explore view: channel constellation or health board.
+### Saved videos
 
-`Channel Detail`
+- Lead with recognizable thumbnails, titles, channel, and saved date.
+- Put codec, file integrity, and sidecar metadata in secondary details.
 
-- Timeline is the hero: uploads, discovered videos, archived files, subtitles,
-  failures, and policy changes.
-- Include upload cadence, duration distribution, keyword/subtitle flow, and
-  storage trend.
+### Advanced management
 
-`Library`
+- Retain dense operational information for users who explicitly open it.
+- Charts and diagnostic visualizations belong here when they help investigation.
+- Do not reuse the advanced visual density as the default app shell.
 
-- Searchable media table plus rich preview pane.
-- Filters should feel fast: channel, date, status, quality, subtitle language,
-  archived/missing.
+## Visual System
 
-`Queue`
+- Light-first neutral background with clear surface separation.
+- High-contrast body text and quiet secondary text.
+- Blue or green for the primary action; amber and red only for actionable
+  attention states.
+- Rounded controls and surfaces may be used sparingly; avoid a dashboard made of
+  identical floating cards.
+- Use normal UI typography for tasks and reserve monospace for paths, IDs, or
+  copyable technical values inside advanced management.
+- Avoid neon borders, decorative grids, translucent cockpit panels, status-chip
+  walls, and motion that does not explain a state change.
 
-- Live lanes for sync, metadata, subtitle, thumbnail, download, postprocess.
-- Failed jobs should look actionable, not buried.
+Dark mode may remain an optional preference, but it must follow the same simple
+information hierarchy.
 
-`Insights`
+## Interaction And Accessibility
 
-- This can become the visual playground after the MVP loop works.
-- It should eventually feel like an observability dashboard for a private media
-  archive.
+- Keyboard focus, labels, validation, and screen-reader names are required for
+  every primary control.
+- Critical information must be visible without hover.
+- Loading states keep the action and expected result clear.
+- Motion should be short and functional: registration confirmed, backup started,
+  status changed.
+- Mobile keeps the same three-step order and primary labels. Do not move a
+  required action into an icon-only menu.
+- Use readable target sizes and do not rely on color alone for status.
 
-## Interaction Principles
+## Manual And Screenshot Standard
 
-- Motion should explain state changes: discovered, queued, downloading,
-  completed, failed, retried.
-- Hover states can reveal detail, but critical state must be visible without
-  hover.
-- Realtime updates should feel alive but not noisy.
-- Prefer animated transitions between filtered states over abrupt redraws.
-- Use skeletons and shimmer carefully for loading, especially in charts.
-- Keep keyboard and screen-reader basics intact even for beautiful visuals.
+The user manual follows the product's three-step flow. Every screenshot should
+show the exact control named by the adjacent instruction, and every caption
+should tell the reader what to confirm after clicking.
 
-## Palette And Surface
+- Use one screenshot per decision, not one screenshot per internal subsystem.
+- Keep the pointer or focus near the relevant field or button when practical.
+- Match English and Korean control names exactly.
+- Retake screenshots when a primary label or hierarchy changes.
+- Keep video guides as supplemental material; the written guide must stand on
+  its own.
 
-Start from a dark-first operational palette:
+## Default-Mode Release Bar
 
-- near-black page background
-- slightly lifted card/surface layer
-- thin low-contrast borders
-- high-contrast text
-- muted secondary text
-- saturated accent colors only for meaningful status/data
+A default-mode release is ready when a new user can:
 
-Possible semantic accents:
+- register a channel without documentation;
+- start automatic backup from the same guided path;
+- identify automatic-backup on, running, paused, and Needs attention states;
+- recover from a common input or download error using the offered action;
+- complete the same flow on desktop and mobile;
+- reach advanced management without it appearing in the first-run path.
 
-- sync / discovery: blue or cyan
-- completed / healthy: emerald
-- warning / backlog: amber
-- failed / blocked: red
-- subtitles / metadata: violet
-- storage pressure: magenta or orange
-
-Avoid a single-hue dashboard. The interface should have a rich but disciplined
-data palette.
-
-## Implementation Notes
-
-Initial frontend stack can include:
-
-- React + Vite
-- Tailwind CSS or CSS variables for design tokens
-- lucide-react for icons
-- Framer Motion for measured UI motion
-- Recharts for standard charts
-- D3.js for custom visualizations
-
-If a visualization needs D3, use it proudly. Do not force standard chart
-libraries to do custom work badly.
-
-## MVP Visual Bar
-
-Even the first MVP should not look like a placeholder.
-
-Minimum bar:
-
-- polished dark dashboard shell
-- beautiful KPI/status metrics
-- at least one meaningful dynamic visualization
-- high-quality empty/error/loading states
-- realtime progress that feels designed
-- compact tables that look intentional
-
-The app can be technically early and still feel visually serious.
+Polish is measured by confidence and task completion, not by dashboard density.

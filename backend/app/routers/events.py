@@ -75,9 +75,11 @@ async def websocket_events(websocket: WebSocket) -> None:
     if not websocket_token_valid(websocket):
         await websocket.close(code=1008, reason="auth token required")
         return
-    await event_bus.connect(websocket)
     try:
+        await event_bus.connect(websocket)
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
+        pass
+    finally:
         event_bus.disconnect(websocket)

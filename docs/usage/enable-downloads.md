@@ -1,14 +1,14 @@
 # Enable real downloads
 
-Channel Vault NAS can register and preview without starting any media transfer.
+Channel Vault NAS can check and register a channel without starting any media transfer.
 The app arms the worker when you click **Start automatic backup**.
 
 ## Turn on the worker
 
-The simplest path is the UI: open a channel, choose the download interval and
-videos per run, then click **Start automatic backup**. It turns on real
+The simplest path is the UI: open a channel, choose **All-channel check
+interval** and **Per run**, then click **Start automatic backup**. It turns on real
 downloads, metadata sync, and the scheduler immediately (see
-[Channel backup → Step 4](first-backup.md#step-4-start-the-automatic-download-schedule)).
+[Channel backup → Step 2](first-backup.md#start-automatic-backup)).
 To arm the NAS globally instead, set these runtime env values:
 
 ```bash
@@ -39,8 +39,9 @@ no container restart is required. Restart only when you edit `.env` manually.
     ```
 
 !!! tip "Do it from the UI"
-    Open **Settings → Runtime env manifest**. It shows the active values and
-    pending overrides. See the
+    Open **Settings → Technical settings → Runtime tools → Env guide**. The
+    **Runtime env manifest** drawer shows the active values and pending
+    overrides. See the
     [Settings tour](product-tour.md#settings).
 
 ## The pass is always bounded
@@ -54,11 +55,12 @@ NAS or your network:
   behind a confirmation modal.
 - API `run-once` limits are capped.
 - Per-channel policy can **pause** worker claims.
-- Candidate creation can continue **even when workers are paused**.
+- New uploads may still be discovered and added to the waiting list while a
+  channel is paused; they are not downloaded until you resume it.
 
 <figure markdown="span">
-  ![Automatic download schedule](../assets/user-manual/en/04-download-confirm-modal.png){ loading=lazy }
-  <figcaption>Starting the schedule enables real downloads; each pass claims only the configured batch size. The advanced Manual one-pass test is gated by the same confirmation modal.</figcaption>
+  ![Automatic download schedule](../assets/user-manual/en/04-backup-schedule.png){ loading=lazy }
+  <figcaption>Choose the interval and per-run limit, then select Start automatic backup. Each scheduled pass claims only the configured batch size.</figcaption>
 </figure>
 
 !!! warning "Verify before you expose"

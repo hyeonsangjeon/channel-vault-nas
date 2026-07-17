@@ -66,10 +66,11 @@ searchable SQLite index must be rebuilt.
 
 ## Your first backup is one screen
 
-Open **Channels**, paste and preview the source, then register it. The channel
-screen shows **Total / Downloaded / Remaining** once, beside the one primary
-action: **Start automatic backup**. Download interval, videos per run, next run,
-and pause all stay together.
+On **Home**, select **Register channel**, paste the source, select **Check
+channel**, then confirm with **Register channel**. The channel screen shows
+**Total / Downloaded / Remaining** once, beside the one primary action: **Start
+automatic backup**. Download interval, videos per run, next run, and pause all
+stay together.
 
 [![Channel Vault NAS channel backup screen](assets/screenshots/channel-downloads.png)](usage/first-backup.md)
 
