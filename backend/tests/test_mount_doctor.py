@@ -7,10 +7,15 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
 from app.main import app
+from app.services import mount_doctor as mount_doctor_service
 from app.services.mount_doctor import build_mount_doctor
 
 
-def test_mount_doctor_accepts_separated_writable_paths(tmp_path: Path) -> None:
+def test_mount_doctor_accepts_separated_writable_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mount_doctor_service, "_running_in_container", lambda: False)
     metadata_dir = tmp_path / "metadata"
     download_dir = tmp_path / "archive"
     runtime_dir = tmp_path / "runtime"
@@ -75,6 +80,7 @@ async def test_mount_doctor_endpoint_uses_runtime_settings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(mount_doctor_service, "_running_in_container", lambda: False)
     metadata_dir = tmp_path / "metadata"
     download_dir = tmp_path / "archive"
     runtime_dir = tmp_path / "runtime"

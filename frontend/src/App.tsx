@@ -32,6 +32,7 @@ import {
   Link2,
   ListFilter,
   Plus,
+  RefreshCcw,
   Rocket,
   RotateCcw,
   Save,
@@ -172,11 +173,10 @@ import {
   type StorageScan,
   type SyncJob,
 } from "./api/channels";
-import { ChannelConstellation } from "./components/ChannelConstellation";
 import { ChannelBackupOverview } from "./components/channel/ChannelBackupOverview";
 import { ChannelRegistrationPanel } from "./components/channel/ChannelRegistrationPanel";
+import { SimpleHome } from "./components/dashboard/SimpleHome";
 import { MetricTile } from "./components/MetricTile";
-import { QueueFlow } from "./components/QueueFlow";
 import {
   backupStats,
   fidelityChecks,
@@ -214,12 +214,12 @@ const navItems: { key: TranslationKey; id: NavId }[] = [
   { key: "nav.settings", id: "settings" },
 ];
 
+const primaryNavItems = navItems.filter((item) => item.id !== "queue" && item.id !== "insights");
+
 const mobileNavItems: { key: TranslationKey; id: NavId; icon: typeof Gauge }[] = [
   { key: "nav.dashboard", id: "dashboard", icon: Gauge },
   { key: "nav.channels", id: "channels", icon: Link2 },
   { key: "nav.library", id: "library", icon: BookOpen },
-  { key: "nav.queue", id: "queue", icon: Download },
-  { key: "nav.insights", id: "insights", icon: HardDrive },
   { key: "nav.settings", id: "settings", icon: Settings },
 ];
 
@@ -237,7 +237,6 @@ type QueuePreflightFilter = "all" | "ready" | "review" | "unchecked";
 type LibraryIntegrityFilter = "all" | "complete" | "partial_sidecars" | "missing_media" | "media_only";
 type LibrarySidecarFilter = "all" | "any" | "subtitles" | "thumbnail" | "nfo";
 type LibraryPresetFilter = "missing_subtitles" | "media_only" | "h264_1080p" | "complete_mp4";
-type LaunchRunwayState = "ready" | "active" | "locked";
 type ReleaseReadinessBriefTone = "ready" | "close" | "building";
 type CleanInstallGateStepState = "ready" | "active" | "warn";
 type DownloadTelemetryStatus = "running" | "completed" | "failed" | "cancelled";
@@ -645,6 +644,7 @@ function App() {
   const [metadataLimitFilter, setMetadataLimitFilter] = useState("");
   const [metadataRetentionKeep, setMetadataRetentionKeep] = useState("200");
   const [metadataRunStatus, setMetadataRunStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [settingsAdvancedOpen, setSettingsAdvancedOpen] = useState(initialRoute?.runtimeGuide ?? false);
   const [runtimeGuideOpen, setRuntimeGuideOpen] = useState(initialRoute?.runtimeGuide ?? false);
   const [runtimeGuideCopyStatus, setRuntimeGuideCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [runtimeRestartCopyStatus, setRuntimeRestartCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -692,7 +692,9 @@ function App() {
   );
   const [liveDownloadConfirmOpen, setLiveDownloadConfirmOpen] = useState(false);
   const [liveDownloadStatus, setLiveDownloadStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const activeNavIdRef = useRef<NavId>(activeNavId);
   const registeredChannelIdRef = useRef<number | null>(null);
+  const translateRef = useRef(t);
   const applyingRouteHashRef = useRef(false);
   const librarySearchInputRef = useRef<HTMLInputElement | null>(null);
   const libraryViewImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -717,6 +719,62 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (
+      activeNavId !== "queue" &&
+      activeNavId !== "insights" &&
+      !(activeNavId === "settings" && settingsAdvancedOpen)
+    ) return;
+    let cancelled = false;
+
+    async function loadAdvancedWorkspace() {
+      try {
+        if (activeNavId === "queue") {
+          const [jobs, workerSnapshot, workerRunSnapshot] = await Promise.all([
+            getDownloadJobs(undefined, { limit: 200 }),
+            getDownloadWorkerPlan(undefined, 5),
+            getDownloadWorkerRuns(undefined, 8),
+          ]);
+          if (cancelled) return;
+          setGlobalDownloadJobs(jobs);
+          setQueueConsoleWorkerPlan(workerSnapshot);
+          setQueueConsoleWorkerRuns(workerRunSnapshot);
+          return;
+        }
+
+        if (activeNavId === "insights") {
+          const [storageSnapshot, pressureTrend, readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
+            getStorageScan(),
+            getStoragePressureTrend(),
+            getOperationsReadiness(),
+            getMountDoctor(),
+          ]);
+          if (cancelled) return;
+          setStorageScan(storageSnapshot);
+          setStoragePressureTrend(pressureTrend);
+          setOperationsReadiness(readinessSnapshot);
+          setMountDoctor(mountDoctorSnapshot);
+          return;
+        }
+
+        const [readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
+          getOperationsReadiness(),
+          getMountDoctor(),
+        ]);
+        if (cancelled) return;
+        setOperationsReadiness(readinessSnapshot);
+        setMountDoctor(mountDoctorSnapshot);
+      } catch (error) {
+        if (!cancelled) handleAuthFailure(error);
+      }
+    }
+
+    void loadAdvancedWorkspace();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeNavId, settingsAdvancedOpen]);
+
+  useEffect(() => {
     if (!commandPaletteOpen) return;
     window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
   }, [commandPaletteOpen]);
@@ -724,9 +782,12 @@ function App() {
   const sourceValueTrimmed = sourceValue.trim();
   const activeProbe = registration?.probe ?? probe;
   const registeredChannelId = registration?.channel.id ?? activeProbe?.existing_channel_id ?? selectedChannelId;
-  const activeTitle = channelDetail?.title ?? activeProbe?.title ?? "wingnut987S";
-  const activeHandle = channelDetail?.handle ?? activeProbe?.handle ?? "@wingnut987s4";
-  const activeExternalId = channelDetail?.external_id ?? activeProbe?.external_id ?? "UCmLADXQtWVuzOnOK5TNrWaw";
+  const activeDashboardChannel = registeredChannelId
+    ? dashboard?.channels.find((channel) => parseDashboardChannelId(channel.id) === registeredChannelId) ?? null
+    : null;
+  const activeTitle = channelDetail?.title ?? activeProbe?.title ?? activeDashboardChannel?.title ?? t("runtime.checking");
+  const activeHandle = channelDetail?.handle ?? activeProbe?.handle ?? "";
+  const activeExternalId = channelDetail?.external_id ?? activeProbe?.external_id ?? "";
   const isDemoWorkspace = channelDetail?.external_id === DEMO_WORKSPACE_EXTERNAL_ID;
   const activeInitials = getInitials(activeTitle);
   const activeCounts = channelDetail ?? registration?.channel;
@@ -753,7 +814,7 @@ function App() {
   );
   const activeFolderRoot = activeProbe
     ? buildFolderRoot(activeProbe)
-    : buildRegisteredFolderRoot(channelDetail, channelVideos) ?? "/downfolder/channels/@wingnut987s4 [UCmLADXQtWVuzOnOK5TNrWaw]/2022";
+    : buildRegisteredFolderRoot(channelDetail, channelVideos) ?? "/archive/channels";
   const activeChannels = useMemo(
     () => {
       if (dashboard?.channels.length) {
@@ -874,13 +935,6 @@ function App() {
       window.removeEventListener("popstate", applyRouteFromHash);
     };
   }, []);
-  const activeLinks = useMemo(() => {
-    if (!dashboard?.channels.length) return [];
-    const ids = new Set(dashboard.channels.map((channel) => channel.id));
-    return dashboard.links
-      .filter((link) => ids.has(link.source) && ids.has(link.target))
-      .map((link) => ({ source: link.source, target: link.target, weight: link.weight }));
-  }, [dashboard]);
   const storageMapChannels = useMemo(
     () =>
       storageScan?.channels.length
@@ -1060,7 +1114,7 @@ function App() {
   );
   const activeRhythm = useMemo(() => buildUploadRhythm(activeTimeline, uploadRhythm), [activeTimeline]);
   const latestUploadLabel = channelDetail?.latest_video_published_at
-    ? `${t("backup.latest.label")}: ${formatDateLabel(channelDetail.latest_video_published_at)}`
+    ? `${t("backup.latest.label")}: ${formatDateLabel(channelDetail.latest_video_published_at, language)}`
     : t("cadence.latest");
   const cadenceAverageLabel = channelDetail?.avg_upload_interval_days
     ? `${t("metrics.uploadCadence.label")}: ${channelDetail.avg_upload_interval_days}d`
@@ -1524,18 +1578,18 @@ function App() {
     ? metadataSchedulerStateDetail(metadataSchedulerStatus, t)
     : t("runtime.checking");
   const schedulerNextTickLabel = schedulerStatus ? schedulerNextTick(schedulerStatus, t, runtimeClockNow) : t("runtime.checking");
-  const schedulerLastTickLabel = schedulerStatus ? schedulerLastTick(schedulerStatus, t) : t("runtime.checking");
+  const schedulerLastTickLabel = schedulerStatus ? schedulerLastTick(schedulerStatus, t, language) : t("runtime.checking");
   const metadataSchedulerNextTickLabel = metadataSchedulerStatus
     ? metadataSchedulerNextTick(metadataSchedulerStatus, t, runtimeClockNow)
     : t("runtime.checking");
   const metadataSchedulerLastTickLabel = metadataSchedulerStatus
-    ? metadataSchedulerLastTick(metadataSchedulerStatus, t)
+    ? metadataSchedulerLastTick(metadataSchedulerStatus, t, language)
     : t("runtime.checking");
   const metadataSchedulerDueLabel = metadataSchedulerStatus
     ? t("runtime.metadataScheduler.due").replace("{count}", String(metadataSchedulerStatus.due_channel_count))
     : t("runtime.checking");
   const metadataSchedulerNextDueLabel = metadataSchedulerStatus
-    ? formatDateTimeLabel(metadataSchedulerStatus.next_due_at, t("runtime.scheduler.none"))
+    ? formatDateTimeLabel(metadataSchedulerStatus.next_due_at, t("runtime.scheduler.none"), language)
     : t("runtime.checking");
   const metadataDueChannels = metadataSchedulerStatus?.due_channels ?? [];
   const runtimePendingOverrides = runtimeSettings?.pending_overrides.filter((item) => item.pending_restart) ?? [];
@@ -1549,7 +1603,13 @@ function App() {
     Math.ceil(Math.max(simpleFlowStats.fresh, simpleFlowStats.queued, 1) / Math.max(runtimeDraftLimitNumber || 1, 1)),
   );
   const channelSchedulerIntervalMinutes = Math.max(1, Math.round((runtimeDraftIntervalNumber || 60) / 60));
-  const channelSchedulerEnabled = Boolean(schedulerStatus?.enabled);
+  const channelAutomaticBackupIntended = Boolean(channelPolicy?.auto_download && !channelPolicy.worker_paused);
+  const channelSchedulerEnabled = Boolean(
+    runtimeSettings?.download_worker_enabled &&
+      schedulerStatus?.enabled &&
+      metadataSchedulerStatus?.enabled &&
+      channelAutomaticBackupIntended,
+  );
   const channelSchedulerActualIntervalMinutes = Math.max(
     1,
     Math.round(((schedulerStatus?.interval_seconds ?? runtimeDraftIntervalNumber) || 60) / 60),
@@ -1578,7 +1638,9 @@ function App() {
     channelSchedulerEnabled &&
     schedulerStatus != null &&
     (schedulerStatus.interval_seconds !== runtimeDraftIntervalNumber ||
-      schedulerStatus.limit !== runtimeDraftLimitNumber);
+      schedulerStatus.limit !== runtimeDraftLimitNumber ||
+      metadataSchedulerStatus?.interval_seconds !== runtimeDraftMetadataIntervalNumber ||
+      channelDetail?.sync_interval_minutes !== channelSchedulerIntervalMinutes);
   const channelScheduleTotalCount = Math.max(
     activeCounts?.video_count ?? 0,
     library?.total ?? 0,
@@ -1588,13 +1650,34 @@ function App() {
   );
   const channelScheduleDownloadedCount = Math.min(
     channelScheduleTotalCount,
-    Math.max(activeArchivedCount, simpleFlowStats.archived),
+    activeArchivedCount,
   );
   const channelScheduleRemainingCount = Math.max(
     0,
     activeMissingCount || channelScheduleTotalCount - channelScheduleDownloadedCount,
   );
   const channelScheduleComplete = channelScheduleTotalCount > 0 && channelScheduleRemainingCount === 0;
+  const channelRuntimeNeedsAttention = Boolean(
+    runtimeSettings &&
+      (runtimeSettings.pending_restart ||
+        !runtimeSettings.download_worker_enabled ||
+        !schedulerStatus?.enabled ||
+        !metadataSchedulerStatus?.enabled ||
+        schedulerStatus?.state === "failed" ||
+        schedulerStatus?.state === "locked" ||
+        schedulerStatus?.state === "off" ||
+        metadataSchedulerStatus?.state === "failed" ||
+        metadataSchedulerStatus?.state === "locked" ||
+        metadataSchedulerStatus?.state === "off"),
+  );
+  const failedDownloadJobs = currentDownloadJobs.filter((job) => job.status === "failed");
+  const failedDownloadJobIds = failedDownloadJobs.map((job) => job.id);
+  const channelBackgroundNeedsAttention = Boolean(
+    channelAutomaticBackupIntended &&
+      (failedDownloadJobIds.length > 0 || channelRuntimeNeedsAttention),
+  );
+  const channelAttentionMessage =
+    failedDownloadJobs[0]?.error_message || runtimeApplyMessage || t("detail.simple.attentionDetail");
   const channelSchedulerSummaryLabel = channelScheduleComplete ? t("detail.automation.complete") : channelSchedulerSummary;
   const binaryStateLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
     !binary ? t("runtime.checking") : binary.available ? t("runtime.available") : t("runtime.missing");
@@ -1732,6 +1815,14 @@ function App() {
   }, [metadataSchedulerStatus?.next_tick_at, runtimeGuideOpen, schedulerStatus?.next_tick_at]);
 
   useEffect(() => {
+    activeNavIdRef.current = activeNavId;
+  }, [activeNavId]);
+
+  useEffect(() => {
+    translateRef.current = t;
+  }, [t]);
+
+  useEffect(() => {
     registeredChannelIdRef.current = registeredChannelId ?? null;
   }, [registeredChannelId]);
 
@@ -1771,6 +1862,7 @@ function App() {
   }, [archiveTxtDraft]);
 
   useEffect(() => {
+    if (activeNavId !== "library") return;
     let cancelled = false;
     async function loadLibraryViews() {
       try {
@@ -1784,7 +1876,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeNavId]);
 
   function handleAuthFailure(error: unknown) {
     const authError = error instanceof ApiAuthError || (error instanceof Error && error.name === "ApiAuthError");
@@ -1816,33 +1908,21 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let dashboardRefreshTimer: number | null = null;
+    let queueRefreshTimer: number | null = null;
+    let channelRefreshTimer: number | null = null;
+    let insightsRefreshTimer: number | null = null;
     async function loadDashboard() {
       try {
-        const [snapshot, recentEvents, runtimeSnapshot, storageSnapshot, pressureTrend, readinessSnapshot, mountDoctorSnapshot] = await Promise.all([
+        const [snapshot, recentEvents, runtimeSnapshot] = await Promise.all([
           getDashboard(),
-          getRecentEvents(100),
+          getRecentEvents(24),
           getRuntimeSettings(),
-          getStorageScan(),
-          getStoragePressureTrend(),
-          getOperationsReadiness(),
-          getMountDoctor(),
-        ]);
-        const [globalJobs, globalWorkerSnapshot, globalWorkerRunSnapshot] = await Promise.all([
-          getDownloadJobs(undefined, { limit: 200 }),
-          getDownloadWorkerPlan(undefined, 5),
-          getDownloadWorkerRuns(undefined, 8),
         ]);
         if (cancelled) return;
         setDashboard(snapshot);
         setEvents(recentEvents);
         setRuntimeSettings(runtimeSnapshot);
-        setStorageScan(storageSnapshot);
-        setStoragePressureTrend(pressureTrend);
-        setOperationsReadiness(readinessSnapshot);
-        setMountDoctor(mountDoctorSnapshot);
-        setGlobalDownloadJobs(globalJobs);
-        setQueueConsoleWorkerPlan(globalWorkerSnapshot);
-        setQueueConsoleWorkerRuns(globalWorkerRunSnapshot);
       } catch (error) {
         if (cancelled) return;
         if (handleAuthFailure(error)) return;
@@ -1865,18 +1945,47 @@ function App() {
           setRuntimeRestartEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 8));
         }
         applyDownloadTelemetryEvent(event);
-        getDashboard().then(setDashboard).catch(() => undefined);
-        getStorageScan().then(setStorageScan).catch(() => undefined);
-        getOperationsReadiness().then(setOperationsReadiness).catch(() => undefined);
-        if (event.type === "storage.pressure.snapshot") {
-          getStoragePressureTrend().then(setStoragePressureTrend).catch(() => undefined);
+        const isProgressEvent = event.type === "download.progress";
+        const refreshesArchiveSummary =
+          !isProgressEvent &&
+          (event.type.startsWith("download.") ||
+            event.type === "library.rescan.applied" ||
+            event.type === "sync.completed");
+        if (refreshesArchiveSummary) {
+          if (dashboardRefreshTimer !== null) window.clearTimeout(dashboardRefreshTimer);
+          dashboardRefreshTimer = window.setTimeout(() => {
+            getDashboard().then(setDashboard).catch(() => undefined);
+          }, 500);
         }
-        if (event.type.startsWith("download.") || event.type === "library.rescan.applied") {
-          refreshQueueConsoleState().catch(() => undefined);
+        if (
+          !isProgressEvent &&
+          activeNavIdRef.current === "queue" &&
+          (event.type.startsWith("download.") || event.type === "library.rescan.applied")
+        ) {
+          if (queueRefreshTimer !== null) window.clearTimeout(queueRefreshTimer);
+          queueRefreshTimer = window.setTimeout(() => {
+            refreshQueueConsoleState().catch(() => undefined);
+          }, 500);
+        }
+        if (event.type === "storage.pressure.snapshot" && activeNavIdRef.current === "insights") {
+          if (insightsRefreshTimer !== null) window.clearTimeout(insightsRefreshTimer);
+          insightsRefreshTimer = window.setTimeout(() => {
+            Promise.all([getStorageScan(), getStoragePressureTrend(), getOperationsReadiness()])
+              .then(([storageSnapshot, pressureTrend, readinessSnapshot]) => {
+                setStorageScan(storageSnapshot);
+                setStoragePressureTrend(pressureTrend);
+                setOperationsReadiness(readinessSnapshot);
+              })
+              .catch(() => undefined);
+          }, 500);
         }
         const channelId = registeredChannelIdRef.current;
-        if (channelId) {
-          refreshChannelAfterEvent(channelId, event.type).catch(() => undefined);
+        const eventChannelId = readEventNumber(event.data, "channel_id");
+        if (!isProgressEvent && channelId && (eventChannelId === null || eventChannelId === channelId)) {
+          if (channelRefreshTimer !== null) window.clearTimeout(channelRefreshTimer);
+          channelRefreshTimer = window.setTimeout(() => {
+            refreshChannelAfterEvent(channelId, event.type).catch(() => undefined);
+          }, 350);
         }
       } catch {
         // Ignore malformed development events.
@@ -1895,6 +2004,10 @@ function App() {
 
     return () => {
       cancelled = true;
+      if (dashboardRefreshTimer !== null) window.clearTimeout(dashboardRefreshTimer);
+      if (queueRefreshTimer !== null) window.clearTimeout(queueRefreshTimer);
+      if (channelRefreshTimer !== null) window.clearTimeout(channelRefreshTimer);
+      if (insightsRefreshTimer !== null) window.clearTimeout(insightsRefreshTimer);
       socket.close();
     };
   }, []);
@@ -1957,57 +2070,93 @@ function App() {
 
     const channelId = registeredChannelId;
     let cancelled = false;
-    async function load() {
+    setChannelDetail(null);
+    setChannelPolicy(null);
+    setDownloadJobs([]);
+    setChannelVideos([]);
+    setLibrary(null);
+    async function loadSummary() {
       try {
-        const [
-          detail,
-          policy,
-          videos,
-          coverage,
-          missingVideos,
-          cadence,
-          syncJobSnapshot,
-          jobs,
-          librarySnapshot,
-          workerSnapshot,
-          workerRunSnapshot,
-        ] = await Promise.all([
+        const [detail, policy, jobs] = await Promise.all([
           getChannel(channelId),
           getChannelPolicy(channelId),
-          getChannelVideos(channelId),
-          getChannelCoverage(channelId),
-          getChannelMissingVideos(channelId),
-          getChannelCadence(channelId),
-          getSyncJobs(channelId, 4),
           getDownloadJobs(channelId),
-          getLibrary(channelId),
-          getDownloadWorkerPlan(channelId),
-          getDownloadWorkerRuns(channelId),
         ]);
         if (cancelled) return;
         setChannelDetail(detail);
         setChannelPolicy(policy);
+        setDownloadJobs(jobs);
+      } catch (error) {
+        if (cancelled) return;
+        setWorkflowStatus("error");
+        setWorkflowMessage(error instanceof Error ? error.message : translateRef.current("workflow.error"));
+      }
+    }
+    void loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [registeredChannelId]);
+
+  useEffect(() => {
+    if (!registeredChannelId || (activeNavId !== "channels" && activeNavId !== "library")) return;
+    const channelId = registeredChannelId;
+    let cancelled = false;
+
+    async function loadDetailWorkspace() {
+      try {
+        if (activeNavId === "library") {
+          const [videos, librarySnapshot] = await Promise.all([
+            getChannelVideos(channelId),
+            getLibrary(channelId),
+          ]);
+          if (cancelled) return;
+          setChannelVideos(videos);
+          setLibrary(librarySnapshot);
+          return;
+        }
+
+        const [
+          videos,
+          librarySnapshot,
+          coverage,
+          missingVideos,
+          cadence,
+          syncJobSnapshot,
+          workerSnapshot,
+          workerRunSnapshot,
+        ] = await Promise.all([
+          getChannelVideos(channelId),
+          getLibrary(channelId),
+          getChannelCoverage(channelId),
+          getChannelMissingVideos(channelId),
+          getChannelCadence(channelId),
+          getSyncJobs(channelId, 4),
+          getDownloadWorkerPlan(channelId),
+          getDownloadWorkerRuns(channelId),
+        ]);
+        if (cancelled) return;
         setChannelVideos(videos);
+        setLibrary(librarySnapshot);
         setChannelCoverage(coverage);
         setChannelMissingVideos(missingVideos);
         setChannelCadence(cadence);
         setSyncJobs(syncJobSnapshot);
-        setDownloadJobs(jobs);
-        setLibrary(librarySnapshot);
         setWorkerPlan(workerSnapshot);
         setWorkerRuns(workerRunSnapshot);
       } catch (error) {
         if (cancelled) return;
         setWorkflowStatus("error");
-        setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+        setWorkflowMessage(error instanceof Error ? error.message : translateRef.current("workflow.error"));
       }
     }
-    load();
 
+    void loadDetailWorkspace();
     return () => {
       cancelled = true;
     };
-  }, [registeredChannelId, t]);
+  }, [activeNavId, registeredChannelId]);
 
   function resetChannelDraftState() {
     setRegistration(null);
@@ -2231,6 +2380,36 @@ function App() {
       setLibrary(librarySnapshot);
       setWorkerPlan(workerSnapshot);
       setWorkflowMessage(t("job.retried"));
+    } catch (error) {
+      setWorkflowStatus("error");
+      setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
+    }
+  }
+
+  async function handleRetryFailedDownloads() {
+    if (!registeredChannelId || failedDownloadJobIds.length === 0) return;
+    setWorkflowStatus("bulk");
+    setWorkflowMessage("");
+    try {
+      const result = await bulkUpdateDownloadJobs({
+        job_ids: failedDownloadJobIds,
+        action: "retry",
+        priority: 75,
+        quality: channelPolicy?.max_quality ?? maxQuality,
+      });
+      const [jobs, snapshot, librarySnapshot, workerSnapshot] = await Promise.all([
+        getDownloadJobs(registeredChannelId),
+        getDashboard(),
+        getLibrary(registeredChannelId),
+        getDownloadWorkerPlan(registeredChannelId),
+      ]);
+      applyDownloadJobs(jobs);
+      setDashboard(snapshot);
+      setLibrary(librarySnapshot);
+      setWorkerPlan(workerSnapshot);
+      setPreflightPlan(null);
+      setWorkflowStatus("idle");
+      setWorkflowMessage(t("detail.simple.retrySuccess").replace("{count}", String(result.updated)));
     } catch (error) {
       setWorkflowStatus("error");
       setWorkflowMessage(error instanceof Error ? error.message : t("workflow.error"));
@@ -2876,10 +3055,11 @@ function App() {
     setLiveDownloadConfirmOpen(false);
     setArchiveTxtRunConfirmOpen(false);
     setActiveNavId("settings");
+    setSettingsAdvancedOpen(true);
     writeAppHash({ nav: "settings", runtimeGuide: true }, "push");
     window.setTimeout(() => {
-      scrollToAppSection(".runtime-console");
       void handleOpenRuntimeGuide();
+      window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
     }, 0);
   }
 
@@ -2890,6 +3070,20 @@ function App() {
     setLiveDownloadConfirmOpen(true);
   }
 
+  async function updateAllChannelSyncIntervals(intervalMinutes: number) {
+    if (!registeredChannelId) return;
+    const channelIds = new Set<number>([registeredChannelId]);
+    dashboard?.channels.forEach((channel) => {
+      const id = parseDashboardChannelId(channel.id);
+      if (Number.isFinite(id)) channelIds.add(id);
+    });
+    const details = await Promise.all(
+      Array.from(channelIds, (channelId) => updateChannel(channelId, { sync_interval_minutes: intervalMinutes })),
+    );
+    const selectedDetail = details.find((detail) => detail.id === registeredChannelId);
+    if (selectedDetail) setChannelDetail(selectedDetail);
+  }
+
   async function handleStartDownloadSchedule() {
     if (!registeredChannelId) return;
     const nextDraft: RuntimeDraft = {
@@ -2897,6 +3091,7 @@ function App() {
       downloadWorkerEnabled: true,
       schedulerEnabled: true,
       metadataSchedulerEnabled: true,
+      metadataSchedulerIntervalSeconds: runtimeDraft.schedulerIntervalSeconds,
     };
     if (!isRuntimeDraftValid(nextDraft)) {
       setRuntimeApplyStatus("error");
@@ -2914,8 +3109,12 @@ function App() {
     setWorkflowMessage("");
 
     try {
-      if (channelPolicy && !channelPolicy.auto_download) {
-        const policy = await updateChannelPolicy(registeredChannelId, { auto_download: true });
+      if (!channelPolicy?.auto_download || channelPolicy.worker_paused) {
+        const policy = await updateChannelPolicy(registeredChannelId, {
+          auto_download: true,
+          worker_paused: false,
+          worker_pause_reason: null,
+        });
         setChannelPolicy(policy);
       }
       const quality = channelPolicy?.max_quality ?? maxQuality;
@@ -2935,8 +3134,10 @@ function App() {
         const queuedNow = jobs.filter((job) => job.status === "queued").length;
         queuedCount = Math.max(newlyQueued, queuedNow);
       }
-      const result = await saveRuntimeSettingsDraft(nextDraft);
-      await Promise.all([loadChannelState(registeredChannelId), refreshQueueConsoleState()]);
+      await Promise.all([
+        saveRuntimeSettingsDraft(nextDraft),
+        updateAllChannelSyncIntervals(intervalMinutes),
+      ]);
       const message = registerForFuture
         ? t("detail.automation.registeredIdle")
             .replace("{minutes}", String(intervalMinutes))
@@ -2950,9 +3151,13 @@ function App() {
       setRuntimeApplyMessage(message);
       setWorkflowStatus("idle");
       setWorkflowMessage(message);
-      if (!registerForFuture && (result.runtime.scheduler_status.running || result.runtime.scheduler_status.next_tick_at)) {
-        setActiveChannelTab("downloads");
-      }
+      void refreshChannelSummary(registeredChannelId)
+        .then((summary) => {
+          setChannelDetail(summary.detail);
+          setChannelPolicy(summary.policy);
+          applyDownloadJobs(summary.jobs);
+        })
+        .catch(() => undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("runtime.apply.error");
       setRuntimeApplyStatus("error");
@@ -2963,29 +3168,31 @@ function App() {
   }
 
   async function handleStopDownloadSchedule() {
-    const nextDraft: RuntimeDraft = {
-      ...runtimeDraft,
-      schedulerEnabled: false,
-    };
-    if (!isRuntimeDraftValid(nextDraft)) {
-      setRuntimeApplyStatus("error");
-      setRuntimeApplyMessage(t("runtime.apply.invalid"));
-      return;
-    }
+    if (!registeredChannelId) return;
 
-    setRuntimeDraft(nextDraft);
     setRuntimeApplyStatus("applying");
     setRuntimeApplyMessage("");
     setWorkflowStatus("queueing");
     setWorkflowMessage("");
 
     try {
-      await saveRuntimeSettingsDraft(nextDraft);
+      const policy = await updateChannelPolicy(registeredChannelId, {
+        worker_paused: true,
+        worker_pause_reason: "paused_from_simple_ui",
+      });
+      setChannelPolicy(policy);
       const message = t("detail.automation.stopped");
       setRuntimeApplyStatus("saved");
       setRuntimeApplyMessage(message);
       setWorkflowStatus("idle");
       setWorkflowMessage(message);
+      void refreshChannelSummary(registeredChannelId)
+        .then((summary) => {
+          setChannelDetail(summary.detail);
+          setChannelPolicy(summary.policy);
+          applyDownloadJobs(summary.jobs);
+        })
+        .catch(() => undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("runtime.apply.error");
       setRuntimeApplyStatus("error");
@@ -3001,6 +3208,8 @@ function App() {
       ...runtimeDraft,
       downloadWorkerEnabled: true,
       schedulerEnabled: true,
+      metadataSchedulerEnabled: true,
+      metadataSchedulerIntervalSeconds: runtimeDraft.schedulerIntervalSeconds,
     };
     if (!isRuntimeDraftValid(nextDraft)) {
       setRuntimeApplyStatus("error");
@@ -3017,8 +3226,10 @@ function App() {
     setWorkflowMessage("");
 
     try {
-      await saveRuntimeSettingsDraft(nextDraft);
-      await Promise.all([loadChannelState(registeredChannelId), refreshQueueConsoleState()]);
+      await Promise.all([
+        saveRuntimeSettingsDraft(nextDraft),
+        updateAllChannelSyncIntervals(intervalMinutes),
+      ]);
       const message = t("detail.automation.updated")
         .replace("{minutes}", String(intervalMinutes))
         .replace("{limit}", String(limit));
@@ -3026,6 +3237,13 @@ function App() {
       setRuntimeApplyMessage(message);
       setWorkflowStatus("idle");
       setWorkflowMessage(message);
+      void refreshChannelSummary(registeredChannelId)
+        .then((summary) => {
+          setChannelDetail(summary.detail);
+          setChannelPolicy(summary.policy);
+          applyDownloadJobs(summary.jobs);
+        })
+        .catch(() => undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("runtime.apply.error");
       setRuntimeApplyStatus("error");
@@ -3748,6 +3966,7 @@ function App() {
     setRuntimeBackupCopyStatus(null);
     setRuntimeApplyStatus("idle");
     setRuntimeApplyMessage("");
+    setSettingsAdvancedOpen(true);
     setRuntimeGuideOpen(true);
     await loadRuntimeRestartEvents();
   }
@@ -4725,13 +4944,13 @@ function App() {
   }
 
   async function refreshChannelAfterEvent(channelId: number, eventType: string) {
-    if (eventType === "download.progress" || eventType === "download.started" || eventType === "download.preflight") {
-      const [jobs, workerSnapshot] = await Promise.all([
-        getDownloadJobs(channelId),
-        getDownloadWorkerPlan(channelId),
-      ]);
+    if (eventType === "download.progress") return;
+    if (eventType === "download.started" || eventType === "download.preflight") {
+      const jobs = await getDownloadJobs(channelId);
       applyDownloadJobs(jobs);
-      setWorkerPlan(workerSnapshot);
+      if (activeNavIdRef.current === "channels") {
+        setWorkerPlan(await getDownloadWorkerPlan(channelId));
+      }
       return;
     }
     if (
@@ -4740,8 +4959,37 @@ function App() {
       eventType === "sync.completed" ||
       eventType === "download.bulk"
     ) {
-      await loadChannelState(channelId);
+      if (activeNavIdRef.current === "channels") {
+        await loadChannelState(channelId);
+        return;
+      }
+      if (activeNavIdRef.current === "library") {
+        const [summary, videos, librarySnapshot] = await Promise.all([
+          refreshChannelSummary(channelId),
+          getChannelVideos(channelId),
+          getLibrary(channelId),
+        ]);
+        setChannelDetail(summary.detail);
+        setChannelPolicy(summary.policy);
+        applyDownloadJobs(summary.jobs);
+        setChannelVideos(videos);
+        setLibrary(librarySnapshot);
+        return;
+      }
+      const summary = await refreshChannelSummary(channelId);
+      setChannelDetail(summary.detail);
+      setChannelPolicy(summary.policy);
+      applyDownloadJobs(summary.jobs);
     }
+  }
+
+  async function refreshChannelSummary(channelId: number) {
+    const [detail, policy, jobs] = await Promise.all([
+      getChannel(channelId),
+      getChannelPolicy(channelId),
+      getDownloadJobs(channelId),
+    ]);
+    return { detail, policy, jobs };
   }
 
   async function refreshQueueConsoleState() {
@@ -5162,6 +5410,7 @@ function App() {
 
   function handleSelectNav(id: NavId) {
     setActiveNavId(id);
+    if (id === "settings") setSettingsAdvancedOpen(false);
     setActiveChannelTab((current) => {
       if (id === "library") return "library";
       if (id === "channels" && current === "library") return "overview";
@@ -5230,15 +5479,22 @@ function App() {
     window.setTimeout(() => scrollToAppSection(".queue-console-panel"), 0);
   }
 
+  function openSettingsAdvanced() {
+    setActiveNavId("settings");
+    setSettingsAdvancedOpen(true);
+    pushAppRoute({ nav: "settings", runtimeGuide: false });
+    window.setTimeout(() => scrollToAppSection(".settings-advanced-details"), 0);
+  }
+
   const operatorGuideSteps: OperatorGuideStep[] = [
     {
-      id: "cockpit",
+      id: "home",
       icon: Gauge,
       nav: "dashboard",
-      titleKey: "operatorGuide.step.cockpit.title",
-      detailKey: "operatorGuide.step.cockpit.detail",
-      outcomeKey: "operatorGuide.step.cockpit.outcome",
-      actionKey: "operatorGuide.step.cockpit.action",
+      titleKey: "operatorGuide.step.home.title",
+      detailKey: "operatorGuide.step.home.detail",
+      outcomeKey: "operatorGuide.step.home.outcome",
+      actionKey: "operatorGuide.step.home.action",
       action: () => handleSelectNav("dashboard"),
     },
     {
@@ -5259,44 +5515,7 @@ function App() {
       detailKey: "operatorGuide.step.downloads.detail",
       outcomeKey: "operatorGuide.step.downloads.outcome",
       actionKey: "operatorGuide.step.downloads.action",
-      action: () => openChannelWorkspace("downloads", ".launch-control-panel"),
-    },
-    {
-      id: "queue",
-      icon: Rocket,
-      nav: "queue",
-      titleKey: "operatorGuide.step.queue.title",
-      detailKey: "operatorGuide.step.queue.detail",
-      outcomeKey: "operatorGuide.step.queue.outcome",
-      actionKey: "operatorGuide.step.queue.action",
-      action: openQueueWorkspace,
-    },
-    {
-      id: "library",
-      icon: BookOpen,
-      nav: "library",
-      titleKey: "operatorGuide.step.library.title",
-      detailKey: "operatorGuide.step.library.detail",
-      outcomeKey: "operatorGuide.step.library.outcome",
-      actionKey: "operatorGuide.step.library.action",
-      action: () => handleSelectNav("library"),
-    },
-    {
-      id: "runtime",
-      icon: ShieldCheck,
-      nav: "settings",
-      titleKey: "operatorGuide.step.runtime.title",
-      detailKey: "operatorGuide.step.runtime.detail",
-      outcomeKey: "operatorGuide.step.runtime.outcome",
-      actionKey: "operatorGuide.step.runtime.action",
-      action: () => {
-        setActiveNavId("settings");
-        pushAppRoute({ nav: "settings", runtimeGuide: true });
-        window.setTimeout(() => {
-          scrollToAppSection(".runtime-console");
-          void handleOpenRuntimeGuide();
-        }, 0);
-      },
+      action: () => openChannelWorkspace("overview", ".channel-backup-overview"),
     },
   ];
   const operatorGuideStep = operatorGuideSteps[Math.min(operatorGuideStepIndex, operatorGuideSteps.length - 1)];
@@ -5319,7 +5538,7 @@ function App() {
       titleKey: "nav.dashboard",
       detailKey: "commandPalette.dashboard.detail",
       groupKey: "commandPalette.group.navigation",
-      keywords: ["dashboard", "cockpit", "home", "대시보드"],
+      keywords: ["dashboard", "home", "대시보드", "홈"],
       run: () => handleSelectNav("dashboard"),
     },
     {
@@ -5409,6 +5628,7 @@ function App() {
       keywords: ["runtime", "worker", "scheduler", "restart", "런타임"],
       run: () => {
         setActiveNavId("settings");
+        setSettingsAdvancedOpen(true);
         window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
       },
     },
@@ -5421,9 +5641,10 @@ function App() {
       keywords: ["env", "manifest", "docker", "compose", "runtime", "환경"],
       run: () => {
         setActiveNavId("settings");
+        setSettingsAdvancedOpen(true);
         window.setTimeout(() => {
-          scrollToAppSection(".runtime-console");
           void handleOpenRuntimeGuide();
+          window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
         }, 0);
       },
     },
@@ -5473,32 +5694,54 @@ function App() {
   const showLibraryWorkspace = activeNavId === "library";
   const showInsightsWorkspace = activeNavId === "insights";
   const showSettingsWorkspace = activeNavId === "settings";
-  const showLibraryIndex = registeredChannelId && (showLibraryWorkspace || (showChannelWorkspace && activeChannelTab === "library"));
+  const simpleSettingsBackupState = !runtimeSettings
+    ? "checking"
+    : channelBackgroundNeedsAttention || runtimeApplyStatus === "error"
+      ? "attention"
+      : channelSchedulerEnabled
+        ? schedulerStatus?.running || metadataSchedulerStatus?.running || simpleFlowStats.running > 0
+          ? "running"
+          : "on"
+        : "paused";
+  const simpleSettingsBackupTitle = t(`simpleSettings.backup.${simpleSettingsBackupState}` as TranslationKey);
+  const simpleSettingsBackupDetail =
+    simpleSettingsBackupState === "on" || simpleSettingsBackupState === "running"
+      ? t("simpleSettings.backup.onDetail")
+      : t(`simpleSettings.backup.${simpleSettingsBackupState}Detail` as TranslationKey);
+  const SimpleSettingsBackupIcon =
+    simpleSettingsBackupState === "attention"
+      ? AlertTriangle
+      : simpleSettingsBackupState === "paused"
+        ? CirclePause
+        : simpleSettingsBackupState === "running"
+          ? RefreshCcw
+          : simpleSettingsBackupState === "on"
+            ? ShieldCheck
+            : Clock3;
+  const showLibraryIndex = showLibraryWorkspace || Boolean(registeredChannelId && showChannelWorkspace && activeChannelTab === "library");
   const showLowerGrid = showChannelWorkspace || showInsightsWorkspace;
   const hasAnyRegisteredChannel = Boolean(registeredChannelId || dashboard?.channels.length);
-  const cockpitStage = operationsReadiness?.stage ?? "setup";
-  const cockpitMissions = operationsReadiness?.missions.filter((mission) => mission.action_kind !== "none").slice(0, 3) ?? [];
-  const cockpitQueueWork = queueConsoleCounts.candidate + queueConsoleCounts.queued + queueConsoleCounts.running;
-  const cockpitStorageIssues = storageDriftTotal + (storageScan?.orphan_sidecars.length ?? 0);
+  const queueWorkCount = queueConsoleCounts.candidate + queueConsoleCounts.queued + queueConsoleCounts.running;
+  const storageIssueCount = storageDriftTotal + (storageScan?.orphan_sidecars.length ?? 0);
   const sidebarRuntimeTone = !runtimeSettings
     ? "checking"
-    : runtimeSettings.pending_restart
+    : !hasAnyRegisteredChannel
+      ? "locked"
+      : simpleSettingsBackupState === "attention"
       ? "warn"
-      : channelSchedulerEnabled
+      : simpleSettingsBackupState === "on" || simpleSettingsBackupState === "running"
         ? "good"
         : "locked";
   const sidebarRuntimeTitle = !runtimeSettings
     ? t("sidebar.status.title")
-    : runtimeSettings.pending_restart
-      ? t("runtime.restart.pending")
-      : channelSchedulerEnabled
-        ? t("sidebar.backup.on")
-        : t("sidebar.backup.off");
+    : !hasAnyRegisteredChannel
+      ? t("sidebar.backup.off")
+      : simpleSettingsBackupTitle;
   const sidebarRuntimeDetail = !runtimeSettings
     ? t("runtime.checking")
-    : channelSchedulerEnabled
-      ? t("sidebar.backup.onDetail")
-      : t("sidebar.backup.offDetail");
+    : !hasAnyRegisteredChannel
+      ? t("sidebar.backup.offDetail")
+      : simpleSettingsBackupDetail;
   const sidebarNavBadges = useMemo<Record<NavId, NavStatusBadge>>(
     () => ({
       dashboard: {
@@ -5506,8 +5749,8 @@ function App() {
         tone: activeMissingCount > 0 ? "active" : "good",
         label:
           activeMissingCount > 0
-            ? t("dashboard.cockpit.protectedFresh").replace("{fresh}", String(activeMissingCount))
-            : t("dashboard.cockpit.protectedAll"),
+            ? t("dashboard.overview.protectedFresh").replace("{fresh}", String(activeMissingCount))
+            : t("dashboard.overview.protectedAll"),
       },
       channels: {
         value: String(activeChannels.length),
@@ -5520,13 +5763,13 @@ function App() {
         label: t("detail.flow.skipSummary").replace("{archived}", String(activeArchivedCount)).replace("{fresh}", String(activeMissingCount)),
       },
       queue: {
-        value: String(cockpitQueueWork),
-        tone: queueConsoleCounts.failed ? "bad" : cockpitQueueWork ? "active" : "good",
+        value: String(queueWorkCount),
+        tone: queueConsoleCounts.failed ? "bad" : queueWorkCount ? "active" : "good",
         label: `${queueConsoleCounts.queued} ${t("queue.queued")} · ${queueConsoleCounts.running} ${t("queue.running")} · ${queueConsoleCounts.failed} ${t("queue.failed")}`,
       },
       insights: {
-        value: String(cockpitStorageIssues),
-        tone: cockpitStorageIssues > 0 || storagePressureTrend?.warning ? "warn" : "good",
+        value: String(storageIssueCount),
+        tone: storageIssueCount > 0 || storagePressureTrend?.warning ? "warn" : "good",
         label: `${storageDriftTotal} drift · ${storageScan?.orphan_sidecars.length ?? 0} orphan`,
       },
       settings: {
@@ -5542,8 +5785,8 @@ function App() {
       activeMissingCount,
       activeTimeline.length,
       activeTitle,
-      cockpitQueueWork,
-      cockpitStorageIssues,
+      queueWorkCount,
+      storageIssueCount,
       queueConsoleCounts.failed,
       queueConsoleCounts.queued,
       queueConsoleCounts.running,
@@ -5561,61 +5804,9 @@ function App() {
   const eventStreamDetail =
     eventStreamStatus === "live"
       ? events[0]?.occurred_at
-        ? t("topbar.live.last").replace("{time}", formatEventTime(events[0].occurred_at))
+        ? t("topbar.live.last").replace("{time}", formatEventTime(events[0].occurred_at, language))
         : t("topbar.live.waiting")
       : eventStreamStatusDetail(eventStreamStatus, t);
-  const launchRunwayLibraryCount = library?.archived ?? activeArchivedCount;
-  const launchRunwaySteps: {
-    id: string;
-    icon: typeof Link2;
-    state: LaunchRunwayState;
-    titleKey: TranslationKey;
-    detailKey: TranslationKey;
-    actionKey: TranslationKey;
-    metric: string;
-    disabled?: boolean;
-    action: () => void;
-  }[] = [
-    {
-      id: "source",
-      icon: Link2,
-      state: registeredChannelId ? "ready" : "active",
-      titleKey: "launch.runway.source.title",
-      detailKey: "launch.runway.source.detail",
-      actionKey: "launch.runway.source.action",
-      metric: registeredChannelId ? activeTitle : t("launch.runway.source.metric"),
-      action: () => openChannelWorkspace("overview", registeredChannelId ? ".channel-backup-overview" : ".channel-registration-panel"),
-    },
-    {
-      id: "backup",
-      icon: Download,
-      state: !registeredChannelId
-        ? "locked"
-        : channelSchedulerEnabled || channelScheduleComplete
-          ? "ready"
-          : "active",
-      titleKey: "launch.runway.download.title",
-      detailKey: "launch.runway.download.detail",
-      actionKey: "launch.runway.download.action",
-      metric: channelScheduleComplete ? t("detail.automation.complete") : String(channelScheduleRemainingCount),
-      disabled: !registeredChannelId,
-      action: () => openChannelWorkspace("overview", ".channel-backup-overview"),
-    },
-    {
-      id: "library",
-      icon: BookOpen,
-      state: !registeredChannelId ? "locked" : launchRunwayLibraryCount > 0 ? "ready" : "active",
-      titleKey: "launch.runway.library.title",
-      detailKey: "launch.runway.library.detail",
-      actionKey: "launch.runway.library.action",
-      metric: String(launchRunwayLibraryCount),
-      disabled: !registeredChannelId,
-      action: () => handleSelectNav("library"),
-    },
-  ];
-  const launchRunwayCompleted = launchRunwaySteps.filter((step) => step.state === "ready").length;
-  const launchRunwayProgress = Math.round((launchRunwayCompleted / launchRunwaySteps.length) * 100);
-  const launchRunwayCurrent = launchRunwaySteps.find((step) => step.state === "active") ?? launchRunwaySteps.find((step) => step.state === "locked") ?? launchRunwaySteps.at(-1);
   const securityReadinessReady = operationsReadiness ? !operationsReadiness.missions.some((mission) => mission.id === "enable_access_token") : false;
   const mountDoctorCriticalCount = mountDoctor?.issues.filter((issue) => issue.severity === "critical").length ?? 0;
   const mountDoctorWarningCount = mountDoctor?.issues.filter((issue) => issue.severity === "warning").length ?? 0;
@@ -5868,7 +6059,7 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell simple-mode">
       <aside className="sidebar" aria-label={t("nav.dashboard")}>
         <div className="brand-block">
           <div className="brand-mark">
@@ -5881,22 +6072,25 @@ function App() {
         </div>
 
         <nav className="nav-list">
-          {navItems.map((item) => {
-            const navBadge = sidebarNavBadges[item.id];
+          {primaryNavItems.map((item) => {
             return (
               <button
                 className={item.id === activeNavId ? "nav-item active" : "nav-item"}
                 key={item.id}
                 onClick={() => handleSelectNav(item.id)}
-                title={navBadge.label}
                 type="button"
               >
                 <span>{t(item.key)}</span>
-                <em aria-hidden="true" className={`nav-badge ${navBadge.tone}`}>{navBadge.value}</em>
               </button>
             );
           })}
         </nav>
+
+        <details className="sidebar-advanced-nav">
+          <summary>{t("simpleHome.advanced")}</summary>
+          <button onClick={() => handleSelectNav("queue")} type="button">{t("nav.queue")}</button>
+          <button onClick={() => handleSelectNav("insights")} type="button">{t("nav.insights")}</button>
+        </details>
 
         <div className={`sidebar-status ${sidebarRuntimeTone}`}>
           <div className="status-dot" />
@@ -5929,7 +6123,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">{activeNavKicker}</p>
-            <h1>{showDashboardWorkspace ? t("dashboard.title") : activeNavTitle}</h1>
+            {showDashboardWorkspace ? null : <h1>{activeNavTitle}</h1>}
             <div className={`channel-switcher ${registeredChannelId ? "ready" : "empty"}`} aria-label={t("channel.switcher.label")}>
               <div className="channel-switcher-avatar">
                 {registeredChannelId ? activeInitials : <Link2 size={16} />}
@@ -5969,15 +6163,6 @@ function App() {
           </div>
           <div className="topbar-actions">
             <button
-              className="icon-button command-palette-trigger"
-              onClick={openCommandPalette}
-              title={t("commandPalette.open")}
-              aria-label={t("commandPalette.open")}
-              type="button"
-            >
-              <Sparkles size={18} />
-            </button>
-            <button
               className={`guide-button ${operatorGuideSeen ? "seen" : "new"}`}
               onClick={() => openOperatorGuide()}
               title={t("operatorGuide.open")}
@@ -5987,26 +6172,6 @@ function App() {
               <BookOpen size={16} />
               <span>{t("operatorGuide.openShort")}</span>
             </button>
-            <button className="icon-button" onClick={handleTopbarSearch} title={t("actions.search")} aria-label={t("actions.search")} type="button">
-              <Search size={18} />
-            </button>
-            <button
-              className={`icon-button ${topbarRefreshStatus}`}
-              disabled={topbarRefreshStatus === "refreshing"}
-              onClick={() => void handleTopbarRefresh()}
-              title={topbarRefreshStatus === "refreshing" ? t("actions.refreshing") : t("actions.refresh")}
-              aria-label={topbarRefreshStatus === "refreshing" ? t("actions.refreshing") : t("actions.refresh")}
-              type="button"
-            >
-              <RotateCcw size={18} />
-            </button>
-            <div className={`topbar-live ${eventStreamStatus}`} aria-label={t("topbar.live.aria")}>
-              <span />
-              <div>
-                <strong>{eventStreamLabel}</strong>
-                <small>{eventStreamDetail}</small>
-              </div>
-            </div>
             <label className="language-control" title={t("actions.language")}>
               <Languages size={16} />
               <select
@@ -6021,10 +6186,6 @@ function App() {
                 ))}
               </select>
             </label>
-            <button className="command-button" onClick={() => handleSelectNav("settings")} type="button">
-              <Settings size={16} />
-              {t("actions.policies")}
-            </button>
           </div>
         </header>
 
@@ -6181,496 +6342,79 @@ function App() {
         ) : null}
 
         {showDashboardWorkspace ? (
-          <>
-            {hasAnyRegisteredChannel ? (
-              <>
-            <section className={`dashboard-cockpit ${cockpitStage}`} aria-label={t("dashboard.cockpit.aria")}>
-              <div className="cockpit-hero">
-                <div className="cockpit-copy">
-                  <p className="panel-kicker">{t("dashboard.cockpit.kicker")}</p>
-                  <h2>{t("dashboard.cockpit.title")}</h2>
-                  <span>{t("dashboard.cockpit.subtitle")}</span>
-                </div>
-                <div className="cockpit-score-card">
-                  <Gauge size={22} />
-                  <div>
-                    <span>{t("dashboard.cockpit.protectedLabel")}</span>
-                    <strong>{activeArchivedCount}/{activeCounts?.video_count ?? activeTimeline.length}</strong>
-                    <em>
-                      {activeMissingCount > 0
-                        ? t("dashboard.cockpit.protectedFresh").replace("{fresh}", String(activeMissingCount))
-                        : t("dashboard.cockpit.protectedAll")}
-                    </em>
-                  </div>
-                </div>
-              </div>
-
-            </section>
-
-            <section className="launch-runway" aria-label={t("launch.runway.aria")}>
-              <div className="launch-runway-head">
-                <div>
-                  <p className="panel-kicker">{t("launch.runway.kicker")}</p>
-                  <h2>{t("launch.runway.title")}</h2>
-                  <span>{t("launch.runway.subtitle")}</span>
-                </div>
-                <div className="launch-runway-meter">
-                  <span>{t("launch.runway.progress")}</span>
-                  <strong>
-                    {launchRunwayCompleted}/{launchRunwaySteps.length}
-                  </strong>
-                  <em>
-                    {t("launch.runway.current")} · {launchRunwayCurrent ? t(launchRunwayCurrent.titleKey) : t("runtime.checking")}
-                  </em>
-                  <i>
-                    <b style={{ width: `${launchRunwayProgress}%` }} />
-                  </i>
-                </div>
-              </div>
-              <div className="launch-runway-grid">
-                {launchRunwaySteps.map((step, index) => {
-                  const StepIcon = step.icon;
-                  return (
-                    <article className={`launch-runway-step ${step.state}`} key={step.id}>
-                      <div className="launch-runway-step-index">
-                        <span>{index + 1}</span>
-                        <StepIcon size={15} />
-                      </div>
-                      <div className="launch-runway-step-copy">
-                        <em>{t(`launch.runway.status.${step.state}` as TranslationKey)}</em>
-                        <strong>{t(step.titleKey)}</strong>
-                        <small>{t(step.detailKey)}</small>
-                      </div>
-                      <div className="launch-runway-step-action">
-                        <strong>{step.metric}</strong>
-                        <button disabled={step.disabled} onClick={step.action} type="button">
-                          {t(step.actionKey)}
-                          <ChevronRight size={13} />
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-              </>
-            ) : null}
-
-            {!hasAnyRegisteredChannel ? (
-              <section className="first-source-panel first-source-panel-focus" aria-label={t("firstRun.empty.aria")}>
-                <div className="first-source-head">
-                  <div>
-                    <p className="panel-kicker">{t("firstRun.empty.kicker")}</p>
-                    <h2>{t("firstRun.empty.title")}</h2>
-                    <span>{t("firstRun.empty.subtitle")}</span>
-                  </div>
-                  <div className="first-source-action-row">
-                    <button className="primary-action" disabled={demoSeedStatus === "loading"} onClick={handleSeedDemoWorkspace} type="button">
-                      <Database size={16} />
-                      {demoSeedStatus === "loading" ? t("firstRun.demo.loading") : t("firstRun.demo.action")}
-                    </button>
-                    <button className="first-source-secondary" onClick={() => openChannelWorkspace("overview", ".channel-registration-panel")} type="button">
-                      <Link2 size={15} />
-                      {t("firstRun.empty.primary")}
-                    </button>
-                  </div>
-                </div>
-                {workflowMessage ? (
-                  <span className={`workflow-message first-source-message ${workflowStatus}`}>{workflowMessage}</span>
-                ) : null}
-                <section className={`operator-checks-panel ${operatorChecksOpen ? "open" : ""}`} aria-label={t("firstRun.operatorChecks.aria")}>
-                  <button className="operator-checks-toggle" onClick={() => setOperatorChecksOpen((open) => !open)} type="button">
-                    <span>
-                      <ShieldCheck size={15} />
-                      <strong>{t("firstRun.operatorChecks.title")}</strong>
-                    </span>
-                    <small>{t("firstRun.operatorChecks.detail")}</small>
-                    <ChevronRight size={14} />
-                  </button>
-                  {operatorChecksOpen ? (
-                    <div className="operator-checks-content">
-                      <div className="clean-install-gate" aria-label={t("firstRun.gate.aria")}>
-                  <div className="clean-install-head">
-                    <div>
-                      <p className="panel-kicker">{t("firstRun.gate.kicker")}</p>
-                      <h3>{t("firstRun.gate.title")}</h3>
-                      <span>
-                        {cleanInstallGateNextStep
-                          ? t("firstRun.gate.subtitle").replace("{next}", t(cleanInstallGateNextStep.titleKey))
-                          : t("firstRun.gate.done")}
-                      </span>
-                    </div>
-                    <div className="clean-install-score">
-                      <ShieldCheck size={15} />
-                      <strong>
-                        {cleanInstallGateReadyCount}/{cleanInstallGateSteps.length}
-                      </strong>
-                      <small>{t("firstRun.gate.score")}</small>
-                    </div>
-                  </div>
-                  <div className="clean-install-steps">
-                    {cleanInstallGateSteps.map((step, index) => {
-                      const StepIcon = step.icon;
-                      return (
-                        <article className={step.state} key={step.id}>
-                          <div className="clean-install-step-index">
-                            <span>{index + 1}</span>
-                            <StepIcon size={14} />
-                          </div>
-                          <div className="clean-install-step-copy">
-                            <em>{t(`firstRun.gate.status.${step.state}` as TranslationKey)}</em>
-                            <strong>{t(step.titleKey)}</strong>
-                            <small>{t(step.detailKey)}</small>
-                          </div>
-                          <button disabled={step.disabled} onClick={() => void step.action()} type="button">
-                            {t(step.actionKey)}
-                          </button>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
-                    </div>
-                  ) : null}
-                </section>
-                {operatorChecksOpen ? (
-                  <div className="first-source-grid">
-                    <article>
-                      <FileArchive size={17} />
-                      <strong>{t("firstRun.empty.archiveTitle")}</strong>
-                      <span>{t("firstRun.empty.archiveDetail")}</span>
-                      <button
-                        onClick={() => {
-                          openChannelWorkspace("overview", ".quick-panel");
-                          window.setTimeout(() => scrollToAppSection(".quick-panel"), 0);
-                        }}
-                        type="button"
-                      >
-                        {t("firstRun.empty.archiveAction")}
-                      </button>
-                    </article>
-                    <article>
-                      <FolderTree size={17} />
-                      <strong>{t("firstRun.empty.storageTitle")}</strong>
-                      <span>{t("firstRun.empty.storageDetail")}</span>
-                      <button
-                        onClick={() => {
-                          handleSelectNav("insights");
-                          window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
-                        }}
-                        type="button"
-                      >
-                        {t("firstRun.empty.storageAction")}
-                      </button>
-                    </article>
-                </div>
-                ) : null}
-              </section>
-            ) : null}
-
-            {hasAnyRegisteredChannel ? (
-              <button
-                className={`operator-checks-toggle dashboard-advanced-toggle ${operatorChecksOpen ? "open" : ""}`}
-                onClick={() => setOperatorChecksOpen((open) => !open)}
-                type="button"
-              >
-                <span>
-                  <ShieldCheck size={15} />
-                  <strong>{t("firstRun.operatorChecks.title")}</strong>
-                </span>
-                <small>{t("firstRun.operatorChecks.detail")}</small>
-                <ChevronRight size={14} />
-              </button>
-            ) : null}
-
-            {operatorChecksOpen ? (
-              <>
-            <section className={`release-readiness ${releaseReadinessDone === releaseReadinessItems.length ? "ready" : "building"}`} aria-label={t("release.readiness.aria")}>
-              <div className="release-readiness-head">
-                <div>
-                  <p className="panel-kicker">{t("release.readiness.kicker")}</p>
-                  <h2>{t("release.readiness.title")}</h2>
-                  <span>{t("release.readiness.subtitle")}</span>
-                </div>
-                <div className="release-readiness-score">
-                  <ShieldCheck size={18} />
-                  <strong>
-                    {releaseReadinessDone}/{releaseReadinessItems.length}
-                  </strong>
-                  <span>
-                    {releaseReadinessDone === releaseReadinessItems.length
-                      ? t("release.readiness.scoreReady")
-                      : t("release.readiness.scoreBuilding")}
-                  </span>
-                </div>
-                <div className="release-readiness-actions">
-                  <button onClick={() => void handleCopySupportBundle()} type="button">
-                    <ClipboardList size={13} />
-                    {supportBundleCopyStatus === "copied"
-                      ? t("support.bundle.copied")
-                      : supportBundleCopyStatus === "error"
-                        ? t("support.bundle.copyError")
-                        : t("support.bundle.copy")}
-                  </button>
-                  <button onClick={handleDownloadSupportBundle} type="button">
-                    <Download size={13} />
-                    {t("support.bundle.download")}
-                  </button>
-                </div>
-              </div>
-              <div className={`release-brief ${releaseReadinessBriefTone}`} aria-label={t("release.brief.aria")}>
-                <div className="release-brief-state">
-                  <Sparkles size={16} />
-                  <div>
-                    <span>{t("release.brief.kicker")}</span>
-                    <strong>{t(releaseReadinessBriefStatusKey)}</strong>
-                    <small>
-                      {t("release.brief.score").replace("{done}", String(releaseReadinessDone)).replace("{total}", String(releaseReadinessItems.length))}
-                    </small>
-                  </div>
-                </div>
-                <div className="release-brief-next">
-                  <span>{releaseReadinessNextItem ? t("release.brief.next") : t("release.brief.readyNext")}</span>
-                  <strong>{releaseReadinessNextItem ? t(releaseReadinessNextItem.titleKey) : t("release.brief.allGreenTitle")}</strong>
-                  <small>{releaseReadinessNextItem ? t(releaseReadinessNextItem.detailKey) : t("release.brief.allGreenDetail")}</small>
-                </div>
-                <div className="release-brief-pills">
-                  <span className={releaseReadinessPendingItems.length ? "warn" : "good"}>
-                    {releaseReadinessGapSummary}
-                  </span>
-                  <span>{mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking")}</span>
-                  <span>{runtimeBackupRestoreReady ? t("runtime.backup.ready") : t("runtime.backup.warn")}</span>
-                </div>
-                <div className="release-brief-actions">
-                  {releaseReadinessNextItem ? (
-                    <button onClick={() => releaseReadinessNextItem.action()} type="button">
-                      <ChevronRight size={13} />
-                      {t("release.brief.openNext")}
-                    </button>
-                  ) : null}
-                  <button onClick={() => void handleCopyBetaReadinessBrief()} type="button">
-                    <ClipboardList size={13} />
-                    {betaBriefCopyStatus === "copied"
-                      ? t("release.brief.copied")
-                      : betaBriefCopyStatus === "error"
-                        ? t("release.brief.copyError")
-                        : t("release.brief.copy")}
-                  </button>
-                </div>
-              </div>
-              <div className="beta-proof-card" aria-label={t("beta.proof.aria")}>
-                <div className="beta-proof-copy">
-                  <p className="panel-kicker">{t("beta.proof.kicker")}</p>
-                  <strong>{t("beta.proof.title")}</strong>
-                  <span>{t("beta.proof.detail")}</span>
-                </div>
-                <div className="beta-proof-metrics">
-                  <article>
-                    <span>{t("beta.proof.readiness")}</span>
-                    <strong>{releaseReadinessDone}/{releaseReadinessItems.length}</strong>
-                  </article>
-                  <article>
-                    <span>{t("beta.proof.install")}</span>
-                    <strong>{cleanInstallGateReadyCount}/{cleanInstallGateSteps.length}</strong>
-                  </article>
-                  <article>
-                    <span>{t("beta.proof.privacy")}</span>
-                    <strong>{t("beta.proof.redacted")}</strong>
-                  </article>
-                  <article>
-                    <span>{t("beta.proof.source")}</span>
-                    <strong>
-                      {supportBundleSource === "server"
-                        ? t("support.bundle.server")
-                        : supportBundleSource === "fallback"
-                          ? t("support.bundle.fallback")
-                          : t("support.bundle.ready")}
-                    </strong>
-                  </article>
-                </div>
-                <div className="beta-proof-actions">
-                  <button onClick={() => void handleCopyBetaProof()} type="button">
-                    <ClipboardList size={13} />
-                    {betaProofCopyStatus === "copied"
-                      ? t("beta.proof.copied")
-                      : betaProofCopyStatus === "error"
-                        ? t("beta.proof.copyError")
-                        : t("beta.proof.copy")}
-                  </button>
-                  <button onClick={handleDownloadBetaProof} type="button">
-                    <Download size={13} />
-                    {t("beta.proof.download")}
-                  </button>
-                </div>
-              </div>
-              <div className="support-bundle-strip">
-                <ShieldCheck size={15} />
-                <div>
-                  <strong>{t("support.bundle.privacyTitle")}</strong>
-                  <span>{t("support.bundle.privacyDetail")}</span>
-                </div>
-                <small className={`support-bundle-source ${supportBundleSource}`}>
-                  {supportBundleSource === "server"
-                    ? t("support.bundle.server")
-                    : supportBundleSource === "fallback"
-                      ? t("support.bundle.fallback")
-                      : t("support.bundle.ready")}
-                </small>
-              </div>
-              <div className={`mount-doctor-strip ${mountDoctor?.status ?? "checking"}`} aria-label={t("mountDoctor.aria")}>
-                <div className="mount-doctor-score">
-                  <HardDrive size={16} />
-                  <strong>{mountDoctor ? mountDoctor.score : "..."}</strong>
-                  <span>{mountDoctor ? t(`mountDoctor.status.${mountDoctor.status}` as TranslationKey) : t("runtime.checking")}</span>
-                </div>
-                <div className="mount-doctor-copy">
-                  <strong>{t("mountDoctor.title")}</strong>
-                  <span>{mountDoctorTopIssue ? mountDoctorTopIssue.title : mountDoctorIssueDetail}</span>
-                  {mountDoctorTopIssue ? <small>{mountDoctorIssueDetail}</small> : null}
-                </div>
-                <div className="mount-doctor-paths">
-                  {mountDoctorPathRows.map((path) => (
-                    <span className={mountDoctorPathTone(path, mountDoctor?.running_in_container ?? false)} title={path.resolved} key={path.id}>
-                      {mountDoctorPathLabel(path.id, t)}
-                      <em>{mountDoctorPathState(path, t)}</em>
-                    </span>
-                  ))}
-                </div>
-                <div className="mount-doctor-actions">
-                  <button disabled={mountDoctorStatus === "refreshing"} onClick={() => void handleRefreshMountDoctor()} type="button">
-                    <RotateCcw size={13} />
-                    {mountDoctorStatus === "refreshing" ? t("ops.refreshing") : t("ops.refresh")}
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleSelectNav("settings");
-                      window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
-                    }}
-                    type="button"
-                  >
-                    <Settings size={13} />
-                    {t("mountDoctor.action")}
-                  </button>
-                </div>
-              </div>
-              <div className="release-readiness-grid">
-                {releaseReadinessItems.map((item) => {
-                  const ItemIcon = item.icon;
-                  return (
-                    <article className={item.ready ? "ready" : "pending"} key={item.id}>
-                      <div>
-                        <ItemIcon size={16} />
-                        <strong>{t(item.titleKey)}</strong>
-                      </div>
-                      <span>{t(item.detailKey)}</span>
-                      <button onClick={item.action} type="button">
-                        {item.ready ? <CheckCircle2 size={13} /> : <ChevronRight size={13} />}
-                        {t(item.actionKey)}
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="metric-grid" aria-label={t("metrics.aria")}>
-              {activeMetrics.map((metric, index) => (
-                <MetricTile metric={metric} index={index} key={metric.labelKey ?? metric.label ?? index} />
-              ))}
-            </section>
-
-            <section className="ops-strip" aria-label={t("events.title")}>
-              <div className="ops-orbit">
-                <Waves size={18} />
-                <div>
-                  <span>{t("events.title")}</span>
-                  <strong>{events[0] ? eventLabel(events[0], t) : t("events.idle")}</strong>
-                </div>
-              </div>
-              <div className="event-rail">
-                {events.slice(0, 5).map((event) => (
-                  <article className={`event-chip ${eventTone(event.type)}`} key={`${event.type}-${event.occurred_at}`}>
-                    <Bell size={14} />
-                    <span>{eventLabel(event, t)}</span>
-                    <time>{formatEventTime(event.occurred_at)}</time>
-                  </article>
-                ))}
-                {events.length === 0 ? <span className="event-empty">{t("events.empty")}</span> : null}
-              </div>
-              <button className="event-log-button" onClick={() => void handleOpenEventLog()} type="button">
-                <History size={14} />
-                {t("events.openLog")}
-              </button>
-            </section>
-
-            {operationsReadiness && operatorChecksOpen ? (
-              <section className={`ops-readiness ${operationsReadiness.stage}`} aria-label={t("ops.title")}>
-                <div className="ops-readiness-score">
-                  <Gauge size={22} />
-                  <div>
-                    <span>{t("ops.score")}</span>
-                    <strong>{operationsReadiness.score}</strong>
-                    <em>{operationStageLabel(operationsReadiness.stage, t)}</em>
-                  </div>
-                </div>
-                <div className="ops-readiness-main">
-                  <div className="ops-readiness-head">
-                    <div>
-                      <p className="panel-kicker">{t("ops.kicker")}</p>
-                      <h2>{t("ops.title")}</h2>
-                      <span>{t("ops.subtitle")}</span>
-                    </div>
-                    <button
-                      className="command-button"
-                      disabled={operationsStatus === "refreshing"}
-                      onClick={() => void handleRefreshOperationsReadiness()}
-                      type="button"
-                    >
-                      <RotateCcw size={15} />
-                      {operationsStatus === "refreshing"
-                        ? t("ops.refreshing")
-                        : operationsStatus === "done"
-                          ? t("ops.refreshed")
-                          : t("ops.refresh")}
-                    </button>
-                  </div>
-                  <div className="ops-readiness-metrics">
-                    {operationsReadiness.metrics.slice(0, 6).map((metric) => (
-                      <article className={metric.tone} key={metric.key}>
-                        <span>{operationMetricLabel(metric.key, t)}</span>
-                        <strong>{metric.value}</strong>
-                      </article>
-                    ))}
-                  </div>
-                  <div className="ops-mission-list">
-                    {operationsReadiness.missions.slice(0, 5).map((mission) => {
-                      const MissionIcon = operationMissionIcon(mission.id);
-                      return (
-                        <article className={`ops-mission ${mission.severity} ${mission.status}`} key={mission.id}>
-                          <div className="ops-mission-icon">
-                            <MissionIcon size={17} />
-                          </div>
-                          <div>
-                            <strong>{operationMissionTitle(mission.id, t)}</strong>
-                            <small>{operationMissionDetail(mission, t)}</small>
-                          </div>
-                          <button
-                            disabled={mission.action_kind === "none" || storagePressureStatus === "saving"}
-                            onClick={() => void handleOperationsMissionAction(mission)}
-                            type="button"
-                          >
-                            {operationMissionActionLabel(mission, t)}
-                          </button>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
-              </section>
-            ) : null}
-              </>
-            ) : null}
-          </>
+          <SimpleHome
+            hasChannel={hasAnyRegisteredChannel}
+            onAddChannel={() => openChannelWorkspace("overview", ".channel-registration-panel")}
+            onOpenAdvanced={openSettingsAdvanced}
+            t={t}
+          >
+            {hasAnyRegisteredChannel && registeredChannelId ? (
+              <ChannelBackupOverview
+                attention={channelBackgroundNeedsAttention || runtimeApplyStatus === "error"}
+                applying={runtimeApplyStatus === "applying" || workflowStatus === "syncing" || workflowStatus === "bulk"}
+                complete={channelScheduleComplete}
+                dirty={channelSchedulerDirty}
+                downloaded={channelScheduleDownloadedCount}
+                failedCount={failedDownloadJobIds.length}
+                handle={activeHandle}
+                initials={activeInitials}
+                intervalMinutes={channelSchedulerIntervalMinutes}
+                lastRun={channelSchedulerLastLabel}
+                limit={runtimeDraftLimitNumber || 5}
+                manualDisabled={liveDownloadStatus === "running" || workflowStatus === "downloading"}
+                nextRun={channelSchedulerNextLabel}
+                onCheckNow={() => void handleManualSync()}
+                onIntervalChange={(minutes) =>
+                  setRuntimeDraft((draft) => ({
+                    ...draft,
+                    schedulerIntervalSeconds: String(minutes * 60),
+                    metadataSchedulerIntervalSeconds: String(minutes * 60),
+                  }))
+                }
+                onLimitChange={(limit) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: String(limit) }))}
+                onManualTest={handleOpenLiveDownloadConfirm}
+                onOpenLibrary={() => handleSelectNav("library")}
+                onOpenSettings={openSettingsAdvanced}
+                onRetryFailed={() => void handleRetryFailedDownloads()}
+                onStart={() => void handleStartDownloadSchedule()}
+                onStop={() => void handleStopDownloadSchedule()}
+                onUpdate={() => void handleUpdateDownloadSchedule()}
+                remaining={channelScheduleRemainingCount}
+                schedulerEnabled={channelSchedulerEnabled}
+                schedulerRunning={Boolean(
+                  schedulerStatus?.running || metadataSchedulerStatus?.running || simpleFlowStats.running,
+                )}
+                statusMessage={
+                  channelBackgroundNeedsAttention || runtimeApplyStatus === "error"
+                    ? channelAttentionMessage
+                    : workflowMessage || runtimeApplyMessage
+                }
+                t={t}
+                title={activeTitle}
+                total={channelScheduleTotalCount}
+              />
+            ) : (
+              <ChannelRegistrationPanel
+                audioOnly={audioOnly}
+                error={registrationError}
+                isAdditionalChannel={false}
+                maxQuality={maxQuality}
+                onAudioOnlyChange={setAudioOnly}
+                onClose={() => undefined}
+                onCommit={() => void handleCommit()}
+                onMaxQualityChange={setMaxQuality}
+                onSourceValueChange={setSourceValue}
+                onSubmit={handleProbe}
+                onSubtitlesChange={setSubtitlesEnabled}
+                probe={activeProbe}
+                qualityOptions={qualityOptions}
+                sourceValue={sourceValue}
+                status={registrationStatus}
+                subtitlesEnabled={subtitlesEnabled}
+                t={t}
+              />
+            )}
+          </SimpleHome>
         ) : null}
 
         {activeNavId === "queue" ? (
@@ -6827,6 +6571,7 @@ function App() {
                     className="command-button"
                     onClick={() => {
                       setActiveNavId("settings");
+                      setSettingsAdvancedOpen(true);
                       window.setTimeout(() => scrollToAppSection(".runtime-console"), 0);
                     }}
                     type="button"
@@ -7019,11 +6764,11 @@ function App() {
                               </div>
                               <div>
                                 <dt>{t("queue.console.started")}</dt>
-                                <dd>{job.started_at ? formatEventTime(job.started_at) : "-"}</dd>
+                                <dd>{job.started_at ? formatEventTime(job.started_at, language) : "-"}</dd>
                               </div>
                               <div>
                                 <dt>{t("queue.console.completed")}</dt>
-                                <dd>{job.completed_at ? formatEventTime(job.completed_at) : "-"}</dd>
+                                <dd>{job.completed_at ? formatEventTime(job.completed_at, language) : "-"}</dd>
                               </div>
                             </dl>
                             {telemetry?.error || job.error_message ? (
@@ -7040,7 +6785,7 @@ function App() {
                               {jobEvents.map((event) => (
                                 <article className={eventTone(event.type)} key={`${event.type}-${event.occurred_at}`}>
                                   <span>{eventLabel(event, t)}</span>
-                                  <time>{formatEventTime(event.occurred_at)}</time>
+                                  <time>{formatEventTime(event.occurred_at, language)}</time>
                                 </article>
                               ))}
                               {jobEvents.length === 0 ? <p className="empty-copy">{t("queue.console.noEvents")}</p> : null}
@@ -7120,7 +6865,7 @@ function App() {
                     <article key={run.id}>
                       <strong>{run.status}</strong>
                       <small>
-                        {run.channel_title ?? t("queue.console.allChannels")} · {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at)}
+                        {run.channel_title ?? t("queue.console.allChannels")} · {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at, language)}
                       </small>
                       <code>{run.started_count}/{run.completed_count}/{run.failed_count}</code>
                     </article>
@@ -7134,6 +6879,124 @@ function App() {
         {activeNavId !== "queue" ? (
           <>
         {showSettingsWorkspace ? (
+        <>
+        <section className="simple-settings" aria-label={t("simpleSettings.aria")}>
+          <header className="simple-settings__header">
+            <h2>{t("simpleSettings.title")}</h2>
+            <p>{t("simpleSettings.subtitle")}</p>
+          </header>
+
+          <div className="simple-settings__grid">
+            <article className="simple-settings__language">
+              <span className="simple-settings__icon" aria-hidden="true">
+                <Languages size={20} />
+              </span>
+              <div>
+                <h3>{t("simpleSettings.language.title")}</h3>
+                <p>{t("simpleSettings.language.detail")}</p>
+              </div>
+              <label>
+                <span>{t("simpleSettings.language.label")}</span>
+                <select
+                  aria-label={t("simpleSettings.language.label")}
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value as Language)}
+                >
+                  {Object.entries(languages).map(([code, label]) => (
+                    <option key={code} value={code}>
+                      {code.toUpperCase()} · {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </article>
+
+            <article className={`simple-settings__backup ${simpleSettingsBackupState}`}>
+              <span className="simple-settings__icon" aria-hidden="true">
+                <SimpleSettingsBackupIcon size={20} />
+              </span>
+              <div>
+                <h3>{t("simpleSettings.backup.title")}</h3>
+                <strong>{simpleSettingsBackupTitle}</strong>
+                <p>{simpleSettingsBackupDetail}</p>
+              </div>
+              <button
+                className="command-button"
+                onClick={() =>
+                  openChannelWorkspace(
+                    "overview",
+                    registeredChannelId ? ".channel-detail-panel" : ".channel-registration-panel",
+                  )
+                }
+                type="button"
+              >
+                <ChevronRight size={16} />
+                {t("simpleSettings.backup.openChannels")}
+              </button>
+            </article>
+
+            <article className="simple-settings__guide">
+              <span className="simple-settings__icon" aria-hidden="true">
+                <BookOpen size={20} />
+              </span>
+              <div>
+                <h3>{t("simpleSettings.guide.title")}</h3>
+                <p>{t("simpleSettings.guide.detail")}</p>
+              </div>
+              <button className="command-button" onClick={() => openOperatorGuide()} type="button">
+                <BookOpen size={16} />
+                {t("simpleSettings.guide.open")}
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <details
+          className="settings-advanced-details"
+          onToggle={(event) => setSettingsAdvancedOpen(event.currentTarget.open)}
+          open={settingsAdvancedOpen}
+        >
+          <summary>
+            <span className="simple-settings__icon" aria-hidden="true">
+              <Settings size={19} />
+            </span>
+            <span>
+              <strong>{t("simpleSettings.advanced.title")}</strong>
+              <small>{t("simpleSettings.advanced.detail")}</small>
+            </span>
+            <em>
+              {settingsAdvancedOpen
+                ? t("simpleSettings.advanced.close")
+                : t("simpleSettings.advanced.open")}
+            </em>
+          </summary>
+          <div className="settings-advanced-content">
+            <nav className="settings-advanced-routes" aria-label={t("simpleSettings.advanced.routes") }>
+              <button onClick={openQueueWorkspace} type="button">
+                <ListFilter size={18} />
+                <span>
+                  <strong>{t("nav.queue")}</strong>
+                  <small>{t("simpleSettings.advanced.queueDetail")}</small>
+                </span>
+                <ChevronRight size={16} />
+              </button>
+              <button onClick={() => handleSelectNav("insights")} type="button">
+                <HardDrive size={18} />
+                <span>
+                  <strong>{t("nav.insights")}</strong>
+                  <small>{t("simpleSettings.advanced.insightsDetail")}</small>
+                </span>
+                <ChevronRight size={16} />
+              </button>
+              <button onClick={() => scrollToAppSection(".runtime-console")} type="button">
+                <Server size={18} />
+                <span>
+                  <strong>{t("simpleSettings.advanced.runtime")}</strong>
+                  <small>{t("simpleSettings.advanced.runtimeDetail")}</small>
+                </span>
+                <ChevronRight size={16} />
+              </button>
+            </nav>
         <section className="runtime-console" aria-label={t("runtime.title")}>
           <div className="runtime-header">
             <div>
@@ -7262,6 +7125,9 @@ function App() {
             </article>
           </div>
         </section>
+          </div>
+        </details>
+        </>
         ) : null}
 
         {showChannelWorkspace && (!registeredChannelId || registrationComposerOpen) ? (
@@ -7304,10 +7170,12 @@ function App() {
               </div>
             ) : null}
             <ChannelBackupOverview
-              applying={runtimeApplyStatus === "applying" || workflowStatus === "syncing"}
+              attention={channelBackgroundNeedsAttention || runtimeApplyStatus === "error"}
+              applying={runtimeApplyStatus === "applying" || workflowStatus === "syncing" || workflowStatus === "bulk"}
               complete={channelScheduleComplete}
               dirty={channelSchedulerDirty}
               downloaded={channelScheduleDownloadedCount}
+              failedCount={failedDownloadJobIds.length}
               handle={activeHandle}
               initials={activeInitials}
               intervalMinutes={channelSchedulerIntervalMinutes}
@@ -7317,25 +7185,39 @@ function App() {
               nextRun={channelSchedulerNextLabel}
               onCheckNow={() => void handleManualSync()}
               onIntervalChange={(minutes) =>
-                setRuntimeDraft((draft) => ({ ...draft, schedulerIntervalSeconds: String(minutes * 60) }))
+                setRuntimeDraft((draft) => ({
+                  ...draft,
+                  schedulerIntervalSeconds: String(minutes * 60),
+                  metadataSchedulerIntervalSeconds: String(minutes * 60),
+                }))
               }
               onLimitChange={(limit) => setRuntimeDraft((draft) => ({ ...draft, schedulerLimit: String(limit) }))}
               onManualTest={handleOpenLiveDownloadConfirm}
-              onOpenLibrary={() => {
-                setActiveChannelTab("library");
-                window.setTimeout(() => scrollToAppSection(".channel-tab-rail"), 0);
-              }}
+              onOpenLibrary={() => handleSelectNav("library")}
+              onOpenSettings={openSettingsAdvanced}
+              onRetryFailed={() => void handleRetryFailedDownloads()}
               onStart={() => void handleStartDownloadSchedule()}
               onStop={() => void handleStopDownloadSchedule()}
               onUpdate={() => void handleUpdateDownloadSchedule()}
               remaining={channelScheduleRemainingCount}
               schedulerEnabled={channelSchedulerEnabled}
-              schedulerRunning={Boolean(schedulerStatus?.running)}
-              statusMessage={runtimeApplyMessage || workflowMessage}
+              schedulerRunning={Boolean(
+                schedulerStatus?.running || metadataSchedulerStatus?.running || simpleFlowStats.running,
+              )}
+              statusMessage={
+                channelBackgroundNeedsAttention || runtimeApplyStatus === "error"
+                  ? channelAttentionMessage
+                  : workflowMessage || runtimeApplyMessage
+              }
               t={t}
               title={activeTitle}
               total={channelScheduleTotalCount}
             />
+            <details className="channel-advanced-details">
+              <summary>
+                <span>{t("simpleHome.advanced")}</span>
+                <small>{t("simpleHome.advancedDetail")}</small>
+              </summary>
             <div className="channel-tab-rail" aria-label={t("detail.tabs.aria")}>
               {channelDetailTabs.map((tab) => {
                 const TabIcon = tab.icon;
@@ -7357,7 +7239,7 @@ function App() {
             <div className="sync-ops-grid">
               <article>
                 <span>{t("detail.syncOps.next")}</span>
-                <strong>{formatDateTimeLabel(channelDetail?.next_sync_due_at, t("runtime.scheduler.none"))}</strong>
+                <strong>{formatDateTimeLabel(channelDetail?.next_sync_due_at, t("runtime.scheduler.none"), language)}</strong>
                 <small>
                   {t("detail.syncOps.syncInterval").replace(
                     "{minutes}",
@@ -7386,7 +7268,7 @@ function App() {
               <article>
                 <span>{t("detail.syncOps.lastAuto")}</span>
                 <strong>{autoSyncStatusLabel(channelDetail, t)}</strong>
-                <small>{formatDateTimeLabel(channelDetail?.last_auto_synced_at, t("detail.syncOps.autoNoRun"))}</small>
+                <small>{formatDateTimeLabel(channelDetail?.last_auto_synced_at, t("detail.syncOps.autoNoRun"), language)}</small>
               </article>
               <article className={channelPolicy?.auto_download ? "good" : "idle"}>
                 <span>{t("detail.syncOps.autoCandidates")}</span>
@@ -7410,7 +7292,7 @@ function App() {
                     <article className={job.status} key={job.id}>
                       <div>
                         <strong>{syncJobStatusLabel(job.status, t)}</strong>
-                        <span>{job.trigger} · {formatEventTime(job.completed_at ?? job.started_at)}</span>
+                        <span>{job.trigger} · {formatEventTime(job.completed_at ?? job.started_at, language)}</span>
                       </div>
                       <dl>
                         <div>
@@ -7496,7 +7378,7 @@ function App() {
                       {storageChannelPressureTrend.snapshots.map((snapshot) => (
                         <span
                           key={snapshot.id}
-                          title={`${formatDateTimeLabel(snapshot.scanned_at, t("storage.quarantine.unknownTime"))} · ${snapshot.label}`}
+                          title={`${formatDateTimeLabel(snapshot.scanned_at, t("storage.quarantine.unknownTime"), language)} · ${snapshot.label}`}
                         >
                           <i style={{ height: `${Math.max(8, Math.round((snapshot.bytes / activeStorageHistoryPeakBytes) * 100))}%` }} />
                         </span>
@@ -7643,7 +7525,7 @@ function App() {
                 <div className="video-timeline">
                   {activeTimeline.slice(0, 6).map((video) => (
                     <a className={`timeline-row ${video.archive_state}`} href={video.url} key={video.external_id} rel="noreferrer" target="_blank">
-                      <time>{formatVideoDate(video)}</time>
+                      <time>{formatVideoDate(video, language)}</time>
                       <div>
                         <strong>{video.title}</strong>
                         <span>{video.external_id} · {formatDuration(video.duration_seconds)}</span>
@@ -7755,6 +7637,7 @@ function App() {
               </div>
             </div>
             ) : null}
+            </details>
           </section>
         ) : null}
 
@@ -8191,7 +8074,7 @@ function App() {
                           <div>
                             <strong>{run.status}</strong>
                             <small>
-                              {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at)}
+                              {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at, language)}
                             </small>
                           </div>
                           <code>
@@ -8222,12 +8105,12 @@ function App() {
 
         {showLibraryIndex ? (
           <section className="panel library-index-panel">
-            <div className="panel-header compact">
+            <div className="panel-header compact library-simple-header">
               <div>
-                <p className="panel-kicker">{t("library.kicker")}</p>
                 <h2>{t("library.title")}</h2>
+                <p>{t("library.description")}</p>
               </div>
-              <label className="library-search">
+              {registeredChannelId ? <label className="library-search">
                 <Search size={15} />
                 <input
                   ref={librarySearchInputRef}
@@ -8239,9 +8122,19 @@ function App() {
                   placeholder={t("library.search")}
                   value={libraryQuery}
                 />
-              </label>
+              </label> : null}
             </div>
 
+            {registeredChannelId ? <details className="library-advanced-filters">
+              <summary>
+                <span>
+                  <SlidersHorizontal size={16} />
+                  {t("library.advanced.title")}
+                </span>
+                <small>{t("library.advanced.detail")}</small>
+                <ChevronDown aria-hidden="true" className="library-advanced-chevron" size={17} />
+              </summary>
+              <div className="library-advanced-content">
             <div className="library-toolbelt" aria-label={t("library.filter.title")}>
               <div className="library-preset-group">
                 <span>
@@ -8404,10 +8297,6 @@ function App() {
                   <em>{t("library.active.empty")}</em>
                 )}
               </div>
-              <button disabled={libraryActiveViewChips.length === 0} onClick={handleResetLibraryFilters} type="button">
-                <RotateCcw size={13} />
-                {t("library.active.reset")}
-              </button>
             </div>
 
             <div className="library-summary">
@@ -8428,6 +8317,20 @@ function App() {
                 <strong>{library?.total_label ?? "0 MB"}</strong>
               </article>
             </div>
+              </div>
+            </details> : null}
+
+            {registeredChannelId ? <div className="library-results-heading" aria-live="polite">
+              <strong>
+                {t("library.results").replace("{count}", String(visibleLibraryItems.length))}
+              </strong>
+              {libraryHasActiveFilters ? (
+                <button onClick={handleResetLibraryFilters} type="button">
+                  <RotateCcw size={14} />
+                  {t("library.active.reset")}
+                </button>
+              ) : null}
+            </div> : null}
 
             <div className="library-shelf">
               {visibleLibraryItems.slice(0, 6).map((item) => (
@@ -8443,69 +8346,58 @@ function App() {
                   </div>
                   <div className="library-copy">
                     <strong>{item.title}</strong>
-                    <span>{item.video_external_id}</span>
+                    <span>
+                      {item.published_at
+                        ? `${item.channel_title} · ${formatDateLabel(item.published_at, language)}`
+                        : item.channel_title}
+                    </span>
                     <div className="library-fidelity">
                       {item.duration_seconds ? <em className="media-duration-chip">{formatDuration(item.duration_seconds)}</em> : null}
-                      {libraryHasStaleIndex(item) ? <em className="stale-index-chip">{t("library.state.indexedMissing")}</em> : null}
-                      <em className={`integrity-chip ${item.integrity_state}`}>{integrityLabel(item.integrity_state, t)}</em>
-                      <em>{t("library.fidelity").replace("{count}", String(fidelityCount(item)))}</em>
-                      {mediaProfileLabel(item) ? <em className="media-profile-chip">{mediaProfileLabel(item)}</em> : null}
-                      {item.queue_status ? <em>{jobStatusLabel(item.queue_status, t)}</em> : null}
                       {item.total_bytes > 0 ? <em>{item.total_label}</em> : null}
                     </div>
                   </div>
                 </button>
               ))}
               {visibleLibraryItems.length === 0 ? (
-                <div className={`library-empty-state ${librarySourceItemCount === 0 ? "empty" : "filtered"}`}>
+                <div className={`library-empty-state ${!registeredChannelId ? "no-channel" : librarySourceItemCount === 0 ? "empty" : "filtered"}`}>
                   <div className="library-empty-icon">
-                    {librarySourceItemCount === 0 ? <BookOpen size={20} /> : <ListFilter size={20} />}
+                    {!registeredChannelId ? <Link2 size={20} /> : librarySourceItemCount === 0 ? <BookOpen size={20} /> : <ListFilter size={20} />}
                   </div>
                   <strong>
-                    {librarySourceItemCount === 0
+                    {!registeredChannelId
+                      ? t("library.empty.noChannelTitle")
+                      : librarySourceItemCount === 0
                       ? t("library.empty.noItemsTitle")
                       : t("library.empty.filteredTitle")}
                   </strong>
                   <span>
-                    {librarySourceItemCount === 0
+                    {!registeredChannelId
+                      ? t("library.empty.noChannelDetail")
+                      : librarySourceItemCount === 0
                       ? t("library.empty.noItemsDetail")
                       : t("library.empty.filteredDetail")}
                   </span>
                   <div className="library-empty-actions">
-                    {librarySourceItemCount === 0 ? (
-                      <>
-                        <button
-                          className="primary-action"
-                          disabled={!registeredChannelId || workflowStatus === "syncing"}
-                          onClick={() => void handleManualSync()}
-                          type="button"
-                        >
-                          <RotateCcw size={15} />
-                          {t("library.empty.sync")}
-                        </button>
-                        <button className="command-button" onClick={openQueueWorkspace} type="button">
-                          <Rocket size={15} />
-                          {t("library.empty.queue")}
-                        </button>
-                      </>
+                    {!registeredChannelId ? (
+                      <button className="primary-action" onClick={openChannelRegistration} type="button">
+                        <Plus size={15} />
+                        {t("library.empty.register")}
+                      </button>
+                    ) : librarySourceItemCount === 0 ? (
+                      <button
+                        className="primary-action"
+                        disabled={!registeredChannelId || workflowStatus === "syncing"}
+                        onClick={() => void handleManualSync()}
+                        type="button"
+                      >
+                        <RotateCcw size={15} />
+                        {t("library.empty.sync")}
+                      </button>
                     ) : (
-                      <>
-                        <button className="primary-action" disabled={!libraryHasActiveFilters} onClick={handleResetLibraryFilters} type="button">
-                          <ListFilter size={15} />
-                          {t("library.empty.clear")}
-                        </button>
-                        <button
-                          className="command-button"
-                          onClick={() => {
-                            setActiveNavId("insights");
-                            window.setTimeout(() => scrollToAppSection(".storage-panel"), 0);
-                          }}
-                          type="button"
-                        >
-                          <FolderTree size={15} />
-                          {t("library.empty.storage")}
-                        </button>
-                      </>
+                      <button className="primary-action" disabled={!libraryHasActiveFilters} onClick={handleResetLibraryFilters} type="button">
+                        <ListFilter size={15} />
+                        {t("library.empty.clear")}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -8566,7 +8458,7 @@ function App() {
                   <code>{storageVolume.root}</code>
                   {storageScan ? (
                     <small>
-                      {t("storage.scan.scanned").replace("{time}", formatEventTime(storageScan.scanned_at))} ·{" "}
+                      {t("storage.scan.scanned").replace("{time}", formatEventTime(storageScan.scanned_at, language))} ·{" "}
                       {t("storage.scan.hostPressure").replace("{percent}", String(storageVolume.pressure_percent))}
                     </small>
                   ) : null}
@@ -8633,7 +8525,7 @@ function App() {
                       <span
                         key={snapshot.id}
                         style={{ height: `${Math.max(12, Math.round((snapshot.archive_bytes / storagePressurePeakBytes) * 100))}%` }}
-                        title={`${formatDateTimeLabel(snapshot.scanned_at, t("storage.quarantine.unknownTime"))} · ${snapshot.archive_label}`}
+                        title={`${formatDateTimeLabel(snapshot.scanned_at, t("storage.quarantine.unknownTime"), language)} · ${snapshot.archive_label}`}
                       >
                         <i />
                       </span>
@@ -8912,7 +8804,7 @@ function App() {
 
           ) : null}
 
-          {showDashboardWorkspace || showChannelWorkspace ? (
+          {showChannelWorkspace && activeChannelTab === "downloads" ? (
           <motion.div
             className="panel quick-panel"
             initial={{ opacity: 0, y: 12 }}
@@ -9585,7 +9477,7 @@ function App() {
                   </span>
                   <span>
                     <strong>{t("storage.quarantine.purgeCutoff")}</strong>
-                    <em>{formatDateTimeLabel(storageQuarantinePurgePlan.cutoff_at, t("storage.quarantine.unknownTime"))}</em>
+                    <em>{formatDateTimeLabel(storageQuarantinePurgePlan.cutoff_at, t("storage.quarantine.unknownTime"), language)}</em>
                   </span>
                   {storageQuarantinePurgePlan.warnings.length ? (
                     <span className="warning">
@@ -9628,7 +9520,7 @@ function App() {
                     <div>
                       <code>{item.kind} · {item.original_relative_path}</code>
                       <small>
-                        {formatDateTimeLabel(item.quarantined_at, t("storage.quarantine.unknownTime"))} · {item.label}
+                        {formatDateTimeLabel(item.quarantined_at, t("storage.quarantine.unknownTime"), language)} · {item.label}
                       </small>
                     </div>
                     <button
@@ -10522,7 +10414,7 @@ function App() {
                       <strong>{eventLabel(event, t)}</strong>
                       <span>{runtimeRestartEventDetail(event, t)}</span>
                     </div>
-                    <time>{formatEventTime(event.occurred_at)}</time>
+                    <time>{formatEventTime(event.occurred_at, language)}</time>
                   </article>
                 ))}
                 {!runtimeRestartEvents.length && runtimeRestartEventsStatus !== "loading" ? (
@@ -10972,7 +10864,7 @@ function App() {
                     <strong>{eventLabel(eventDetail, t)}</strong>
                     <small>
                       {typeof eventDetail.id === "number" ? `#${eventDetail.id} · ` : ""}
-                      {eventDetail.type} · {formatEventTime(eventDetail.occurred_at)}
+                      {eventDetail.type} · {formatEventTime(eventDetail.occurred_at, language)}
                     </small>
                   </div>
                   <div className="event-detail-actions">
@@ -11064,7 +10956,7 @@ function App() {
                       <em>{event.type}</em>
                       <span>
                         {typeof event.id === "number" ? <b className="event-log-id">#{event.id}</b> : null}
-                        <time>{formatEventTime(event.occurred_at)}</time>
+                        <time>{formatEventTime(event.occurred_at, language)}</time>
                       </span>
                     </div>
                     <strong>{eventLabel(event, t)}</strong>
@@ -11260,7 +11152,7 @@ function App() {
                       {tick.started_count}/{tick.completed_count}/{tick.failed_count}
                     </strong>
                     <small>
-                      {formatEventTime(tick.created_at)}
+                      {formatEventTime(tick.created_at, language)}
                       {tick.duration_seconds !== null ? ` · ${formatDuration(tick.duration_seconds)}` : ""}
                     </small>
                   </div>
@@ -11275,7 +11167,7 @@ function App() {
                     </div>
                     <div>
                       <dt>{t("runtime.scheduler.next")}</dt>
-                      <dd>{formatDateTimeLabel(tick.next_tick_at, t("runtime.scheduler.none"))}</dd>
+                      <dd>{formatDateTimeLabel(tick.next_tick_at, t("runtime.scheduler.none"), language)}</dd>
                     </div>
                     <div>
                       <dt>{t("runtime.worker")}</dt>
@@ -11465,7 +11357,7 @@ function App() {
                       {tick.synced_count}/{tick.videos_created_count}/{tick.videos_enriched_count}/{tick.candidates_created_count}
                     </strong>
                     <small>
-                      {formatEventTime(tick.created_at)}
+                      {formatEventTime(tick.created_at, language)}
                       {tick.duration_seconds !== null ? ` · ${formatDuration(tick.duration_seconds)}` : ""}
                     </small>
                   </div>
@@ -11508,7 +11400,7 @@ function App() {
                     </div>
                     <div>
                       <dt>{t("runtime.scheduler.next")}</dt>
-                      <dd>{formatDateTimeLabel(tick.next_tick_at, t("runtime.scheduler.none"))}</dd>
+                      <dd>{formatDateTimeLabel(tick.next_tick_at, t("runtime.scheduler.none"), language)}</dd>
                     </div>
                     <div>
                       <dt>{t("runtime.metadataScheduler")}</dt>
@@ -11588,7 +11480,7 @@ function App() {
                       <div>
                         <strong>{latestWorkerRun.status}</strong>
                         <small>
-                          {latestWorkerRun.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(latestWorkerRun.created_at)}
+                          {latestWorkerRun.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(latestWorkerRun.created_at, language)}
                         </small>
                       </div>
                       <em>{formatDuration(latestWorkerRun.duration_seconds)}</em>
@@ -11745,7 +11637,7 @@ function App() {
                     <div>
                       <strong>{run.status}</strong>
                       <small>
-                        {run.channel_title ?? activeTitle} · {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at)}
+                        {run.channel_title ?? activeTitle} · {run.dry_run ? t("worker.dryRun") : t("worker.live")} · {formatEventTime(run.created_at, language)}
                       </small>
                     </div>
                     {run.duration_seconds !== null ? <em>{formatDuration(run.duration_seconds)}</em> : null}
@@ -13038,18 +12930,26 @@ function eventLabel(event: ArchiveEvent, t: (key: TranslationKey) => string) {
   return event.type;
 }
 
-function formatEventTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+const dateLocales: Record<Language, string> = {
+  en: "en-US",
+  ko: "ko-KR",
+  ja: "ja-JP",
+  zh: "zh-CN",
+  hi: "hi-IN",
+};
+
+function formatEventTime(value: string, language: Language) {
+  return new Intl.DateTimeFormat(dateLocales[language], { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
-function formatDateLabel(value: string | null | undefined) {
+function formatDateLabel(value: string | null | undefined, language: Language) {
   if (!value) return "sync pending";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat(dateLocales[language], { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
-function formatDateTimeLabel(value: string | null | undefined, fallback: string) {
+function formatDateTimeLabel(value: string | null | undefined, fallback: string, language: Language) {
   if (!value) return fallback;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(dateLocales[language], {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -13057,8 +12957,8 @@ function formatDateTimeLabel(value: string | null | undefined, fallback: string)
   }).format(new Date(value));
 }
 
-function formatVideoDate(video: TimelineVideo) {
-  if (video.published_at) return formatDateLabel(video.published_at);
+function formatVideoDate(video: TimelineVideo, language: Language) {
+  if (video.published_at) return formatDateLabel(video.published_at, language);
   if (video.upload_date && /^\d{4}-\d{2}-\d{2}$/.test(video.upload_date)) return video.upload_date;
   if (video.upload_date && /^\d{8}$/.test(video.upload_date)) {
     return `${video.upload_date.slice(0, 4)}-${video.upload_date.slice(4, 6)}-${video.upload_date.slice(6, 8)}`;
@@ -13421,21 +13321,10 @@ function demoClearMessage(result: DemoWorkspaceClearResult, t: (key: Translation
     .replace("{rows}", String(result.db_rows_removed));
 }
 
-function schedulerLastTick(status: RuntimeSettings["scheduler_status"], t: (key: TranslationKey) => string) {
-  const timestamp = status.last_completed_at ?? status.last_started_at;
-  if (!timestamp) return t("runtime.scheduler.none");
-  const result =
-    status.last_result_status === "failed"
-      ? t("runtime.scheduler.result.failed")
-      : status.last_result_status === "completed"
-        ? t("runtime.scheduler.result.completed")
-        : schedulerStateLabel(status.state, t);
-  return `${result} · ${formatEventTime(timestamp)}`;
-}
-
-function metadataSchedulerLastTick(
-  status: RuntimeSettings["metadata_scheduler_status"],
+function schedulerLastTick(
+  status: RuntimeSettings["scheduler_status"],
   t: (key: TranslationKey) => string,
+  language: Language,
 ) {
   const timestamp = status.last_completed_at ?? status.last_started_at;
   if (!timestamp) return t("runtime.scheduler.none");
@@ -13445,7 +13334,23 @@ function metadataSchedulerLastTick(
       : status.last_result_status === "completed"
         ? t("runtime.scheduler.result.completed")
         : schedulerStateLabel(status.state, t);
-  return `${result} · ${formatEventTime(timestamp)}`;
+  return `${result} · ${formatEventTime(timestamp, language)}`;
+}
+
+function metadataSchedulerLastTick(
+  status: RuntimeSettings["metadata_scheduler_status"],
+  t: (key: TranslationKey) => string,
+  language: Language,
+) {
+  const timestamp = status.last_completed_at ?? status.last_started_at;
+  if (!timestamp) return t("runtime.scheduler.none");
+  const result =
+    status.last_result_status === "failed"
+      ? t("runtime.scheduler.result.failed")
+      : status.last_result_status === "completed"
+        ? t("runtime.scheduler.result.completed")
+        : schedulerStateLabel(status.state, t);
+  return `${result} · ${formatEventTime(timestamp, language)}`;
 }
 
 function schedulerTickStatusLabel(status: string, t: (key: TranslationKey) => string) {

@@ -4,11 +4,12 @@
 [![CI](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml/badge.svg)](https://github.com/hyeonsangjeon/channel-vault-nas/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-34d399)](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/LICENSE)
 
-![Channel Vault NAS archive console](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/readme-hero.svg)
+![Channel Vault NAS Home showing its simple three-step backup flow](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/user-manual/en/01-home.png)
 
-Turn a YouTube channel into a recoverable NAS archive. Channel Vault NAS reuses
-existing media and `archive.txt`, downloads only missing videos, and keeps new
-uploads backed up with `yt-dlp`.
+Turn a YouTube channel into a recoverable NAS archive in three steps: register
+the channel, start a schedule, and check one clear backup status. Channel Vault
+NAS reuses existing media and `archive.txt`, downloads only missing videos, and
+keeps new uploads backed up with `yt-dlp`.
 
 > Guarded self-hosted release: designed for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose the raw API directly to the public internet.
@@ -24,6 +25,8 @@ Both images are multi-arch: `linux/amd64` and `linux/arm64`.
 
 ## Why use it
 
+- A simple default UI for channel registration, schedules, and backup status
+- Queue, storage, diagnostics, and runtime controls kept under Advanced management
 - Import existing NAS folders without deliberately re-downloading them
 - See downloaded, missing, queued, and skipped `archive.txt` decisions
 - Start or pause automatic backup from the channel screen
@@ -31,19 +34,19 @@ Both images are multi-arch: `linux/amd64` and `linux/arm64`.
 - Library indexing for media files, sidecars, thumbnails, and coverage
 - NAS storage scanner for drift, pressure, orphan sidecars, and recovery checks
 
-## Screenshots
+## Everyday workflow
 
-| Dashboard overview | Guarded download queue |
+| 1. Register a channel | 2–3. Start the schedule and check its status |
 | --- | --- |
-| ![Dashboard overview](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/dashboard-cockpit.png) | ![Channel backup schedule](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/channel-downloads.png) |
+| ![Check and register a channel](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/user-manual/en/03-channel-registration.png) | ![Channel view showing saved and remaining counts, current status, and next run](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/user-manual/en/02-channel-overview.png) |
 
-| Queue console | Library shelf |
-| --- | --- |
-| ![Queue console](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/queue-console.png) | ![Library shelf](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/library-shelf.png) |
+Already have files? Use the [existing archive import](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/existing-archive-import.png) before starting the schedule.
 
-| Add a channel | Bring an existing archive |
+Advanced management stays available when you need queue or library detail:
+
+| Queue | Saved videos |
 | --- | --- |
-| ![Channel registration](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/channel-registration.png) | ![Existing NAS folder and archive.txt import](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/existing-archive-import.png) |
+| ![Advanced download queue](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/queue-console.png) | ![Saved videos library](https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/docs/assets/screenshots/library-shelf.png) |
 
 ## Architecture
 
@@ -57,8 +60,14 @@ curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/ma
 docker compose -f compose.release.yml up -d
 ```
 
-Open `http://127.0.0.1:5173/`, register a channel, choose the interval and
-videos per run, then click **Start automatic backup**.
+Open `http://127.0.0.1:5173/`, then:
+
+1. Select **Register channel**, paste a channel address, select **Check
+   channel**, and confirm it.
+2. Choose the interval and videos per run, then select **Start automatic
+   backup**.
+3. Confirm the channel shows **Automatic backup is on** or **Automatic backup
+   is running** and check the saved, remaining, and next-run details.
 
 ## Guardrails
 

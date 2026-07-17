@@ -164,7 +164,7 @@ function runtimeSettings(enabled = false, intervalSeconds = 300, limit = 5) {
     download_worker_scheduler_interval_seconds: intervalSeconds,
     download_worker_scheduler_limit: limit,
     metadata_sync_scheduler_enabled: enabled,
-    metadata_sync_scheduler_interval_seconds: 900,
+    metadata_sync_scheduler_interval_seconds: intervalSeconds,
     metadata_sync_scheduler_limit: 2,
     download_dir: "/tmp/channel-vault-nas-e2e/archive",
     metadata_dir: "/tmp/channel-vault-nas-e2e/metadata",
@@ -203,7 +203,7 @@ function runtimeSettings(enabled = false, intervalSeconds = 300, limit = 5) {
       state: enabled ? "armed" : "off",
       enabled,
       running: false,
-      interval_seconds: 900,
+      interval_seconds: intervalSeconds,
       limit: 2,
       due_channel_count: 0,
       next_due_at: null,
@@ -225,9 +225,22 @@ function runtimeSettings(enabled = false, intervalSeconds = 300, limit = 5) {
 
 async function setupFirstBackupRoutes(
   page: Page,
-  options: { workerEnabled: boolean; policyPatchFails?: boolean },
+  options: {
+    workerEnabled: boolean;
+    failAfterQueue?: boolean;
+    policyPatchFails?: boolean;
+    refreshFailsAfterPause?: boolean;
+  },
 ) {
   const calls: string[] = [];
+  let autoDownloadEnabled = false;
+  let workerPaused = false;
+  let workerPauseReason: string | null = null;
+  let schedulerEnabled = false;
+  let schedulerIntervalSeconds = 300;
+  let schedulerLimit = 5;
+  let syncIntervalMinutes = 360;
+  let currentJobs = jobs;
   await page.addInitScript(() => {
     localStorage.setItem("channel-vault-language", "ko");
     localStorage.removeItem("cvn.authToken");
@@ -251,17 +264,25 @@ async function setupFirstBackupRoutes(
       return;
     }
     if (path === "/api/settings/runtime" && method === "GET") {
-      await route.fulfill({ contentType: "application/json", body: JSON.stringify(runtimeSettings(false)) });
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(runtimeSettings(schedulerEnabled, schedulerIntervalSeconds, schedulerLimit)),
+      });
       return;
     }
     if (path === "/api/settings/runtime" && method === "PATCH") {
       const payload = request.postDataJSON() as {
         download_worker_scheduler_interval_seconds?: number;
         download_worker_scheduler_limit?: number;
+        metadata_sync_scheduler_interval_seconds?: number;
       };
       const interval = payload.download_worker_scheduler_interval_seconds ?? 300;
       const limit = payload.download_worker_scheduler_limit ?? 5;
+      schedulerEnabled = true;
+      schedulerIntervalSeconds = interval;
+      schedulerLimit = limit;
       calls.push(`runtime:${interval}:${limit}`);
+      calls.push(`runtime-metadata:${payload.metadata_sync_scheduler_interval_seconds ?? 900}`);
       const runtime = runtimeSettings(true, interval, limit);
       await route.fulfill({
         contentType: "application/json",
@@ -308,8 +329,29 @@ async function setupFirstBackupRoutes(
       });
       return;
     }
+    if (path === `/api/channels/${channelId}` && method === "PATCH") {
+      const payload = request.postDataJSON() as { sync_interval_minutes?: number };
+      syncIntervalMinutes = payload.sync_interval_minutes ?? syncIntervalMinutes;
+      calls.push(`channel-interval:${syncIntervalMinutes}`);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ...channel, sync_interval_minutes: syncIntervalMinutes }),
+      });
+      return;
+    }
     if (path === `/api/channels/${channelId}`) {
-      await route.fulfill({ contentType: "application/json", body: JSON.stringify(channel) });
+      if (options.refreshFailsAfterPause && workerPaused) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "nonessential refresh unavailable" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ...channel, sync_interval_minutes: syncIntervalMinutes }),
+      });
       return;
     }
     if (path === `/api/channels/${channelId}/policy` && method === "GET") {
@@ -317,14 +359,14 @@ async function setupFirstBackupRoutes(
         contentType: "application/json",
         body: JSON.stringify({
           channel_id: channelId,
-          auto_download: false,
+          auto_download: autoDownloadEnabled,
           max_quality: "1080p",
           audio_only: false,
           subtitles_enabled: true,
           subtitle_languages: ["ko"],
           retention_policy: "keep_all",
-          worker_paused: false,
-          worker_pause_reason: null,
+          worker_paused: workerPaused,
+          worker_pause_reason: workerPauseReason,
           created_at: now,
           updated_at: now,
         }),
@@ -333,6 +375,12 @@ async function setupFirstBackupRoutes(
     }
     if (path === `/api/channels/${channelId}/policy` && method === "PATCH") {
       calls.push("policy");
+      const payload = request.postDataJSON() as {
+        auto_download?: boolean;
+        worker_paused?: boolean;
+        worker_pause_reason?: string | null;
+      };
+      calls.push(`policy:${JSON.stringify(payload)}`);
       if (options.policyPatchFails) {
         await route.fulfill({
           status: 500,
@@ -341,18 +389,21 @@ async function setupFirstBackupRoutes(
         });
         return;
       }
+      autoDownloadEnabled = payload.auto_download ?? autoDownloadEnabled;
+      workerPaused = payload.worker_paused ?? workerPaused;
+      workerPauseReason = payload.worker_pause_reason === undefined ? workerPauseReason : payload.worker_pause_reason;
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           channel_id: channelId,
-          auto_download: true,
+          auto_download: autoDownloadEnabled,
           max_quality: "1080p",
           audio_only: false,
           subtitles_enabled: true,
           subtitle_languages: ["ko"],
           retention_policy: "keep_all",
-          worker_paused: false,
-          worker_pause_reason: null,
+          worker_paused: workerPaused,
+          worker_pause_reason: workerPauseReason,
           created_at: now,
           updated_at: now,
         }),
@@ -454,16 +505,30 @@ async function setupFirstBackupRoutes(
       return;
     }
     if (path === "/api/jobs/downloads" && url.searchParams.get("channel_id") === String(channelId)) {
-      await route.fulfill({ contentType: "application/json", body: JSON.stringify(jobs) });
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(currentJobs) });
       return;
     }
     if (path === "/api/jobs/downloads/bulk" && method === "POST") {
-      calls.push("bulk-queue");
+      const payload = request.postDataJSON() as { action: "queue" | "retry"; job_ids: number[] };
+      calls.push(payload.action === "retry" ? "bulk-retry" : "bulk-queue");
+      currentJobs = currentJobs.map((job, index) =>
+        payload.job_ids.includes(job.id)
+          ? {
+              ...job,
+              status: payload.action === "queue" && options.failAfterQueue && index === 0 ? "failed" : "queued",
+              priority: 85,
+              error_message:
+                payload.action === "queue" && options.failAfterQueue && index === 0
+                  ? "temporary download failure"
+                  : null,
+            }
+          : job,
+      );
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          updated: jobs.length,
-          jobs: jobs.map((job) => ({ ...job, status: "queued", priority: 85 })),
+          updated: payload.job_ids.length,
+          jobs: currentJobs,
         }),
       });
       return;
@@ -499,22 +564,20 @@ test("channel registration previews then saves a channel without starting downlo
 
   await page.goto("/");
 
-  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
-
   const registrationPanel = page.locator(".channel-registration-panel");
   await expect(registrationPanel).toBeVisible();
   await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4?si=LZr7f3vNJZsuoRo1");
-  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 확인" }).click();
 
   await expect(registrationPanel).toContainText("Wingnut Archive Lab");
   await expect(registrationPanel.locator(".channel-registration-facts dd").first()).toHaveText("3");
   await expect(registrationPanel).toContainText("3.4 GB");
+  await registrationPanel.locator(".channel-registration-destination summary").click();
   await expect(registrationPanel).toContainText("channels/@wingnut987s4");
-  await expect(registrationPanel).toContainText("The first vault pass");
 
   await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
 
-  await expect(page.locator(".channel-detail-panel")).toContainText("Wingnut Archive Lab");
+  await expect(page.locator(".simple-home")).toContainText("Wingnut Archive Lab");
   const backupOverview = page.locator(".channel-backup-overview");
   await expect(backupOverview).toContainText("남은 영상 3개를 자동으로 백업합니다");
   await expect(backupOverview.getByRole("button", { name: "자동 백업 시작" })).toBeVisible();
@@ -529,10 +592,8 @@ test("channel registration keeps empty input errors inside the registration pane
 
   await page.goto("/");
 
-  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
-
   const registrationPanel = page.locator(".channel-registration-panel");
-  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 확인" }).click();
 
   await expect(registrationPanel).toContainText("먼저 채널 URL, @handle, UC 채널 ID를 붙여넣어 주세요");
   expect(calls).not.toContain("probe");
@@ -540,19 +601,30 @@ test("channel registration keeps empty input errors inside the registration pane
   expect(calls).not.toContain("worker-run");
 });
 
+test("saved videos gives an empty workspace a clear channel-registration path", async ({ page }) => {
+  await setupFirstBackupRoutes(page, { workerEnabled: true });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "저장된 영상", exact: true }).click();
+
+  const library = page.locator(".library-index-panel");
+  await expect(library).toContainText("저장된 영상을 보려면 채널을 등록하세요.");
+  await library.getByRole("button", { name: "채널 등록", exact: true }).click();
+  await expect(page.locator(".channel-registration-panel")).toBeVisible();
+});
+
 test("automatic backup queues only missing videos and hot-applies the scheduler", async ({ page }) => {
   const calls = await setupFirstBackupRoutes(page, { workerEnabled: true });
 
   await page.goto("/");
-  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
 
   const registrationPanel = page.locator(".channel-registration-panel");
   await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4");
-  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 확인" }).click();
   await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
 
   const backupOverview = page.locator(".channel-backup-overview");
-  await backupOverview.getByLabel("다운로드 간격").selectOption("30");
+  await backupOverview.getByLabel("모든 채널 확인 간격").selectOption("30");
   await backupOverview.getByLabel("한 번에").selectOption("5");
   await backupOverview.getByRole("button", { name: "자동 백업 시작" }).click();
 
@@ -563,18 +635,77 @@ test("automatic backup queues only missing videos and hot-applies the scheduler"
   expect(calls).toContain("candidates");
   expect(calls).toContain("bulk-queue");
   expect(calls).toContain("runtime:1800:5");
+  expect(calls).toContain("runtime-metadata:1800");
+  expect(calls).toContain("channel-interval:30");
   expect(calls).not.toContain("worker-run");
+});
+
+test("simple backup status retries failed downloads without opening the queue console", async ({ page }) => {
+  const calls = await setupFirstBackupRoutes(page, { workerEnabled: true, failAfterQueue: true });
+
+  await page.goto("/");
+
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4");
+  await registrationPanel.getByRole("button", { name: "채널 확인" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
+
+  const backupOverview = page.locator(".channel-backup-overview");
+  await backupOverview.getByRole("button", { name: "자동 백업 시작" }).click();
+
+  const retryButton = backupOverview.getByRole("button", { name: "실패 항목 다시 시도 (1)" });
+  await expect(backupOverview).toContainText("확인 필요");
+  await expect(retryButton).toBeVisible();
+  await retryButton.click();
+
+  await expect(backupOverview).toContainText("실패한 다운로드 1개를 다시 대기열에 넣었습니다.");
+  await expect(retryButton).toHaveCount(0);
+  expect(calls).toContain("bulk-retry");
+  await expect(page.locator(".queue-console-panel")).toHaveCount(0);
+});
+
+test("pausing automatic backup stays successful when a follow-up refresh fails", async ({ page }) => {
+  const calls = await setupFirstBackupRoutes(page, { workerEnabled: true, refreshFailsAfterPause: true });
+
+  await page.goto("/");
+
+  const registrationPanel = page.locator(".channel-registration-panel");
+  await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4");
+  await registrationPanel.getByRole("button", { name: "채널 확인" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
+
+  const backupOverview = page.locator(".channel-backup-overview");
+  await backupOverview.getByRole("button", { name: "자동 백업 시작" }).click();
+  await expect(backupOverview).toContainText("자동 백업 켜짐");
+
+  const runtimePatchCountBeforePause = calls.filter((call) => call.startsWith("runtime:")).length;
+  const pauseRequestPromise = page.waitForRequest((request) => {
+    if (request.method() !== "PATCH") return false;
+    if (new URL(request.url()).pathname !== `/api/channels/${channelId}/policy`) return false;
+    return request.postDataJSON().worker_paused === true;
+  });
+
+  await backupOverview.getByRole("button", { name: "일시 정지" }).click();
+  const pauseRequest = await pauseRequestPromise;
+
+  expect(pauseRequest.postDataJSON()).toEqual({
+    worker_paused: true,
+    worker_pause_reason: "paused_from_simple_ui",
+  });
+  await expect(backupOverview).toContainText("자동 백업 일시 정지");
+  await expect(backupOverview.getByRole("button", { name: "자동 백업 시작" })).toBeVisible();
+  expect(calls.filter((call) => call.startsWith("runtime:"))).toHaveLength(runtimePatchCountBeforePause);
+  expect(calls).toContain('policy:{"worker_paused":true,"worker_pause_reason":"paused_from_simple_ui"}');
 });
 
 test("automatic backup does not report success when the channel policy cannot be enabled", async ({ page }) => {
   const calls = await setupFirstBackupRoutes(page, { workerEnabled: true, policyPatchFails: true });
 
   await page.goto("/");
-  await page.getByLabel("첫 소스 빈 상태").getByRole("button", { name: "내 채널 추가" }).click();
 
   const registrationPanel = page.locator(".channel-registration-panel");
   await registrationPanel.getByLabel("채널 URL 또는 ID").fill("https://youtube.com/@wingnut987s4");
-  await registrationPanel.getByRole("button", { name: "미리보기" }).click();
+  await registrationPanel.getByRole("button", { name: "채널 확인" }).click();
   await registrationPanel.getByRole("button", { name: "채널 등록" }).click();
 
   const backupOverview = page.locator(".channel-backup-overview");

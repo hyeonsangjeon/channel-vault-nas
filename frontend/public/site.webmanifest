@@ -1,12 +1,12 @@
 {
   "name": "Channel Vault NAS",
   "short_name": "Channel Vault",
-  "description": "A private NAS operator console for channel sync, guarded downloads, archive.txt imports, and local media recovery.",
+  "description": "Simple automatic YouTube channel backup for your NAS.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#07080d",
-  "theme_color": "#07080d",
+  "background_color": "#f6f7fb",
+  "theme_color": "#f6f7fb",
   "icons": [
     {
       "src": "/favicon.svg",

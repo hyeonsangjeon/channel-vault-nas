@@ -18,7 +18,7 @@ from app.schemas.settings import (
     SchedulerTickPruneResult,
 )
 from app.services.channel_sync import run_channel_sync
-from app.services.download_queue import create_channel_download_candidates
+from app.services.download_queue import queue_channel_auto_downloads
 from app.services.event_bus import event_bus
 
 
@@ -330,7 +330,7 @@ async def _auto_create_candidates(
 ) -> int:
     if policy is None or not policy.auto_download:
         return 0
-    result = await create_channel_download_candidates(
+    result = await queue_channel_auto_downloads(
         db=session,
         channel_id=channel_id,
         quality=policy.max_quality,

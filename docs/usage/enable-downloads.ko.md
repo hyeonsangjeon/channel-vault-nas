@@ -1,13 +1,13 @@
 # 실제 다운로드 켜기
 
-Channel Vault NAS는 미디어를 전송하지 않고도 등록과 미리보기를 할 수 있습니다.
+Channel Vault NAS는 미디어를 전송하지 않고도 채널을 확인하고 등록할 수 있습니다.
 **자동 백업 시작**을 누를 때 앱이 워커를 켭니다.
 
 ## 워커 켜기
 
-가장 간단한 방법은 UI입니다. 채널을 열고 다운로드 간격과 한 번에 받을 개수를 고른
-다음 **자동 백업 시작**을 누릅니다. 실제 다운로드, 메타데이터 동기화, 스케줄러가
-즉시 켜집니다([채널 백업 시작 → 4단계](first-backup.md#step-4-start-the-automatic-download-schedule)
+가장 간단한 방법은 UI입니다. 채널을 열고 **모든 채널 확인 간격**과 **한 번에** 받을
+개수를 고른 다음 **자동 백업 시작**을 누릅니다. 실제 다운로드, 메타데이터 동기화,
+스케줄러가 즉시 켜집니다([채널 백업 시작 → 2단계](first-backup.md#start-automatic-backup)
 참고). 대신 NAS 전체에 직접 값을 지정하려면 다음 런타임 env를 설정하세요:
 
 ```bash
@@ -38,8 +38,9 @@ CVN_FFPROBE_BINARY=ffprobe
     ```
 
 !!! tip "UI에서 하기"
-    **설정 → Runtime env manifest**를 여세요. 현재 적용값과 저장 대기값을
-    보여줍니다. [설정 둘러보기](product-tour.md#settings) 참고.
+    **설정 → 기술 설정 → 런타임 도구 → Env 가이드**를 여세요. 열린
+    **런타임 env 매니페스트**에서 현재 적용값과 저장 대기값을 확인할 수
+    있습니다. [설정 둘러보기](product-tour.md#settings) 참고.
 
 ## 패스는 항상 제한됩니다
 
@@ -51,11 +52,12 @@ CVN_FFPROBE_BINARY=ffprobe
 - 고급 **수동 1회 테스트**는 같은 개수만큼 **한 번** 실행하며, 확인 모달을 거칩니다.
 - API `run-once` 한도가 제한됩니다.
 - 채널별 정책으로 워커 claim을 **일시정지**할 수 있습니다.
-- 워커가 일시정지돼 있어도 후보 생성은 **계속**될 수 있습니다.
+- 채널을 일시정지해도 새 영상은 찾아서 대기 목록에 넣을 수 있습니다. 다시 시작하기
+  전에는 다운로드하지 않습니다.
 
 <figure markdown="span">
-  ![자동 백업 설정](../assets/user-manual/ko/04-download-confirm-modal.png){ loading=lazy }
-  <figcaption>스케줄을 시작하면 실제 다운로드가 켜지고, 각 패스는 설정한 개수만큼만 가져옵니다. 고급 수동 1회 테스트도 같은 확인 모달을 거칩니다.</figcaption>
+  ![자동 백업 설정](../assets/user-manual/ko/04-backup-schedule.png){ loading=lazy }
+  <figcaption>확인 간격과 한 번에 받을 개수를 고른 뒤 자동 백업 시작을 누릅니다. 각 예약 실행은 설정한 개수만큼만 가져옵니다.</figcaption>
 </figure>
 
 !!! warning "노출 전에 검증하세요"

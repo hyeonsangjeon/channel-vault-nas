@@ -2,7 +2,6 @@ import {
   CheckCircle2,
   ChevronDown,
   FolderTree,
-  HardDrive,
   Link2,
   Sparkles,
   X,
@@ -56,7 +55,7 @@ export function ChannelRegistrationPanel({
 }: ChannelRegistrationPanelProps) {
   const isProbing = status === "probing";
   const isCommitting = status === "committing";
-  const previewInitials = getInitials(probe?.title ?? "Channel Vault");
+  const verifiedInitials = getInitials(probe?.title ?? "Channel Vault");
 
   return (
     <section
@@ -85,19 +84,11 @@ export function ChannelRegistrationPanel({
             value={sourceValue}
           />
         </label>
-        <button className="primary-action channel-registration-preview" disabled={isProbing} type="submit">
+        <button className="primary-action channel-registration-check" disabled={isProbing} type="submit">
           <Sparkles size={16} />
           {isProbing ? t("registration.probing") : t("registration.probe")}
         </button>
       </form>
-
-      <div aria-label={t("registration.steps.aria")} className="channel-registration-steps">
-        <span><b>1</b>{t("registration.steps.check")}</span>
-        <i />
-        <span><b>2</b>{t("registration.steps.register")}</span>
-        <i />
-        <span><b>3</b>{t("registration.steps.backup")}</span>
-      </div>
 
       <details className="channel-registration-options">
         <summary>
@@ -136,9 +127,9 @@ export function ChannelRegistrationPanel({
 
       {probe ? (
         <div className="channel-registration-result">
-          <p>{t("registration.previewResult")}</p>
+          <p>{t("registration.verifiedResult")}</p>
           <div className="channel-registration-identity">
-            <span className="channel-registration-avatar">{previewInitials}</span>
+            <span className="channel-registration-avatar">{verifiedInitials}</span>
             <div>
               <strong>{probe.title}</strong>
               <small>{probe.handle ?? probe.normalized.identifier}</small>
@@ -153,19 +144,11 @@ export function ChannelRegistrationPanel({
               <dt>{t("registration.estimatedStorage")}</dt>
               <dd>{probe.storage_forecast.estimated_label}</dd>
             </div>
-            <div>
-              <dt>{t("registration.destination")}</dt>
-              <dd><FolderTree size={14} />{probe.folder_preview.channel_dir}</dd>
-            </div>
           </dl>
-          <div className="channel-registration-videos">
-            {probe.videos.slice(0, 3).map((video) => (
-              <a href={video.url} key={video.external_id} rel="noreferrer" target="_blank">
-                <strong>{video.title}</strong>
-                <span>{video.external_id}</span>
-              </a>
-            ))}
-          </div>
+          <details className="channel-registration-destination">
+            <summary><FolderTree size={14} />{t("registration.destination")}</summary>
+            <code>{probe.folder_preview.channel_dir}</code>
+          </details>
           <button className="primary-action channel-registration-commit" disabled={isCommitting} onClick={onCommit} type="button">
             {isCommitting ? <Sparkles size={16} /> : <CheckCircle2 size={16} />}
             {isCommitting ? t("registration.committing") : t("registration.commit")}
@@ -173,10 +156,6 @@ export function ChannelRegistrationPanel({
         </div>
       ) : null}
 
-      <div className="channel-registration-trust">
-        <span><CheckCircle2 size={16} />{t("registration.trust.skip")}</span>
-        <span><HardDrive size={16} />{t("registration.trust.index")}</span>
-      </div>
     </section>
   );
 }

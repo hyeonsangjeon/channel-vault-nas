@@ -8,6 +8,15 @@ The project is in active alpha. Dates use Korea Standard Time.
 
 ### Changed
 
+- The default interface now leads with a light three-step Home flow: register a
+  channel, choose the automatic-backup schedule, and read the current status.
+  Queue, storage, runtime, and diagnostic controls remain available under
+  advanced management instead of filling the first screen.
+- English and Korean manuals, README screenshots, the social preview, and
+  click-by-click setup copy now match the simplified Home, registration,
+  schedule, Saved videos, and Settings screens.
+- Metadata scheduler passes now stage only never-queued missing videos, respect
+  storage pressure, and stay idempotent when the same channel is checked again.
 - GitHub Pages now publishes search-focused English/Korean titles, Open Graph
   and large social-card metadata, structured software data, `robots.txt`, a
   sitemap verification gate, and an `llms.txt` product summary.
@@ -19,6 +28,13 @@ The project is in active alpha. Dates use Korea Standard Time.
   copy, current assets, deployment facts, differentiators, and limitations.
 - Published both GHCR packages for anonymous pulls and verified the API and web
   `linux/amd64` and `linux/arm64` manifests without registry credentials.
+
+### Fixed
+
+- Dates and times now follow the language selected in Channel Vault instead of
+  the browser's operating-system locale.
+- Storage-pressure events refresh an open Insights screen without restoring the
+  high-frequency background requests removed from inactive workspaces.
 
 ## 0.1.0-alpha.3 - 2026-07-10
 

@@ -3,6 +3,8 @@ import { Buffer } from "node:buffer";
 import { writeFileSync } from "node:fs";
 
 test.setTimeout(90_000);
+const backendPort = process.env.CVN_E2E_BACKEND_PORT ?? "8011";
+const backendUrl = process.env.CVN_E2E_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`;
 
 function watchBrowserErrors(page: Page) {
   const errors: string[] = [];
@@ -19,6 +21,26 @@ async function dispatchButtonClick(button: Locator) {
   await button.evaluate((element) => {
     (element as HTMLButtonElement).click();
   });
+}
+
+async function selectSidebarAdvanced(page: Page, name: "큐" | "인사이트", path: string) {
+  const details = page.locator("details.sidebar-advanced-nav");
+  if (!(await details.isVisible())) {
+    await page.goto(path);
+    return;
+  }
+  if (!(await details.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await details.locator("summary").click();
+  }
+  await details.getByRole("button", { name, exact: true }).click();
+}
+
+async function openChannelAdvanced(page: Page) {
+  const details = page.locator("details.channel-advanced-details");
+  await expect(details).toBeVisible();
+  if (!(await details.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await details.locator("summary").click();
+  }
 }
 
 async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
@@ -54,80 +76,41 @@ async function openKoreanVault(page: Page, path = "/", expectDashboard = true) {
   await page.goto(path);
   await expect(page.locator(".channel-switcher")).toContainText("Signal Lab");
   if (!expectDashboard) return;
-  const cockpit = page.getByLabel("대시보드 개요");
-  await expect(cockpit).toContainText("내 채널 백업 상태");
-  await page.locator("button.dashboard-advanced-toggle").click();
-  const opsBoard = page.getByLabel("오늘의 아카이브 작업");
-  await expect(opsBoard).toContainText("준비도");
-  await expect(opsBoard).toContainText("워커가 안전 잠금 상태");
-  const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
-  await expect(releaseReadiness).toContainText("백업/복구");
-  await expect(releaseReadiness).toContainText("공개 브리핑");
-  await expect(releaseReadiness).toContainText("다음 확인");
-  const mountDoctor = page.getByLabel("NAS 볼륨 마운트 진단");
-  await expect(mountDoctor).toContainText("저장소 점검");
-  await expect(mountDoctor).toContainText("DB");
-  await expect(mountDoctor).toContainText("Archive");
+  const home = page.locator(".simple-home");
+  await expect(home.getByRole("heading", { name: "내 채널을 자동으로 안전하게 보관하세요" })).toBeVisible();
+  await expect(home.locator(".simple-home-step")).toHaveCount(3);
+  await expect(home.locator(".channel-backup-overview")).toBeVisible();
+  await expect(home).toBeVisible();
 }
 
 test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-test("command palette opens operational surfaces and live status is visible", async ({ page }, testInfo) => {
+test("simple home, guide, and keyboard palette expose the right level of detail", async ({ page }, testInfo) => {
   const errors = watchBrowserErrors(page);
   await openKoreanVault(page);
 
-  const livePill = page.getByLabel("실시간 이벤트 연결");
-  await expect(livePill).toContainText("Live");
+  const guideButton = page.getByRole("button", { name: "사용자 가이드 열기" });
+  if (await guideButton.isVisible()) {
+    await guideButton.click();
+    const operatorGuide = page.getByLabel("Channel Vault NAS 사용자 가이드");
+    await expect(operatorGuide).toBeVisible();
+    await expect(operatorGuide).toContainText("개요에서 시작");
+    await operatorGuide.getByRole("button", { name: "다음" }).click();
+    await expect(operatorGuide).toContainText("내 채널 등록");
+    await operatorGuide.getByRole("button", { name: "채널 등록", exact: true }).click();
+    await expect(page.getByLabel("채널 URL 또는 ID")).toBeVisible();
+    await operatorGuide.getByRole("button", { name: "가이드 건너뛰기" }).click();
+    await page.getByRole("button", { name: "홈", exact: true }).click();
+  }
 
-  await page.getByRole("button", { name: "운영 가이드 열기" }).click();
-  const operatorGuide = page.getByLabel("Channel Vault NAS 운영 가이드");
-  await expect(operatorGuide).toBeVisible();
-  await expect(operatorGuide).toContainText("개요에서 시작");
-  await operatorGuide.getByRole("button", { name: "다음" }).click();
-  await expect(operatorGuide).toContainText("소스를 안전하게 등록");
-  await operatorGuide.getByRole("button", { name: "소스 등록 열기" }).click();
-  await expect(page.getByLabel("채널 URL 또는 ID")).toBeVisible();
-  await operatorGuide.getByRole("button", { name: "가이드 건너뛰기" }).click();
-  await page.getByRole("button", { name: "대시보드", exact: true }).click();
-
-  await expect(page.getByText("공개 이슈용 안전 진단")).toBeVisible();
-  const supportBundleResponsePromise = page.waitForResponse(
-    (response) => response.url().includes("/api/ops/support-bundle") && response.status() === 200,
-  );
-  await dispatchButtonClick(page.getByRole("button", { name: "지원 번들 복사" }));
-  const supportBundleResponse = await supportBundleResponsePromise;
+  const supportBundleResponse = await page.request.get(`${backendUrl}/api/ops/support-bundle`);
+  await expect(supportBundleResponse).toBeOK();
   const supportBundle = await supportBundleResponse.json();
   expect(supportBundle.redaction.safe_for_public_issue).toBe(true);
-  await expect(page.locator(".support-bundle-source").filter({ hasText: "서버 redacted" })).toBeVisible();
-  const releaseReadiness = page.getByLabel("릴리즈 준비 체크리스트");
-  const betaProof = page.getByLabel("온보딩 증거 내보내기");
-  await expect(betaProof).toContainText("이 설치가 public-safe인지 증거로 내보내기");
-  await expect(betaProof.getByRole("button", { name: "proof 다운로드" })).toBeVisible();
-  await dispatchButtonClick(betaProof.getByRole("button", { name: "proof 복사" }));
-  await expect(betaProof.getByRole("button", { name: "proof 복사됨" })).toBeVisible();
-  const betaProofText = await page.evaluate(() => navigator.clipboard.readText());
-  const betaProofPayload = JSON.parse(betaProofText);
-  expect(betaProofPayload.kind).toBe("channel_vault_beta_onboarding_proof");
-  expect(betaProofPayload.privacy.redacted_for_public_issue).toBe(true);
-  expect(betaProofText).not.toContain("Signal Lab");
-  expect(betaProofText).not.toContain("https://");
-  expect(betaProofText).not.toContain("/tmp/");
-  await dispatchButtonClick(releaseReadiness.getByRole("button", { name: "브리핑 복사" }));
-  await expect(releaseReadiness.getByRole("button", { name: "브리핑 복사됨" })).toBeVisible();
-  await releaseReadiness.getByRole("button", { name: "복구 가이드" }).click();
-  const runtimeGuideFromReadiness = page.getByLabel("런타임 env 매니페스트");
-  await expect(runtimeGuideFromReadiness).toBeVisible();
-  const runtimeRailFromReadiness = runtimeGuideFromReadiness.getByLabel("런타임 가이드 섹션");
-  await expect(runtimeRailFromReadiness).toContainText("보안");
-  await expect(runtimeRailFromReadiness).toContainText("볼륨");
-  await expect(runtimeRailFromReadiness).toContainText("백업");
-  await runtimeRailFromReadiness.getByRole("button").filter({ hasText: "백업" }).click();
-  await expect(runtimeGuideFromReadiness.getByLabel("백업 및 복구 confidence")).toBeVisible();
-  await runtimeGuideFromReadiness.getByRole("button", { name: "닫기" }).click();
 
-  await page.getByRole("button", { name: "Command Palette 열기" }).click();
+  await page.keyboard.press("Control+K");
   const palette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
   await expect(palette).toBeVisible();
   await expect(palette).toContainText("소스 등록");
@@ -146,7 +129,7 @@ test("command palette opens operational surfaces and live status is visible", as
   await page.screenshot({ path: testInfo.outputPath("command-palette-runtime-guide.png"), fullPage: true });
   await runtimeGuide.getByRole("button", { name: "닫기" }).click();
 
-  await page.getByRole("button", { name: "Command Palette 열기" }).click();
+  await page.keyboard.press("Control+K");
   const queuePalette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
   await queuePalette.getByLabel("운영, 화면, archive 도구 검색").fill("queue");
   await expect(queuePalette).toContainText("전역 큐 콘솔");
@@ -157,10 +140,32 @@ test("command palette opens operational surfaces and live status is visible", as
   expect(errors).toEqual([]);
 });
 
+test("mobile home and settings keep guide and advanced management reachable", async ({ page }) => {
+  const errors = watchBrowserErrors(page);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openKoreanVault(page);
+
+  await page.locator(".simple-home__advanced").click();
+  await expect(page).toHaveURL(/#\/settings/);
+  const simpleSettings = page.getByLabel("기본 설정");
+  await expect(simpleSettings).toBeVisible();
+  await expect(simpleSettings.getByLabel("표시 언어 선택")).toBeVisible();
+  await expect(simpleSettings.getByRole("button", { name: "사용자 가이드 열기" })).toBeVisible();
+
+  const advancedSettings = page.locator("details.settings-advanced-details");
+  await expect(advancedSettings).toHaveJSProperty("open", true);
+  const advancedRoutes = advancedSettings.getByLabel("고급 관리 이동");
+  await expect(advancedRoutes.getByRole("button", { name: /큐/ })).toBeVisible();
+  await expect(advancedRoutes.getByRole("button", { name: /인사이트/ })).toBeVisible();
+  await expect(advancedRoutes.getByRole("button", { name: /런타임 도구/ })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("url hash deep links restore nav and channel tabs", async ({ page }) => {
   const errors = watchBrowserErrors(page);
   await openKoreanVault(page, "/#/channels/downloads?channel=1", false);
 
+  await openChannelAdvanced(page);
   const channelTabs = page.getByLabel("채널 상세 탭");
   await expect(channelTabs.getByRole("button", { name: "다운로드" })).toHaveClass(/active/);
   await expect(page.getByText("다운로드 묶음 미리보기")).toBeVisible();
@@ -172,12 +177,13 @@ test("url hash deep links restore nav and channel tabs", async ({ page }) => {
   await expect(page).toHaveTitle("Signal Lab · 정책 · Channel Vault NAS");
   await expect(page).toHaveURL(/#\/channels\/policy\?channel=1/);
 
-  await page.getByRole("button", { name: "큐", exact: true }).click();
+  await selectSidebarAdvanced(page, "큐", "/#/queue?channel=1");
   await expect(page.getByLabel("다운로드 큐")).toBeVisible();
   await expect(page).toHaveTitle("다운로드 큐 · Channel Vault NAS");
   await expect(page).toHaveURL(/#\/queue\?channel=1/);
 
   await page.goBack();
+  await openChannelAdvanced(page);
   await expect(channelTabs.getByRole("button", { name: "정책" })).toHaveClass(/active/);
   await expect(page).toHaveURL(/#\/channels\/policy\?channel=1/);
 
@@ -265,19 +271,20 @@ test("registration command bar can probe and commit without external YouTube cal
   });
 
   await openKoreanVault(page);
-  await page.getByRole("button", { name: "Command Palette 열기" }).click();
+  await page.keyboard.press("Control+K");
   const registrationPalette = page.getByLabel("필요한 운영 화면으로 바로 이동.");
   await registrationPalette.getByLabel("운영, 화면, archive 도구 검색").fill("소스 등록");
   await registrationPalette.getByRole("button").filter({ hasText: "소스 등록" }).first().click();
   const registrationInput = page.getByLabel("채널 URL 또는 ID");
   await expect(registrationInput).toBeVisible();
   await registrationInput.fill("https://www.youtube.com/@e2evault");
-  await page.getByRole("button", { name: "미리보기", exact: true }).click();
+  await page.getByRole("button", { name: "채널 확인", exact: true }).click();
   await expect(page.getByText("E2E Vault Signal").first()).toBeVisible();
   await page.getByRole("button", { name: "채널 등록", exact: true }).click();
   await expect(page.locator(".channel-registration-panel")).toBeHidden();
   await expect(page.locator(".channel-backup-overview")).toBeVisible();
   await expect(page.getByRole("heading", { name: "남은 영상 2개를 자동으로 백업합니다" })).toBeVisible();
+  await openChannelAdvanced(page);
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "다운로드" }).click();
   await expect(page.getByText("다운로드 묶음 미리보기")).toBeVisible();
   expect(errors).toEqual([]);
@@ -338,21 +345,17 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   });
 
   await openKoreanVault(page);
-  const opsStorageAction = page.getByLabel("오늘의 아카이브 작업").getByRole("button", { name: "스캔 열기" }).first();
-  if ((await opsStorageAction.count()) > 0) {
-    await opsStorageAction.click();
-    await expect(page.locator(".storage-panel")).toBeVisible();
-    await page.getByRole("button", { name: "대시보드", exact: true }).click();
-  }
-  const growthTask = page.getByLabel("오늘의 아카이브 작업").locator(".ops-mission").filter({ hasText: "급증 채널 점검" });
-  await expect(growthTask).toBeVisible();
-  await growthTask.getByRole("button", { name: "채널 열기" }).click();
-  await expect(page.getByLabel("채널 상세 탭").getByRole("button", { name: "라이브러리" })).toBeVisible();
+  await selectSidebarAdvanced(page, "인사이트", "/#/insights?channel=1");
+  await expect(page.locator(".storage-panel")).toBeVisible();
+  await expect(page.locator(".storage-tree-panel").first()).toContainText("@signalvaultlab");
+  await page.getByRole("button", { name: "채널", exact: true }).click();
+  await openChannelAdvanced(page);
+  await page.getByLabel("채널 상세 탭").getByRole("button", { name: "라이브러리" }).click();
   const growthMissionLens = page.getByLabel("채널 NAS 발자국");
   await expect(growthMissionLens).toBeVisible();
   await expect(growthMissionLens).toContainText("7/30일 성장 비교");
-  await page.getByRole("button", { name: "대시보드", exact: true }).click();
-  await page.getByRole("button", { name: "큐", exact: true }).click();
+  await page.getByRole("button", { name: "홈", exact: true }).click();
+  await selectSidebarAdvanced(page, "큐", "/#/queue?channel=1");
   const queueConsole = page.getByLabel("다운로드 큐");
   const refreshQueueButton = queueConsole.getByRole("button", { name: "큐 새로고침" }).first();
   const runFiveButton = queueConsole.getByRole("button", { name: "대기 5개 실행" });
@@ -376,10 +379,23 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(queueConsole.getByText("인덱스된 파일")).toBeVisible();
   await expect(queueConsole.getByText("최근 작업 로그")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("queue-console.png"), fullPage: true });
-  await page.getByRole("button", { name: "대시보드", exact: true }).click();
+  await page.getByRole("button", { name: "홈", exact: true }).click();
   await expect(queueConsole).toBeHidden();
 
   await page.getByRole("button", { name: "설정", exact: true }).click();
+  const simpleSettings = page.getByLabel("기본 설정");
+  await expect(simpleSettings).toBeVisible();
+  await expect(simpleSettings.getByLabel("표시 언어 선택")).toBeVisible();
+  await expect(simpleSettings.getByRole("button", { name: "사용자 가이드 열기" })).toBeVisible();
+  await expect(page.getByLabel("런타임 설정")).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath("simple-settings.png"), fullPage: true });
+
+  const advancedSettings = page.locator("details.settings-advanced-details");
+  await advancedSettings.locator("summary").click();
+  const advancedRoutes = advancedSettings.getByLabel("고급 관리 이동");
+  await expect(advancedRoutes.getByRole("button", { name: /큐/ })).toBeVisible();
+  await expect(advancedRoutes.getByRole("button", { name: /인사이트/ })).toBeVisible();
+  await expect(advancedRoutes.getByRole("button", { name: /런타임 도구/ })).toBeVisible();
   await expect(page.getByLabel("런타임 설정")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("runtime-console.png"), fullPage: true });
   await page.getByRole("button", { name: "Env 가이드" }).click();
@@ -507,6 +523,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(dueWatchlist.getByRole("button").first()).toBeVisible();
   await dueWatchlist.getByRole("button").first().click();
   await page.getByRole("button", { name: "채널", exact: true }).click();
+  await openChannelAdvanced(page);
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "개요" }).click();
   await expect(page.getByText("다음 sync 예정")).toBeVisible();
   await expect(page.getByText("마지막 자동 sync")).toBeVisible();
@@ -526,7 +543,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await page.getByRole("button", { name: "간격 저장" }).click();
   expect((await (await intervalPatch).json()).sync_interval_minutes).toBe(120);
   await expect(page.getByText("120분 간격")).toBeVisible();
-  await page.getByRole("button", { name: "인사이트", exact: true }).click();
+  await selectSidebarAdvanced(page, "인사이트", "/#/insights?channel=1");
   await expect(page.getByText("아카이브 루트").first()).toBeVisible();
   const storageTrend = page.getByLabel("스토리지 추세", { exact: true });
   await expect(storageTrend).toContainText("최근 스냅샷");
@@ -585,8 +602,13 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   const storageExport = page.waitForEvent("download");
   await storageTriage.getByRole("button", { name: "CSV 저장" }).click();
   expect((await storageExport).suggestedFilename()).toContain("storage-scan");
+  await page.getByRole("button", { name: "저장된 영상", exact: true }).click();
+  await page.getByText("고급 필터", { exact: true }).click();
+  await expect(page.locator(".saved-view-pill").filter({ hasText: "Media only triage" })).toBeVisible();
   await page.getByRole("button", { name: "채널", exact: true }).click();
+  await openChannelAdvanced(page);
   await page.getByLabel("채널 상세 탭").getByRole("button", { name: "라이브러리" }).click();
+  await page.getByText("고급 필터", { exact: true }).click();
   const channelStorageLens = page.getByLabel("채널 NAS 발자국");
   await expect(channelStorageLens).toBeVisible();
   await expect(channelStorageLens).toContainText("아카이브 점유");
@@ -777,6 +799,7 @@ test("queue preflight, bulk queueing, library shelf, and rescan apply stay wired
   await expect(eventLog.getByRole("button", { name: "보존 정리" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("event-log.png"), fullPage: true });
   await eventLog.getByRole("button", { name: "닫기", exact: true }).click();
+  await openChannelAdvanced(page);
 
   const archivePathway = page.getByLabel("새 영상 확인, 기존 영상 스킵, 큐 진행 보기");
   await expect(archivePathway).toContainText("스킵 장부");

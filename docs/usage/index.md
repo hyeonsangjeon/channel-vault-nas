@@ -4,15 +4,15 @@ Channel Vault NAS has one archive path, from source to verified media:
 
 ```mermaid
 flowchart LR
-  A[Register a channel] --> B[Preview and Register]
-  B --> C[Review remaining videos]
-  C --> D[Start automatic backup]
-  D --> E[Verify in Library]
+  A[Add a channel] --> B[Check channel]
+  B --> C[Register channel]
+  C --> D[Choose a schedule and start]
+  D --> E[Read status or open Saved videos]
 ```
 
 <figure markdown="span">
-  ![Dashboard: today's archive status](../assets/user-manual/en/01-dashboard-cockpit.png){ loading=lazy }
-  <figcaption>The Dashboard is a read-only overview: archive score, the next useful action, and worker/storage/library state. Deep controls live on the Channels tab.</figcaption>
+  ![Home: today's archive status](../assets/user-manual/en/01-home.png){ loading=lazy }
+  <figcaption>Home keeps the three everyday tasks together: add a channel, start automatic backup, and read its current status.</figcaption>
 </figure>
 
 ## Start here
@@ -23,7 +23,7 @@ flowchart LR
 
     ---
 
-    The click-by-click walkthrough: paste a channel, preview it, register it,
+    The click-by-click walkthrough: paste a channel, check it, register it,
     then choose interval and per-run count and start automatic backup.
 
     [:octicons-arrow-right-24: Start channel backup](first-backup.md)
@@ -42,8 +42,7 @@ flowchart LR
 
     ---
 
-    Reference for every screen: Dashboard, Channels, Queue, Library, Insights,
-    and Settings.
+    Reference for the four everyday screens and the advanced management tools.
 
     [:octicons-arrow-right-24: Product tour](product-tour.md)
 
@@ -71,15 +70,8 @@ flowchart LR
 
 | Tab | What it's for |
 | --- | --- |
-| **Dashboard** | Archive overview and the next useful action. No deep controls. |
-| **Channels** | The start point: Preview → Register channel, review remaining videos, then Start automatic backup. |
-| **Queue** | Every candidate, queued, running, completed, failed, and cancelled job. Stale failures for already-archived videos are hidden from current work. |
-| **Library** | Archived and missing videos together, with codec/sidecar/path integrity. |
-| **Insights** | Storage pressure, folder structure, drift, orphan sidecars — read from the real archive root. |
-| **Settings** | Runtime console: worker/scheduler flags, binary paths, restart adapters, audit. |
-
-!!! tip "Try it without touching YouTube"
-    Expand the secondary **Safe demo and advanced import options** panel on the
-    Dashboard to load a deterministic `Signal Lab` fixture — no external calls, no
-    downloads. Great for a first look. See
-    [Channel backup → Safe demo](first-backup.md#optional-explore-with-the-safe-demo).
+| **Home** | Add a channel, start or pause automatic backup, and read the current status. |
+| **Channels** | Manage the selected channel and change its schedule. |
+| **Saved videos** | Find the videos already stored on the NAS. |
+| **Settings** | Change everyday preferences and open technical settings only when needed. |
+| **Advanced management** | Queue, storage analysis, logs, policies, and runtime tools for troubleshooting and administration. |

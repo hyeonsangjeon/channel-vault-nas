@@ -22,8 +22,8 @@
 </p>
 
 <p align="center">
-  <a href="docs/assets/demo/channel-vault-public-alpha.gif">
-    <img src="docs/assets/demo/channel-vault-public-alpha.gif" alt="Channel Vault NAS 채널 등록, 자동 백업, 기존 아카이브 가져오기 데모" width="100%">
+  <a href="docs/assets/user-manual/ko/01-home.png">
+    <img src="docs/assets/user-manual/ko/01-home.png" alt="3단계 자동 백업 흐름을 보여주는 Channel Vault NAS 홈" width="100%">
   </a>
 </p>
 
@@ -66,9 +66,11 @@ docker compose -f compose.release.yml up -d
 
 브라우저에서 **`http://127.0.0.1:5173/`**을 연 다음:
 
-1. **채널**에서 URL 또는 `@handle`을 붙여넣고 **미리보기**를 누릅니다.
-2. 소스를 확인하고 **채널 등록**을 누릅니다.
-3. 간격과 한 번에 받을 영상 수를 고른 뒤 **자동 백업 시작**을 누릅니다.
+1. **홈**에서 **채널 등록**을 누르고 URL 또는 `@handle`을 붙여넣은 뒤
+   **채널 확인**을 누릅니다.
+2. 확인된 채널 이름과 주소가 맞으면 **채널 등록**을 누릅니다.
+3. 간격과 한 번에 받을 영상 수를 고르고 **자동 백업 시작**을 누른 뒤,
+   같은 화면에서 자동 백업이 켜졌는지 확인합니다.
 
 이미 파일이나 `archive.txt`가 있다면 자동 백업 전에 [기존 아카이브
 가져오기](docs/usage/migrate-existing-archive.ko.md)를 따라 하세요. 기존 영상을
@@ -85,7 +87,7 @@ Synology/QNAP 설치는 [한국어 NAS 설치
 
 | 오늘의 아카이브 상태 | 자동 백업 |
 | --- | --- |
-| ![대시보드](docs/assets/screenshots/dashboard-cockpit.png) | ![채널 자동 백업](docs/assets/screenshots/channel-downloads.png) |
+| ![간단한 홈 화면](docs/assets/screenshots/home.png) | ![채널 자동 백업](docs/assets/screenshots/channel-downloads.png) |
 
 | 채널 등록 | 기존 아카이브 가져오기 |
 | --- | --- |

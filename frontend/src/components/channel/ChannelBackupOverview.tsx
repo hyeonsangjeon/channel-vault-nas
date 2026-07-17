@@ -1,9 +1,7 @@
 import {
-  CheckCircle2,
   CirclePause,
   Clock3,
   Download,
-  FolderTree,
   Library,
   RefreshCcw,
   Save,
@@ -14,10 +12,12 @@ import type { TranslationKey } from "../../i18n";
 type Translate = (key: TranslationKey) => string;
 
 type ChannelBackupOverviewProps = {
+  attention: boolean;
   applying: boolean;
   complete: boolean;
   dirty: boolean;
   downloaded: number;
+  failedCount: number;
   handle: string;
   initials: string;
   intervalMinutes: number;
@@ -30,6 +30,8 @@ type ChannelBackupOverviewProps = {
   onLimitChange: (limit: number) => void;
   onManualTest: () => void;
   onOpenLibrary: () => void;
+  onOpenSettings: () => void;
+  onRetryFailed: () => void;
   onStart: () => void;
   onStop: () => void;
   onUpdate: () => void;
@@ -46,10 +48,12 @@ const intervalPresets = [15, 30, 60, 360, 720, 1440];
 const limitPresets = [1, 3, 5, 10, 20];
 
 export function ChannelBackupOverview({
+  attention,
   applying,
   complete,
   dirty,
   downloaded,
+  failedCount,
   handle,
   initials,
   intervalMinutes,
@@ -62,6 +66,8 @@ export function ChannelBackupOverview({
   onLimitChange,
   onManualTest,
   onOpenLibrary,
+  onOpenSettings,
+  onRetryFailed,
   onStart,
   onStop,
   onUpdate,
@@ -75,6 +81,7 @@ export function ChannelBackupOverview({
 }: ChannelBackupOverviewProps) {
   const intervals = withCurrent(intervalPresets, intervalMinutes);
   const limits = withCurrent(limitPresets, limit);
+  const isRunning = schedulerEnabled && schedulerRunning;
 
   return (
     <section className="channel-backup-overview">
@@ -149,31 +156,59 @@ export function ChannelBackupOverview({
           ) : null}
         </div>
 
-        <div className="channel-backup-trust">
-          <span><CheckCircle2 size={16} />{t("detail.simple.trustSkip")}</span>
-          <span><FolderTree size={16} />{t("detail.simple.trustIndex")}</span>
-        </div>
       </div>
 
-      {schedulerEnabled ? (
-        <div className={`channel-backup-status${schedulerRunning ? " is-running" : ""}`} role="status">
+      <div
+        className={`channel-backup-status${isRunning ? " is-running" : ""}${attention ? " is-attention" : ""}${!schedulerEnabled ? " is-paused" : ""}`}
+        role="status"
+      >
           <RefreshCcw size={25} />
           <div>
-            <strong>{schedulerRunning ? t("detail.simple.runningTitle") : t("detail.simple.activeTitle")}</strong>
-            <small>{t("detail.simple.activeDetail")}</small>
+            <strong>
+              {attention
+                ? t("detail.simple.attentionTitle")
+                : isRunning
+                  ? t("detail.simple.runningTitle")
+                  : schedulerEnabled
+                    ? t("detail.simple.activeTitle")
+                    : t("detail.simple.pausedTitle")}
+            </strong>
+            <small>
+              {attention
+                ? statusMessage || t("detail.simple.attentionDetail")
+                : schedulerEnabled
+                  ? t("detail.simple.activeDetail")
+                  : t("detail.simple.pausedDetail")}
+            </small>
           </div>
-          <span>
-            <small>{t("detail.simple.nextRun")}</small>
-            <strong>{nextRun}</strong>
-          </span>
-          <button aria-label={t("detail.simple.pause")} className="command-button" disabled={applying} onClick={onStop} title={t("detail.simple.pause")} type="button">
-            <CirclePause size={16} />
-            {t("detail.simple.pause")}
-          </button>
-        </div>
-      ) : null}
+          {schedulerEnabled && !attention ? (
+            <>
+              <span>
+                <small>{t("detail.simple.nextRun")}</small>
+                <strong>{nextRun}</strong>
+              </span>
+              <button aria-label={t("detail.simple.pause")} className="command-button" disabled={applying} onClick={onStop} title={t("detail.simple.pause")} type="button">
+                <CirclePause size={16} />
+                {t("detail.simple.pause")}
+              </button>
+            </>
+          ) : null}
+          {attention ? (
+            <button
+              className="command-button channel-backup-attention-action"
+              disabled={applying}
+              onClick={failedCount > 0 ? onRetryFailed : onOpenSettings}
+              type="button"
+            >
+              <RefreshCcw size={16} />
+              {failedCount > 0
+                ? t("detail.simple.retryFailed").replace("{count}", String(failedCount))
+                : t("detail.simple.openSettings")}
+            </button>
+          ) : null}
+      </div>
 
-      {statusMessage ? <div className="channel-backup-message" role="status">{statusMessage}</div> : null}
+      {statusMessage && !attention ? <div className="channel-backup-message" role="status">{statusMessage}</div> : null}
 
       <details className="channel-backup-advanced">
         <summary>

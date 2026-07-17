@@ -77,10 +77,11 @@ If DSM asks which file to use, rename `compose.release.yml` to
 
 ## First backup after install
 
-1. Open **Channels**, paste a channel URL or `@handle`, and select **Preview**.
-2. Confirm the source and select **Register channel**.
-3. Choose the interval and videos per run, then select **Start automatic
-   backup**.
+1. On **Home**, select **Register channel**, paste a channel URL or `@handle`,
+   and select **Check channel**. From **Channels**, use **Add channel**.
+2. Confirm the checked source and select **Register channel**.
+3. Choose the interval and videos per run, select **Start automatic backup**,
+   and confirm that the same card shows automatic backup is on.
 
 Already have media or `archive.txt`? Follow [Bring an existing
 archive](../usage/migrate-existing-archive.md) before step 3 so existing videos

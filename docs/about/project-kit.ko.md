@@ -12,15 +12,16 @@ description: >-
 
 ## 한 문장 소개
 
-Channel Vault NAS는 YouTube 채널을 NAS에 백업하고, 기존 미디어와 `archive.txt`를
-재사용하며, 없는 영상만 다운로드하고, 디스크 파일에서 검색 색인을 다시 만들 수
-있는 오픈소스 Docker 콘솔입니다.
+Channel Vault NAS는 채널 등록, 일정 시작, 상태 확인의 세 단계로 YouTube 채널을
+NAS에 백업하고 기존 미디어와 `archive.txt`를 재사용하는 오픈소스 Docker
+앱입니다.
 
 ## 짧은 디렉터리 설명
 
-YouTube 채널을 Docker NAS에 백업합니다. 기존 미디어와 `archive.txt`를 가져오고,
-누락 또는 건너뜀 판단을 확인하며, 제한된 `yt-dlp` 다운로드를 예약하고, 마운트된
-폴더와 사이드카에서 라이브러리 색인을 복구합니다.
+YouTube 채널을 Docker NAS에 백업합니다. 채널을 등록하고, 제한된 `yt-dlp`
+일정을 시작한 뒤, 저장된 영상 수와 남은 영상 수를 확인합니다. 기존 미디어와
+`archive.txt`를 가져올 수 있고 마운트된 폴더와 사이드카에서 색인을 복구할 수
+있습니다.
 
 ## 검증된 정보
 
@@ -40,6 +41,8 @@ YouTube 채널을 Docker NAS에 백업합니다. 기존 미디어와 `archive.tx
 
 ## 차별점
 
+- 기본 화면은 채널 등록, 백업 일정, 하나의 명확한 상태에 집중합니다. 대기열,
+  저장소 진단, 런타임 제어는 필요할 때만 **고급 관리**에서 엽니다.
 - 기존 NAS 미디어, 자막, 썸네일, `info.json` 사이드카를 일부러 다시 받지 않고
   색인할 수 있습니다.
 - `archive.txt` 판단이 명령행 옵션 안에 사라지지 않고 다운로드됨, 없음, 대기,
@@ -54,15 +57,16 @@ TubeArchivist, Pinchflat, TubeSync, ytdl-sub가 더 잘 맞는 경우는 [솔직
 
 ## 미디어 자료
 
-아래 자료는 현재 `alpha.3` 흐름을 보여주며 프로젝트 링크와 출처를 함께 표시하면
-소개 글에 사용할 수 있습니다.
+앞의 두 자료는 현재 일상 작업 흐름을 보여주므로 디렉터리와 리뷰에서 우선 사용해
+주세요. 나머지는 보조 자료입니다. 프로젝트 링크와 출처를 함께 표시하면 소개
+글에 사용할 수 있습니다.
 
+- [간단한 홈과 3단계 흐름](../assets/user-manual/ko/01-home.png)
+- [채널 백업 상태](../assets/user-manual/ko/02-channel-overview.png)
+- [채널 등록](../assets/user-manual/ko/03-channel-registration.png)
 - [1280x640 소셜 프리뷰](../assets/social-preview.png)
 - [240x240 프로젝트 아이콘](../assets/producthunt-thumbnail.png)
-- [자동 백업 화면](../assets/screenshots/channel-downloads.png)
-- [채널 등록 화면](../assets/screenshots/channel-registration.png)
 - [기존 아카이브 가져오기](../assets/screenshots/existing-archive-import.png)
-- [대시보드 개요](../assets/screenshots/dashboard-cockpit.png)
 - [12초 제품 데모](../assets/demo/channel-vault-public-alpha.gif)
 
 ## 디렉터리 등록 권장값
