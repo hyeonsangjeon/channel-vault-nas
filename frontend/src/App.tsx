@@ -8333,7 +8333,7 @@ function App() {
             </div> : null}
 
             <div className="library-shelf">
-              {visibleLibraryItems.slice(0, 6).map((item) => (
+              {visibleLibraryItems.map((item) => (
                 <button
                   className={`library-card ${item.archive_state}`}
                   key={item.id}

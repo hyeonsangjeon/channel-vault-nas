@@ -161,6 +161,65 @@ test("mobile home and settings keep guide and advanced management reachable", as
   expect(errors).toEqual([]);
 });
 
+test("saved videos renders every library result beyond the old six-card preview", async ({ page }) => {
+  const errors = watchBrowserErrors(page);
+  const items = Array.from({ length: 7 }, (_, index) => ({
+    id: 8_000 + index,
+    channel_id: 1,
+    channel_title: "Signal Lab",
+    video_external_id: `all-saved-${index + 1}`,
+    title: index === 6 ? "Seventh saved video regression marker" : `Saved video ${index + 1}`,
+    url: `https://www.youtube.com/watch?v=all-saved-${index + 1}`,
+    published_at: `2026-06-${String(30 - index).padStart(2, "0")}T12:00:00.000Z`,
+    duration_seconds: 120 + index,
+    thumbnail_url: null,
+    source_state: "available",
+    archive_state: "archived",
+    integrity_state: "complete",
+    info_json_path: `/archive/all-saved-${index + 1}/video.info.json`,
+    media_files: [`/archive/all-saved-${index + 1}/video.mp4`],
+    media_count: 1,
+    media_container: "mp4",
+    video_codec: "h264",
+    audio_codec: "aac",
+    fps: 30,
+    width: 1920,
+    height: 1080,
+    total_bytes: 4_000_000 + index,
+    total_label: "4 MB",
+    queue_status: null,
+    queue_priority: null,
+    fidelity: { info_json: true, media: true, thumbnail: true, subtitles: true, nfo: true },
+  }));
+
+  await page.route("**/api/library?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("channel_id") !== "1") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items,
+        total: items.length,
+        archived: items.length,
+        missing: 0,
+        queued: 0,
+        total_bytes: items.reduce((sum, item) => sum + item.total_bytes, 0),
+        total_label: "28 MB",
+      }),
+    });
+  });
+
+  await openKoreanVault(page, "/#/library?channel=1", false);
+
+  await expect(page.locator(".library-results-heading")).toContainText("영상 7개");
+  await expect(page.locator(".library-card")).toHaveCount(7);
+  await expect(page.locator(".library-card").filter({ hasText: "Seventh saved video regression marker" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("url hash deep links restore nav and channel tabs", async ({ page }) => {
   const errors = watchBrowserErrors(page);
   await openKoreanVault(page, "/#/channels/downloads?channel=1", false);
