@@ -50,6 +50,20 @@
 [`youtube-dl-nas`](https://github.com/hyeonsangjeon/youtube-dl-nas)의 제작자가,
 일회성 URL 다운로드가 아닌 장기 채널 아카이브를 위해 새로 만들었습니다.
 
+## 나에게 맞을까요?
+
+Channel Vault는 미디어 재생기가 아니라 **아카이브 운영 콘솔**입니다. 이미 NAS
+폴더나 `archive.txt`가 있고, 모든 다운로드·건너뜀·누락 판단을 눈으로 확인하며
+디스크에서 복구하고 싶을 때 가장 잘 맞습니다.
+
+| 이런 게 필요하다면 | 이 도구부터 |
+| --- | --- |
+| 재생과 큰 커뮤니티를 갖춘 완성형 미디어 서버 | [TubeArchivist](https://github.com/tubearchivist/tubearchivist) |
+| 단순하고 성숙한 구독 다운로더 | [Pinchflat](https://github.com/kieraneglin/pinchflat) |
+| **기존 미디어를 재사용하고 `archive.txt` 판단을 보여주는 디스크 우선 채널 아카이빙** | **Channel Vault NAS** |
+
+자세한 비교: [나에게 맞을까요?](docs/about/comparison.ko.md)
+
 ## 빠른 시작
 
 저장소를 clone하거나 이미지를 직접 빌드할 필요가 없습니다.
@@ -94,6 +108,10 @@ Synology/QNAP 설치는 [한국어 NAS 설치
 | ![채널 등록](docs/assets/screenshots/channel-registration.png) | ![NAS 폴더와 archive.txt 가져오기](docs/assets/screenshots/existing-archive-import.png) |
 
 ## 현재 지원 범위
+
+**0.2.0으로 알파를 벗어나 활발히 개발 중입니다.** 기본 화면은 홈·채널·저장한
+영상·설정에 집중하고, 큐 점검과 저장소 진단, 런타임 제어는 필요할 때 열어보는
+고급 관리로 정리했습니다.
 
 - 채널 등록과 메타데이터 동기화
 - 새 영상 후보 생성과 자동 다운로드 일정

@@ -32,8 +32,8 @@ docker compose -f compose.release.yml up -d
     `compose.release.yml` 옆에 `.env`를 만들고 두 이미지 오버라이드를 지정하세요:
 
     ```bash
-    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.3
-    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.2.0
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.2.0
     ```
 
     `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. GHCR 미러와
@@ -80,8 +80,8 @@ Compose 스택은 다음을 실행합니다:
 별칭이 필요합니다.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.3
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.3
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.2.0
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.2.0
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

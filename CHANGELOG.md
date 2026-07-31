@@ -2,12 +2,22 @@
 
 All notable changes to Channel Vault NAS will be tracked here.
 
-The project is in active alpha. Dates use Korea Standard Time.
+The project is actively developed and out of alpha. Dates use Korea Standard Time.
 
-## Unreleased
+## 0.2.0 - 2026-07-31
+
+V2 moves Channel Vault out of alpha with a right-sized default experience and a
+clearer front door, aimed at making the archive workflow obvious to new
+self-hosters.
 
 ### Changed
 
+- Moved out of alpha to **0.2.0**. Release images, Compose files, install docs,
+  the Docker Hub description, and the version reported by the API and UI now
+  read `0.2.0`.
+- Repositioned both READMEs to lead with an honest "Is it for you?" comparison
+  against TubeArchivist, Pinchflat, and TubeSync/ytdl-sub, and to frame the
+  project confidently as out of alpha rather than as a guarded prerelease.
 - The default interface now leads with a light three-step Home flow: register a
   channel, choose the automatic-backup schedule, and read the current status.
   Queue, storage, runtime, and diagnostic controls remain available under
