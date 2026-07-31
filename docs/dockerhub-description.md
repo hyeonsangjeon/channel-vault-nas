@@ -18,8 +18,8 @@ keeps new uploads backed up with `yt-dlp`.
 
 This app is published as two images that run together with Docker Compose:
 
-- `modenaf360/channel-vault-nas-api:0.1.0-alpha.3`
-- `modenaf360/channel-vault-nas-web:0.1.0-alpha.3`
+- `modenaf360/channel-vault-nas-api:0.2.0`
+- `modenaf360/channel-vault-nas-web:0.2.0`
 
 Both images are multi-arch: `linux/amd64` and `linux/arm64`.
 
@@ -83,5 +83,5 @@ archive, or have already exported from your own account.
 - GitHub: <https://github.com/hyeonsangjeon/channel-vault-nas>
 - Manual: <https://hyeonsangjeon.github.io/channel-vault-nas/>
 - Compatibility reports: <https://github.com/hyeonsangjeon/channel-vault-nas/discussions/7>
-- Release: <https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.3>
+- Release: <https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.2.0>
 - Security notes: <https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/SECURITY.md>

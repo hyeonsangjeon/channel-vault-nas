@@ -30,7 +30,7 @@ folders and sidecars.
 | --- | --- |
 | License | [MIT](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/LICENSE) |
 | Source | [GitHub](https://github.com/hyeonsangjeon/channel-vault-nas) |
-| Current release | [`v0.1.0-alpha.3`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.3) |
+| Current release | [`v0.2.0`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.2.0) |
 | First public release | June 11, 2026 |
 | Deployment | Two Docker images with one Compose file |
 | Architectures | `linux/amd64`, `linux/arm64` |

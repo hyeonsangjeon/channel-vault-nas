@@ -31,8 +31,8 @@ Then open **`http://127.0.0.1:5173/`** and jump to
     Create a `.env` beside `compose.release.yml` and set both image overrides:
 
     ```bash
-    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.1.0-alpha.3
-    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.1.0-alpha.3
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.2.0
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.2.0
     ```
 
     Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. Both the GHCR
@@ -79,8 +79,8 @@ one Docker network. The `api` network alias is required because the web image
 proxies `/api` and `/ws` to `http://api:8000`.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.1.0-alpha.3
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.1.0-alpha.3
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.2.0
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.2.0
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

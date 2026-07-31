@@ -34,7 +34,7 @@ Channel Vault는 설치 텔레메트리를 수집하지 않습니다.
 로그를 올릴 때 토큰, 비밀번호, 공개 IP 주소, 비공개 채널 URL은 제거하세요.
 
 Docker Hub와 GHCR 이미지 모두 로그인 없이 받을 수 있습니다.
-`0.1.0-alpha.3` 멀티 아키텍처 manifest는 `linux/amd64`와 `linux/arm64`에서
+`0.2.0` 멀티 아키텍처 manifest는 `linux/amd64`와 `linux/arm64`에서
 확인했습니다.
 
 ## 최소 실행 조건

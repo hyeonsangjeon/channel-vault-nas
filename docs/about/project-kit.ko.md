@@ -29,7 +29,7 @@ YouTube 채널을 Docker NAS에 백업합니다. 채널을 등록하고, 제한�
 | --- | --- |
 | 라이선스 | [MIT](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/LICENSE) |
 | 소스 | [GitHub](https://github.com/hyeonsangjeon/channel-vault-nas) |
-| 현재 릴리스 | [`v0.1.0-alpha.3`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.1.0-alpha.3) |
+| 현재 릴리스 | [`v0.2.0`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.2.0) |
 | 첫 공개 릴리스 | 2026년 6월 11일 |
 | 배포 방식 | 두 Docker 이미지와 하나의 Compose 파일 |
 | 아키텍처 | `linux/amd64`, `linux/arm64` |
