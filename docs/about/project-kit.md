@@ -30,7 +30,7 @@ folders and sidecars.
 | --- | --- |
 | License | [MIT](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/LICENSE) |
 | Source | [GitHub](https://github.com/hyeonsangjeon/channel-vault-nas) |
-| Current release | [`v0.2.0`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.2.0) |
+| Current release | [`v0.3.0`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.3.0) |
 | First public release | June 11, 2026 |
 | Deployment | Two Docker images with one Compose file |
 | Architectures | `linux/amd64`, `linux/arm64` |
@@ -49,6 +49,9 @@ folders and sidecars.
   indexed without deliberately downloading them again.
 - `archive.txt` decisions remain visible as downloaded, missing, queued, or
   skipped records instead of disappearing inside a command-line option.
+- Preservation Watch notices when a saved video vanishes from the source and
+  confirms your NAS holds the last copy, with an exportable preservation
+  manifest.
 - The filesystem is durable archive data; SQLite is a backupable and
   rebuildable search index.
 - Channel registration and actual downloading are separate. Downloads begin

@@ -36,7 +36,7 @@ with:
 Remove tokens, passwords, public IP addresses, and private channel URLs before
 posting logs.
 
-Docker Hub and GHCR both support anonymous pulls. The `0.2.0`
+Docker Hub and GHCR both support anonymous pulls. The `0.3.0`
 multi-architecture manifests are verified for `linux/amd64` and `linux/arm64`.
 
 ## Minimum runtime

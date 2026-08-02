@@ -461,6 +461,8 @@ type TimelineVideo = {
   upload_date: string | null;
   duration_seconds: number | null;
   archive_state: string;
+  source_state: string;
+  removed_detected_at: string | null;
   info_json_path: string | null;
 };
 
@@ -1076,6 +1078,8 @@ function App() {
             upload_date: video.upload_date,
             duration_seconds: video.duration_seconds,
             archive_state: video.archive_state,
+            source_state: video.source_state,
+            removed_detected_at: video.removed_detected_at,
             info_json_path: video.info_json_path,
           }))
         : activeProbe?.videos.map((video) => ({
@@ -1087,6 +1091,8 @@ function App() {
             upload_date: video.upload_date,
             duration_seconds: video.duration_seconds,
             archive_state: "missing",
+            source_state: "available",
+            removed_detected_at: null,
             info_json_path: null,
           })) ?? [],
     [activeProbe, channelVideos],
@@ -7524,13 +7530,13 @@ function App() {
                 </div>
                 <div className="video-timeline">
                   {activeTimeline.slice(0, 6).map((video) => (
-                    <a className={`timeline-row ${video.archive_state}`} href={video.url} key={video.external_id} rel="noreferrer" target="_blank">
+                    <a className={`timeline-row ${video.archive_state}${isPreservedVideo(video) ? " preserved" : ""}`} href={video.url} key={video.external_id} rel="noreferrer" target="_blank">
                       <time>{formatVideoDate(video, language)}</time>
                       <div>
                         <strong>{video.title}</strong>
                         <span>{video.external_id} · {formatDuration(video.duration_seconds)}</span>
                       </div>
-                      <em>{archiveStateLabel(video.archive_state, t)}</em>
+                      <em>{videoTimelineLabel(video, t)}</em>
                     </a>
                   ))}
                 </div>
@@ -12980,6 +12986,20 @@ function formatDuration(seconds: number | null) {
 
 function archiveStateLabel(status: string, t: (key: TranslationKey) => string) {
   return status === "archived" ? t("video.archived") : t("video.missing");
+}
+
+const REMOVED_SOURCE_STATES = new Set(["removed", "blocked", "deleted", "private"]);
+
+function isPreservedVideo(video: Pick<ChannelVideo, "source_state" | "archive_state">) {
+  return REMOVED_SOURCE_STATES.has(video.source_state) && video.archive_state === "archived";
+}
+
+function videoTimelineLabel(
+  video: Pick<ChannelVideo, "source_state" | "archive_state">,
+  t: (key: TranslationKey) => string,
+) {
+  if (isPreservedVideo(video)) return t("video.preserved");
+  return archiveStateLabel(video.archive_state, t);
 }
 
 function archiveTxtStateLabel(status: string, t: (key: TranslationKey) => string) {

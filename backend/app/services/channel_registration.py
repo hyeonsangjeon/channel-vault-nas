@@ -23,6 +23,7 @@ from app.services.archive_txt import (
     ARCHIVE_TXT_PLACEHOLDER_DESCRIPTION,
     ARCHIVE_TXT_PLACEHOLDER_PREFIX,
 )
+from app.services.source_reconciliation import count_removed_saved_videos, reconcile_source_presence
 from app.services.ytdlp_probe import probe_channel_source
 
 
@@ -134,7 +135,10 @@ async def apply_probe_to_channel(
     channel.first_video_published_at = probe.first_video_published_at
     channel.latest_video_published_at = probe.latest_video_published_at
     _update_cadence_from_previews(channel, probe.videos)
-    return await upsert_probe_videos(db=db, channel=channel, probe=probe)
+    summary = await upsert_probe_videos(db=db, channel=channel, probe=probe)
+    await reconcile_source_presence(db=db, channel_id=channel.id, probe=probe, now=now)
+    channel.removed_saved_count = await count_removed_saved_videos(db, channel.id)
+    return summary
 
 
 async def upsert_probe_videos(

@@ -29,7 +29,7 @@ YouTube 채널을 Docker NAS에 백업합니다. 채널을 등록하고, 제한�
 | --- | --- |
 | 라이선스 | [MIT](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/LICENSE) |
 | 소스 | [GitHub](https://github.com/hyeonsangjeon/channel-vault-nas) |
-| 현재 릴리스 | [`v0.2.0`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.2.0) |
+| 현재 릴리스 | [`v0.3.0`](https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.3.0) |
 | 첫 공개 릴리스 | 2026년 6월 11일 |
 | 배포 방식 | 두 Docker 이미지와 하나의 Compose 파일 |
 | 아키텍처 | `linux/amd64`, `linux/arm64` |
@@ -47,6 +47,9 @@ YouTube 채널을 Docker NAS에 백업합니다. 채널을 등록하고, 제한�
   색인할 수 있습니다.
 - `archive.txt` 판단이 명령행 옵션 안에 사라지지 않고 다운로드됨, 없음, 대기,
   건너뜀 상태로 남습니다.
+- 보존 감시(Preservation Watch)는 저장한 영상이 원본에서 사라지는 순간을
+  포착해 NAS가 마지막 사본을 가졌음을 확인하고, 보존 매니페스트로 내보낼 수
+  있습니다.
 - 파일시스템은 영구 아카이브이고 SQLite는 백업하거나 재구축할 수 있는 검색
   색인입니다.
 - 채널 등록과 실제 다운로드가 분리되어 있습니다. 운영자가 자동 백업을 시작한

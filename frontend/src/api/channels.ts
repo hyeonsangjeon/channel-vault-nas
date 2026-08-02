@@ -146,6 +146,7 @@ export type ChannelVideo = {
   thumbnail_url: string | null;
   source_state: string;
   archive_state: "archived" | "missing" | string;
+  removed_detected_at: string | null;
   info_json_path: string | null;
   discovered_at: string;
 };

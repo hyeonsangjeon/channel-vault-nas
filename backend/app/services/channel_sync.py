@@ -261,6 +261,7 @@ def to_channel_video(video: Video, archived_on_disk: bool) -> ChannelVideoRead:
         thumbnail_url=video.thumbnail_url,
         source_state=video.source_state,
         archive_state="archived" if archived_on_disk else "missing",
+        removed_detected_at=video.removed_detected_at,
         info_json_path=video.info_json_path,
         discovered_at=video.discovered_at,
     )
