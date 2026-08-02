@@ -61,6 +61,10 @@ need them.
   subtitles, and `info.json` sidecars without downloading them again.
 - **See what `archive.txt` knows.** Downloaded, missing, queued, and skipped
   videos are visible in the UI instead of disappearing inside a command flag.
+- **Catch vanished uploads.** When a video you already saved disappears from
+  YouTube — removed, privated, or taken down — Channel Vault notices at the next
+  sync and confirms your NAS now holds the last copy. Export a preservation
+  manifest of everything only you still have.
 - **Recover from disk.** Media stays the source of truth; SQLite is a searchable
   index that can be rebuilt from the NAS folders.
 - **Set it once.** Choose a download interval and batch size, start automatic
@@ -82,7 +86,7 @@ honest about where other tools are stronger:
 | A polished media server with in-app playback and a large community | [TubeArchivist](https://github.com/tubearchivist/tubearchivist) |
 | A simple, mature subscription downloader | [Pinchflat](https://github.com/kieraneglin/pinchflat) |
 | Channel subscriptions with filesystem-oriented downloading | [TubeSync](https://github.com/meeb/tubesync) · [ytdl-sub](https://github.com/jmbannon/ytdl-sub) |
-| **Disk-first channel archiving that reuses existing media and makes `archive.txt` decisions visible** | **Channel Vault NAS** |
+| **Disk-first channel archiving that reuses existing media, makes `archive.txt` decisions visible, and flags when your NAS holds the last copy of a vanished video** | **Channel Vault NAS** |
 
 Full breakdown: [Is it for me?](docs/about/comparison.md)
 
@@ -155,7 +159,7 @@ archive.
 
 ## Status
 
-**Out of alpha and in active development (0.2.0).** The core loop runs in Docker
+**Out of alpha and in active development (0.3.0).** The core loop runs in Docker
 and local development today: register a channel, start a schedule, back up
 missing videos, audit what happened, and rebuild the index from disk. The
 default UI stays on Home, Channels, Saved videos, and Settings, with everything
@@ -465,8 +469,8 @@ docker compose -f compose.release.yml up -d
 Equivalent GHCR image overrides:
 
 ```bash
-CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.2.0
-CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.2.0
+CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.3.0
+CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.3.0
 ```
 
 Direct `docker run` is also possible. Compose is still recommended because it
@@ -476,15 +480,15 @@ commands are useful for registry smoke tests.
 Choose Docker Hub:
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.2.0
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.2.0
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.0
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.0
 ```
 
 Or choose GHCR:
 
 ```bash
-export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.2.0
-export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.2.0
+export CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.3.0
+export CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.3.0
 ```
 
 Then run both containers on one Docker network. The `api` network alias is
@@ -530,7 +534,7 @@ Notes:
 - Publishing to Docker Hub requires repository Actions secrets:
   `DOCKERHUB_USERNAME=modenaf360` and `DOCKERHUB_TOKEN=<Docker Hub access token>`.
 - Docker Hub and GHCR packages are public and support anonymous pulls. The
-  `0.2.0` manifests are verified for both `linux/amd64` and
+  `0.3.0` manifests are verified for both `linux/amd64` and
   `linux/arm64`.
 - `manifest unknown` means the requested tag has not been published. Use a
   listed release tag or build from source.
@@ -855,7 +859,7 @@ For each guarded public release:
 - Record/share a short demo video or GIF with `scripts/capture-public-demo.sh`.
 - Keep the safe first-run demo and runtime error copy polished.
 - Run full backend, frontend build, and browser smoke tests.
-- Tag a reviewed release, such as `v0.2.0`.
+- Tag a reviewed release, such as `v0.3.0`.
 
 ## Relationship To youtube-dl-nas
 

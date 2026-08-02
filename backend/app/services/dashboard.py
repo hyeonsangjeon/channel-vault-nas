@@ -100,6 +100,12 @@ async def build_dashboard_snapshot(
                 detail="metadata refresh jobs",
                 tone="active" if active_sync else "protected",
             ),
+            ArchiveMetric(
+                label="Preserved",
+                value=_format_int(removed_saved),
+                detail="last copy safe on your NAS" if removed_saved else "watching for vanished uploads",
+                tone="protected" if removed_saved else "info",
+            ),
         ],
         channels=await _channel_nodes(db, root=root),
         links=[],

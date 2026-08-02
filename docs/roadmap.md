@@ -14,6 +14,8 @@ The app should answer:
 - What is already archived?
 - What is safe to download next?
 - What can be recovered from the filesystem if the database disappears?
+- Which archived videos have vanished from the source, leaving my NAS as the
+  last copy?
 
 ## Public Release Gate
 
@@ -32,6 +34,24 @@ The public release is ready when these are true:
 - The support bundle is server-generated and redacted.
 - Public issue templates, contributing guide, security policy, and demo
   runbook are present.
+
+## 0.3.0 — Preservation Watch
+
+Focus: make disappearance a first-class, celebrated outcome instead of a buried
+filter — the differentiator clone projects tend to skip.
+
+- [x] Source-presence reconciliation — each manual and scheduled sync compares
+  saved videos against the live channel listing and confirms, after a grace
+  window, when an archived video has vanished upstream (removed, privated, or
+  taken down). Guards against truncated listings and single-sync outages so a
+  temporary blip never false-flags a video.
+- [x] Preserved surfacing — a **Preserved** count on the dashboard and on each
+  channel, a preserved badge in the video timeline, and honest "last copy safe
+  on your NAS" framing.
+- [x] Preservation manifest export — `GET /channels/{id}/removed/export`
+  (CSV or NDJSON) lists every video that now exists only on your disk.
+- [x] Reappearance handling — a video that returns to the source is quietly
+  resurrected to `available`.
 
 ## 0.1.0-alpha
 
@@ -112,6 +132,8 @@ Focus: NAS deployment confidence.
 ## Non-Goals
 
 - Public internet downloader service.
-- Automatic deletion of local media because a source disappeared.
+- Automatic deletion of local media because a source disappeared. The opposite
+  is a feature: **Preservation Watch** treats a vanished source as a reason to
+  keep and highlight your copy, never to prune it.
 - Circumventing platform restrictions or archiving content without rights or
   permission.

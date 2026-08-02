@@ -4,6 +4,44 @@ All notable changes to Channel Vault NAS will be tracked here.
 
 The project is actively developed and out of alpha. Dates use Korea Standard Time.
 
+## 0.3.0 - 2026-08-15
+
+V3 makes Channel Vault the archiver that notices when the source is gone.
+**Preservation Watch** turns "a video I saved disappeared from YouTube" from an
+invisible non-event into a first-class, celebrated outcome: your NAS holds the
+last copy. This is the differentiator clone projects tend to skip — most
+subscription downloaders stop caring about a video the moment it is saved.
+
+### Added
+
+- **Preservation Watch** source-presence reconciliation. Every manual and
+  scheduled sync now compares saved videos against the live channel listing and,
+  after a confirmation window (`CVN_PRESERVATION_CONFIRM_HOURS`, default 24h),
+  marks a video that has vanished upstream — removed, privated, or taken down —
+  as preserved. Absence within the window is reported as *suspected* first, so a
+  single sync hiccup never false-flags a video.
+- Truncated-listing and empty-probe safety guards so channels larger than the
+  probe window and momentary listing failures cannot trigger false removals.
+- Automatic resurrection: a video that reappears at the source is quietly
+  restored to `available`.
+- **Preserved** surfacing across the UI — a dedicated dashboard metric tile, a
+  per-channel Preserved count, and a preserved badge in the video timeline, with
+  honest "last copy safe on your NAS" framing.
+- Preservation manifest export at `GET /channels/{id}/removed/export`
+  (CSV or NDJSON) listing every video that now exists only on your disk.
+- `video.preserved` and refreshed preservation copy across all five locales
+  (English, Korean, Japanese, Chinese, Hindi).
+
+### Changed
+
+- Bumped to **0.3.0**. Release images, Compose files, the API/UI version string,
+  and docs now read `0.3.0`.
+- Repositioned both READMEs and the "Is it for me?" comparison to lead with
+  Preservation Watch as the standout differentiator against TubeArchivist,
+  Pinchflat, TubeSync, and ytdl-sub.
+- The first-run demo workspace now seeds a real preserved example instead of an
+  empty Preserved count.
+
 ## 0.2.0 - 2026-07-31
 
 V2 moves Channel Vault out of alpha with a right-sized default experience and a

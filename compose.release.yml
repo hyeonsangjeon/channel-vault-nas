@@ -1,6 +1,6 @@
 services:
   api:
-    image: ${CVN_API_IMAGE:-modenaf360/channel-vault-nas-api:0.2.0}
+    image: ${CVN_API_IMAGE:-modenaf360/channel-vault-nas-api:0.3.0}
     restart: unless-stopped
     environment:
       CVN_APP_NAME: "Channel Vault NAS"
@@ -32,7 +32,7 @@ services:
       start_period: 20s
 
   web:
-    image: ${CVN_WEB_IMAGE:-modenaf360/channel-vault-nas-web:0.2.0}
+    image: ${CVN_WEB_IMAGE:-modenaf360/channel-vault-nas-web:0.3.0}
     restart: unless-stopped
     depends_on:
       api:

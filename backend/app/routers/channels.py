@@ -1,8 +1,8 @@
 """Channel archive-priority endpoints."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -40,6 +40,7 @@ from app.services.archive_metrics import (
     list_missing_videos_from_db,
     list_removed_saved_videos_from_db,
 )
+from app.services.audit_export import audit_export_response
 from app.services.channel_policy import get_channel_policy, update_channel_policy
 from app.services.channel_registration import (
     list_registered_channels,
@@ -220,6 +221,34 @@ async def get_removed_saved_videos(channel_id: int, db: DbSession) -> list[Remov
     if videos is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return videos
+
+
+@router.get("/{channel_id:int}/removed/export", response_class=Response)
+async def export_removed_saved_videos(
+    channel_id: int,
+    db: DbSession,
+    export_format: Literal["ndjson", "csv"] = Query(default="csv", alias="format"),
+) -> Response:
+    """Download a portable preservation manifest of the last-copy videos on disk."""
+    videos = await list_removed_saved_videos_from_db(db, channel_id, download_dir=settings.download_dir)
+    if videos is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    rows = [
+        {
+            "video_id": video.id,
+            "title": video.title,
+            "url": f"https://www.youtube.com/watch?v={video.id}",
+            "published_at": video.published_at.isoformat(),
+            "removed_detected_at": video.removed_detected_at.isoformat(),
+            "local_relative_path": video.local_relative_path,
+        }
+        for video in videos
+    ]
+    return audit_export_response(
+        rows=rows,
+        filename_prefix=f"preserved-videos-channel-{channel_id}",
+        export_format=export_format,
+    )
 
 
 @router.get("/{channel_id:int}/cadence", response_model=ChannelCadence)

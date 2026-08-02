@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Channel Vault NAS"
-    app_version: str = "0.2.0"
+    app_version: str = "0.3.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
 
@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     media_probe_timeout_seconds: int = 20
     channel_probe_timeout_seconds: int = 90
     channel_probe_video_limit: int = 500
+    preservation_confirm_hours: int = 24
     download_worker_enabled: bool = False
     download_worker_plan_limit: int = 3
     download_worker_timeout_seconds: int = 14400

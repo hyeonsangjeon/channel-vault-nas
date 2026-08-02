@@ -124,6 +124,7 @@ class ChannelVideoRead(BaseModel):
     thumbnail_url: str | None
     source_state: str
     archive_state: str
+    removed_detected_at: datetime | None = None
     info_json_path: str | None
     discovered_at: datetime
 

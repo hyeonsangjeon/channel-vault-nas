@@ -6027,6 +6027,12 @@ button {
   background: rgba(52, 211, 153, 0.065);
 }
 
+.timeline-row.preserved em {
+  border-color: rgba(56, 189, 248, 0.34);
+  color: #cbeafe;
+  background: rgba(56, 189, 248, 0.09);
+}
+
 .coverage-rings {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

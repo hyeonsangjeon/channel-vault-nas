@@ -88,7 +88,8 @@ async def test_dashboard_snapshot_endpoint() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["metrics"]) == 5
+    assert len(data["metrics"]) == 6
+    assert any(metric["label"] == "Preserved" and metric["value"] == "0" for metric in data["metrics"])
     assert data["coverage"]["percent"] == 0
     assert data["coverage"]["removed_saved"] == 0
     assert data["fidelity"]["info_json"] >= data["coverage"]["archived"]
