@@ -1,9 +1,9 @@
 # NAS install guide (Synology / QNAP)
 
 This guide covers deploying Channel Vault NAS on a NAS with Docker, plus
-bare-metal/VM host installs. It is a guarded **alpha→beta**: keep the raw API
-loopback-bound, set an operator token, and publish only the web tier through a
-trusted reverse proxy or VPN.
+bare-metal/VM host installs. It stays security-guarded by default: keep the raw
+API loopback-bound, set an operator token, and publish only the web tier through
+a trusted reverse proxy or VPN.
 
 Read first: [`README.md`](../README.md) Quickstart, the
 [Known Limitations](../README.md#known-limitations), and

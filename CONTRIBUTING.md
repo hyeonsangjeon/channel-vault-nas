@@ -1,6 +1,6 @@
 # Contributing
 
-Channel Vault NAS is an alpha NAS archive console. Contributions are welcome,
+Channel Vault NAS is a self-hosted NAS archive console. Contributions are welcome,
 but changes should keep the product focused on creator-owned media,
 user-authorized backups, Google Takeout, and existing local NAS folders.
 
@@ -62,3 +62,23 @@ fast non-browser release-gate pass while iterating locally.
 Do not paste private archive paths, source URLs, support bundles, logs, or
 screenshots into public issues before checking them. Redact paths and source
 identifiers when they are not needed for reproduction.
+
+## Benchmarks And Attribution
+
+Some repository-shaping patterns — the README front door, environment-split
+Compose, same-origin frontend build, path-aware and least-privilege GitHub
+Actions, and the release-evidence flow — were studied from a public MIT project
+and then re-implemented independently for this domain. No source code, prose,
+brand assets, or example data were copied.
+
+| Field | Value |
+| --- | --- |
+| Reference | [`fastapi/full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template) |
+| License | MIT |
+| Reviewed on | 2026-08-12 |
+| Verified commit | `c350936d2888ef16ff4f5549684fd8db54935a89` (default branch `master`) |
+| Studied surfaces | `README.md`, `compose*.yml`, `.github/workflows/*` |
+| Adaptation | Patterns only; independently re-implemented for NAS archive and recovery |
+
+Repository-level MIT does not clear third-party image or dependency rights, so
+introduced assets are self-made and dependencies are checked separately.

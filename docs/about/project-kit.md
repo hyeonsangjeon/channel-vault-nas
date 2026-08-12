@@ -87,7 +87,7 @@ may be used when linking to the project with attribution.
 
 ## Current limitations
 
-- This is a public alpha, not a mature media-server replacement.
+- This is a focused archive console, not a mature media-server replacement.
 - A supported cookies or authenticated/private-video workflow is not exposed.
 - Operators are responsible for source terms, copyright, storage capacity, and
   securing remote access.

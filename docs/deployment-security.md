@@ -1,6 +1,6 @@
 # Deployment Security Notes
 
-Channel Vault NAS is an alpha for localhost, private LAN, VPN, and trusted NAS
+Channel Vault NAS is built for localhost, private LAN, VPN, and trusted NAS
 reverse-proxy deployments. Do not expose the backend API port directly to the
 public internet.
 

@@ -1,18 +1,18 @@
 # Security Policy
 
-Channel Vault NAS is currently an alpha intended for trusted local networks and
-private NAS environments.
+Channel Vault NAS is intended for trusted local networks and private NAS
+environments.
 
 ## Supported Versions
 
 | Version | Supported |
 | --- | --- |
-| `main` / active alpha branches | Best-effort development support |
-| Tagged public alpha releases | Best-effort security fixes |
+| `main` and active development branches | Best-effort development support |
+| Tagged releases | Best-effort security fixes |
 
 ## Current Exposure Boundary
 
-Do not expose this alpha directly to the public internet.
+Do not expose this app directly to the public internet.
 
 The current app is designed for:
 
