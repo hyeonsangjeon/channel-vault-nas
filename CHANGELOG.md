@@ -4,6 +4,25 @@ All notable changes to Channel Vault NAS will be tracked here.
 
 The project is actively developed and out of alpha. Dates use Korea Standard Time.
 
+## Unreleased
+
+Repository-hardening and positioning polish (docs and workflow metadata only —
+no image rebuild required).
+
+### Changed
+
+- Hardened GitHub Actions to least privilege: top-level read-only `permissions`,
+  per-job `timeout-minutes`, and `persist-credentials: false` on checkouts across
+  the CI, release-images, and docs Pages workflows.
+- Aligned contributor and security docs with the shipped out-of-alpha
+  positioning while preserving every localhost/LAN exposure guardrail.
+
+### Added
+
+- Benchmarks and attribution ledger in `CONTRIBUTING.md` recording the MIT
+  reference studied for repository-shaping patterns (independently
+  re-implemented; no code, prose, or assets copied).
+
 ## 0.3.0 - 2026-08-15
 
 V3 makes Channel Vault the archiver that notices when the source is gone.
