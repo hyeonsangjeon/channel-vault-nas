@@ -12,8 +12,10 @@ Channel Vault NAS를 실행하는 가장 빠른 방법입니다. 여기서는 �
 
 ## 60초 만에 시작 (공개 이미지) { #start-in-60-seconds-published-images }
 
-가장 빠른 경로로 릴리스 Compose 파일을 사용합니다. 웹 포트만 공개하고 API는
-Compose 내부 네트워크에 둡니다:
+Channel Vault NAS는 **컨테이너 두 개**(`channel-vault-nas-api` 백엔드 +
+`channel-vault-nas-web` UI)로 동작합니다. 하나로 합친 이미지는 없으므로 릴리스
+Compose 파일을 사용하세요. **두 이미지를 모두** 내려받고, 웹 포트만 공개하며
+API는 Compose 내부 네트워크에 둡니다:
 
 ```bash
 mkdir channel-vault-nas && cd channel-vault-nas

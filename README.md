@@ -92,8 +92,10 @@ Full breakdown: [Is it for me?](docs/about/comparison.md)
 
 ## Quick Start
 
-Run the published multi-architecture images. No repository clone and no local
-build are required:
+Channel Vault NAS runs as **two containers** — `channel-vault-nas-api` (backend)
+and `channel-vault-nas-web` (UI). There is no single all-in-one image; the
+command below pulls and starts **both**. No repository clone and no local build
+are required:
 
 ```bash
 mkdir channel-vault-nas && cd channel-vault-nas
@@ -131,6 +133,9 @@ That means a future rescan can rebuild library state from media and sidecars
 instead of forcing a second download.
 
 ## Registry Links
+
+Both images are required — `…-api` and `…-web` run together, and the Quick Start
+Compose file pulls both.
 
 - Docker Hub API image:
   [`modenaf360/channel-vault-nas-api`](https://hub.docker.com/r/modenaf360/channel-vault-nas-api)

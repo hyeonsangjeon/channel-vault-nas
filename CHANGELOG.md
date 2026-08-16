@@ -22,6 +22,10 @@ no image rebuild required).
 - Benchmarks and attribution ledger in `CONTRIBUTING.md` recording the MIT
   reference studied for repository-shaping patterns (independently
   re-implemented; no code, prose, or assets copied).
+- Explicit "two containers, both required" messaging on the Docker Hub
+  description, both READMEs' Quick Start, and the Docker install guides, so
+  people pulling `channel-vault-nas-api` alone learn they also need
+  `channel-vault-nas-web` (Compose pulls both).
 
 ## 0.3.0 - 2026-08-15
 

@@ -11,8 +11,10 @@ Both store archive data in bind-mounted host folders (`./metadata`,
 
 ## Start in 60 seconds (published images)
 
-Use the release Compose file for the fastest path. It publishes only the web
-port and keeps the API inside the Compose network:
+Channel Vault NAS runs as **two containers** — `channel-vault-nas-api` (backend)
+and `channel-vault-nas-web` (UI). There is no all-in-one image, so use the
+release Compose file: it pulls **both** images, publishes only the web port, and
+keeps the API inside the Compose network:
 
 ```bash
 mkdir channel-vault-nas && cd channel-vault-nas
