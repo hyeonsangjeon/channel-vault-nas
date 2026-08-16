@@ -8,8 +8,8 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
 
     ---
 
-    공개 이미지를 받아 Compose 스택으로 실행하는 가장 빠른 경로이며, NAS
-    배포에도 이 방식을 씁니다.
+    공개 이미지 두 개(`api`와 `web`)를 받아 Compose로 함께 실행하는 가장 빠른
+    경로이며, NAS 배포에도 이 방식을 씁니다.
 
     [:octicons-arrow-right-24: Docker 설치](docker.md)
 
@@ -75,5 +75,7 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
 
 !!! question "`{\"detail\":\"Not Found\"}` 만 보이나요?"
     **웹** 콘솔 대신 원시 **API** 포트를 연 것입니다. 웹 포트(`CVN_WEB_PORT`,
-    기본 `5173`)를 여세요. API 포트는 `/api/health` 같은 경로만 제공합니다.
+    기본 `5173`)를 여세요. API 포트는 `/api/health` 같은 경로만 제공합니다. 웹
+    포트가 아예 없다면 `api` 컨테이너만 실행 중일 가능성이 큽니다. Channel Vault는
+    `api`와 `web` 이미지가 모두 필요합니다.
     자세한 설명은 [NAS 문제 해결](nas.md#troubleshooting-detailnot-found)에 있습니다.

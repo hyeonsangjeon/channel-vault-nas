@@ -8,8 +8,8 @@ There are three ways to run Channel Vault NAS. Pick one:
 
     ---
 
-    Pull the published images and run the Compose stack — the fastest path, and
-    the one used for NAS deployments.
+    Pull both published images (`api` and `web`) and run them with Compose, the
+    fastest path and the one used for NAS deployments.
 
     [:octicons-arrow-right-24: Docker install](docker.md)
 
@@ -56,7 +56,7 @@ There are three ways to run Channel Vault NAS. Pick one:
 | **Local development** | Editing backend/frontend code | [Local development](local-dev.md) |
 
 Both Docker paths store archive data in bind-mounted host folders, so your media
-and metadata live on disk — not inside a container layer.
+and metadata live on disk, not inside a container layer.
 
 !!! tip "NAS operators: separate your folders first"
     Before the first start, put SQLite metadata, downloaded media, and runtime
@@ -78,4 +78,6 @@ and metadata live on disk — not inside a container layer.
 !!! question "You only see `{\"detail\":\"Not Found\"}`?"
     You opened the raw **API** port instead of the **web** console. Open the web
     port (`CVN_WEB_PORT`, default `5173`). The API port only serves paths like
-    `/api/health`. Full explanation in [NAS troubleshooting](nas.md#troubleshooting-detailnot-found).
+    `/api/health`. If there is no web port at all, you are probably running only
+    the `api` container. Channel Vault needs both the `api` and `web` images.
+    Full explanation in [NAS troubleshooting](nas.md#troubleshooting-detailnot-found).

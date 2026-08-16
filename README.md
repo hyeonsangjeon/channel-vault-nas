@@ -134,8 +134,8 @@ instead of forcing a second download.
 
 ## Registry Links
 
-Both images are required — `…-api` and `…-web` run together, and the Quick Start
-Compose file pulls both.
+Both images are required. The `…-api` and `…-web` containers run together, and
+the Quick Start Compose file pulls both.
 
 - Docker Hub API image:
   [`modenaf360/channel-vault-nas-api`](https://hub.docker.com/r/modenaf360/channel-vault-nas-api)
@@ -234,9 +234,9 @@ me?](docs/about/comparison.md).
 
 ## More screens
 
-The Home and channel-status screenshots above—and the supporting screens
-below—are generated from the seeded browser smoke fixture, not from static
-mockups.
+The Home and channel-status screenshots above, together with the supporting
+screens below, are generated from the seeded browser smoke fixture, not from
+static mockups.
 
 | Register a channel | Bring an existing archive |
 | --- | --- |

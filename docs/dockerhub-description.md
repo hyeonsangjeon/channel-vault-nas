@@ -11,14 +11,14 @@ the channel, start a schedule, and check one clear backup status. Channel Vault
 NAS reuses existing media and `archive.txt`, downloads only missing videos, and
 keeps new uploads backed up with `yt-dlp`.
 
-> **⚠️ Two containers — you need BOTH.** Channel Vault NAS ships as **two images
-> that run together**: `channel-vault-nas-api` (backend) **and**
+> **⚠️ Two containers, and you need both.** Channel Vault NAS ships as two
+> images that run together: `channel-vault-nas-api` (backend) and
 > `channel-vault-nas-web` (the UI, which proxies `/api` and `/ws` to the API).
-> There is no single all-in-one image, so pulling only this one **will not start
-> the app**.
+> There is no single all-in-one image, so pulling only this one will not start
+> the app.
 
-Don't pull the images by hand — one command fetches **both** and wires them
-together (no clone, no build):
+Don't pull the images by hand. One command fetches both and wires them together
+(no clone, no build):
 
 ```bash
 mkdir channel-vault-nas && cd channel-vault-nas
