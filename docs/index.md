@@ -87,8 +87,9 @@ Channel Vault NAS answers the NAS operator question:
 > "What changed, what is already archived, what is safe to download next, and can
 > I recover the archive if the app database disappears?"
 
-The filesystem remains the durable archive. SQLite is the index over that archive
-— rescan an existing NAS folder and it gets indexed without moving a single file.
+The filesystem remains the durable archive. SQLite is the index over that
+archive. Rescan an existing NAS folder and it gets indexed without moving a
+single file.
 
 ### A deliberate fit, not the only downloader
 
@@ -109,7 +110,10 @@ matter most.
 
 ## Registry & links
 
+The API and web images run together, and the Compose install pulls both. There
+is no single all-in-one image.
+
 - Docker Hub API image: [`modenaf360/channel-vault-nas-api`](https://hub.docker.com/r/modenaf360/channel-vault-nas-api)
 - Docker Hub web image: [`modenaf360/channel-vault-nas-web`](https://hub.docker.com/r/modenaf360/channel-vault-nas-web)
-- GHCR mirror: [`ghcr.io/hyeonsangjeon/channel-vault-nas-api`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-api)
+- GHCR mirror: [`ghcr.io/hyeonsangjeon/channel-vault-nas-api`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-api) and [`…-web`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-web)
 - Source: [`github.com/hyeonsangjeon/channel-vault-nas`](https://github.com/hyeonsangjeon/channel-vault-nas)

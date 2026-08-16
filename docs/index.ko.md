@@ -106,7 +106,10 @@ Channel Vault가 잘 맞습니다.
 
 ## 레지스트리 & 링크
 
+API 이미지와 웹 이미지는 함께 동작하며, Compose 설치가 두 이미지를 모두 받습니다.
+하나로 합친 단일 이미지는 없습니다.
+
 - Docker Hub API 이미지: [`modenaf360/channel-vault-nas-api`](https://hub.docker.com/r/modenaf360/channel-vault-nas-api)
 - Docker Hub 웹 이미지: [`modenaf360/channel-vault-nas-web`](https://hub.docker.com/r/modenaf360/channel-vault-nas-web)
-- GHCR 미러: [`ghcr.io/hyeonsangjeon/channel-vault-nas-api`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-api)
+- GHCR 미러: [`ghcr.io/hyeonsangjeon/channel-vault-nas-api`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-api) 및 [`…-web`](https://github.com/hyeonsangjeon/channel-vault-nas/pkgs/container/channel-vault-nas-web)
 - 소스: [`github.com/hyeonsangjeon/channel-vault-nas`](https://github.com/hyeonsangjeon/channel-vault-nas)

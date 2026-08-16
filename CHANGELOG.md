@@ -16,6 +16,15 @@ no image rebuild required).
   the CI, release-images, and docs Pages workflows.
 - Aligned contributor and security docs with the shipped out-of-alpha
   positioning while preserving every localhost/LAN exposure guardrail.
+- Polished the README and github.io pages for easier reading: repaired
+  decorative em dashes in the "More screens" note and the Docker install cards,
+  softened the shouty two-container callout on the Docker Hub description, and
+  made the "both images" requirement explicit on the install landing pages.
+- Fixed the GHCR mirror list on both home pages, which showed only the `-api`
+  image; the `-web` mirror is now linked alongside it, with a note that the two
+  images always run together.
+- Connected the `{"detail":"Not Found"}` install tip to its real cause: running
+  only the `api` container instead of both `api` and `web`.
 
 ### Added
 
