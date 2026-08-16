@@ -11,17 +11,38 @@ the channel, start a schedule, and check one clear backup status. Channel Vault
 NAS reuses existing media and `archive.txt`, downloads only missing videos, and
 keeps new uploads backed up with `yt-dlp`.
 
+> **⚠️ Two containers — you need BOTH.** Channel Vault NAS ships as **two images
+> that run together**: `channel-vault-nas-api` (backend) **and**
+> `channel-vault-nas-web` (the UI, which proxies `/api` and `/ws` to the API).
+> There is no single all-in-one image, so pulling only this one **will not start
+> the app**.
+
+Don't pull the images by hand — one command fetches **both** and wires them
+together (no clone, no build):
+
+```bash
+mkdir channel-vault-nas && cd channel-vault-nas
+curl -fsSLO https://raw.githubusercontent.com/hyeonsangjeon/channel-vault-nas/main/compose.release.yml
+docker compose -f compose.release.yml up -d
+```
+
+Then open `http://127.0.0.1:5173/`.
+
 > Guarded self-hosted release: designed for localhost, private LAN, VPN, or trusted
 > reverse-proxy use. Do not expose the raw API directly to the public internet.
 
-## Images
+## The two images
 
-This app is published as two images that run together with Docker Compose:
+Both images are required, and both are multi-arch (`linux/amd64` +
+`linux/arm64`):
 
-- `modenaf360/channel-vault-nas-api:0.3.0`
-- `modenaf360/channel-vault-nas-web:0.3.0`
+| Image | Role | You still need |
+| --- | --- | --- |
+| `modenaf360/channel-vault-nas-api:0.3.0` | Backend API + scheduler + `yt-dlp` | `…-web` |
+| `modenaf360/channel-vault-nas-web:0.3.0` | Browser UI, proxies `/api` and `/ws` to the API | `…-api` |
 
-Both images are multi-arch: `linux/amd64` and `linux/arm64`.
+The `compose.release.yml` above pulls and connects both for you. GHCR mirrors
+(`ghcr.io/hyeonsangjeon/channel-vault-nas-api` / `-web`) are also available.
 
 ## Why use it
 

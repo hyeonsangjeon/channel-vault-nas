@@ -70,7 +70,10 @@ Channel Vault는 미디어 재생기가 아니라 **아카이브 운영 콘솔**
 
 ## 빠른 시작
 
-저장소를 clone하거나 이미지를 직접 빌드할 필요가 없습니다.
+Channel Vault NAS는 **컨테이너 두 개**로 동작합니다 — `channel-vault-nas-api`
+(백엔드)와 `channel-vault-nas-web`(UI). 하나로 합친 단일 이미지는 없으며, 아래
+명령이 **두 이미지를 모두** 내려받아 함께 실행합니다. 저장소를 clone하거나
+이미지를 직접 빌드할 필요가 없습니다.
 
 ```bash
 mkdir channel-vault-nas && cd channel-vault-nas
