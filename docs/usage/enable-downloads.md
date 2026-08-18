@@ -50,7 +50,7 @@ Worker passes are intentionally capped so an accidental click can't saturate you
 NAS or your network:
 
 - **Automatic backup** claims only your **Per run**
-  batch size each time it runs — never the whole channel at once.
+  batch size each time it runs, never the whole channel at once.
 - The advanced **Manual one-pass test** runs up to that same batch size **once**,
   behind a confirmation modal.
 - API `run-once` limits are capped.

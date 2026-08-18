@@ -65,8 +65,9 @@ These documents live in the repository and render on GitHub:
 ## Relationship to youtube-dl-nas
 
 Channel Vault NAS is a modern, guarded successor in spirit to the classic
-`youtube-dl-nas` workflow — the same "archive to my NAS" goal, rebuilt around a
-FastAPI + React console, a disk-aware library, and safe-by-default download guards.
+`youtube-dl-nas` workflow. It keeps the same "archive to my NAS" goal, rebuilt
+around a FastAPI + React console, a disk-aware library, and safe-by-default
+download guards.
 
 ## License & responsibility
 

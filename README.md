@@ -278,7 +278,7 @@ saved and remaining counts, and schedule together.
 The Channels tab gives each registered channel the same focused schedule and
 status view:
 
-1. Register a channel — paste a URL / `@handle` / `UC…` ID, select **Check
+1. Register a channel. Paste a URL / `@handle` / `UC…` ID, select **Check
    channel**, review it, then **Register channel**.
 2. Choose the interval and per-run count, then select **Start automatic
    backup**.

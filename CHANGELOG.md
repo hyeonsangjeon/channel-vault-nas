@@ -25,6 +25,11 @@ no image rebuild required).
   images always run together.
 - Connected the `{"detail":"Not Found"}` install tip to its real cause: running
   only the `api` container instead of both `api` and `web`.
+- Second readability pass over the README and the install/usage flow (github.io)
+  that a cloner follows to test: replaced decorative em dashes with plain
+  sentences in the README Product Tour steps and the Local development, Docker,
+  archive.txt, Enable downloads, About, and comparison pages, so each step reads
+  as a direct instruction. Wording, links, commands, and meaning are unchanged.
 
 ### Added
 

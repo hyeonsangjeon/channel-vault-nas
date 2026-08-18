@@ -1,7 +1,7 @@
 # Local development
 
-Run the FastAPI backend and the Vite dev server directly — best for editing the
-code.
+Run the FastAPI backend and the Vite dev server directly. This is the best path
+for editing the code.
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ curl http://127.0.0.1:8000/api/health
 
 !!! tip "Turn on real downloads"
     The dev servers start with the worker **off**. To perform real transfers, set
-    the worker flags and restart the backend — see
+    the worker flags and restart the backend. See
     [Enable real downloads](../usage/enable-downloads.md).
 
 ## Next steps

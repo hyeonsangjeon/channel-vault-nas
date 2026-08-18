@@ -17,17 +17,17 @@ youtube-dl --download-archive archive.txt "https://www.youtube.com/playlist?list
 In Channel Vault NAS, that same `archive.txt` becomes a guided reconciliation:
 
 1. **Paste or drop** `archive.txt` into the import panel on the **Channels** tab.
-2. **Preview** the parsed rows — already archived, known missing, unknown,
+2. **Preview** the parsed rows. Already archived, known missing, unknown,
    duplicate, and invalid entries are separated for you.
 3. **Stage only** the videos that still need records or candidates.
 4. **Sync metadata** for placeholder rows so titles, dates, and sizes fill in.
-5. **Queue/download** only the fresh candidates — nothing already in the ledger is
+5. **Queue/download** only the fresh candidates. Nothing already in the ledger is
    re-fetched.
 
 !!! tip "Reconcile an existing NAS folder too"
     You can also rescan an existing archive folder and index it without moving any
     files. See the [Filesystem contract](../reference/filesystem.md) for the
-    expected layout — the database indexes the filesystem, not the other way
+    expected layout. The database indexes the filesystem, not the other way
     around.
 
 !!! note "Safe by default"
