@@ -120,7 +120,7 @@ docker network rm channel-vault-nas
 
 For anything more than a local trial, edit `.env` **before** starting:
 
-- Set `CVN_AUTH_TOKEN` to a long random value — see [Access token](access-token.md).
+- Set `CVN_AUTH_TOKEN` to a long random value. See [Access token](access-token.md).
 - Behind a reverse proxy, publish only the web port and bind the API to loopback:
 
     ```env
