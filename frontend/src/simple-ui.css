@@ -2008,6 +2008,84 @@ input {
   background: #fdf5e6;
 }
 
+/* Download queue: job rows, progress, actions, and expanded detail */
+.queue-console-row {
+  border-color: var(--border);
+  background: #ffffff;
+}
+
+.queue-console-row.selected {
+  border-color: #9fd6b4;
+  background: #eef9f1;
+}
+
+.queue-console-main code {
+  color: #0d58cf;
+}
+
+.queue-console-lock {
+  color: #8a5406;
+}
+
+.queue-console-progress {
+  background: #eef4f8;
+}
+
+.queue-console-row-actions button {
+  border-color: var(--border);
+  color: var(--muted);
+  background: #ffffff;
+}
+
+.queue-console-row-actions button.active {
+  border-color: #bcdcff;
+  color: #0d58cf;
+  background: #eaf2ff;
+}
+
+.queue-console-detail {
+  border-top-color: var(--border);
+}
+
+.queue-console-detail-card {
+  border-color: var(--border);
+  background: #f8fafc;
+}
+
+.queue-console-command {
+  color: #0d58cf;
+  background: #eaf2ff;
+}
+
+.queue-console-error {
+  color: #a3231d;
+  background: #fdecec;
+}
+
+/* Download queue: search, status filters, and live telemetry */
+.queue-console-select {
+  background: #f3f6fa;
+}
+
+.queue-search {
+  background: #f3f6fa;
+}
+
+.queue-console-filters button {
+  border-color: var(--border);
+  background: #ffffff;
+}
+
+.queue-console-filters button.active {
+  border-color: #bcdcff;
+  color: #0d58cf;
+  background: #eaf2ff;
+}
+
+.queue-console-live > div:last-child {
+  background: #eef4f8;
+}
+
 /* Insights: storage trend card */
 .storage-pressure-trend {
   border-color: #cfe9ef;
