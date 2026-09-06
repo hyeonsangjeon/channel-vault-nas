@@ -1969,3 +1969,178 @@ input {
     animation: none;
   }
 }
+
+/*
+ * Operational screens (Download queue, Insights/Storage) kept dark-theme card
+ * styling from styles.css that was never re-themed for this light layer, which
+ * left status banners, the storage trend card, and the triage console with
+ * dark backgrounds and low-contrast text. These overrides finish the light
+ * theme so every operational surface stays legible.
+ */
+
+/* Download queue: status and blocked banners */
+.queue-console-state,
+.queue-console-empty-state {
+  border-color: var(--border);
+  background: #f8fafc;
+}
+
+.queue-console-state.blocked {
+  border-color: #f0d69c;
+  background: #fff8ec;
+}
+
+.queue-console-state-icon,
+.queue-console-empty-icon {
+  border-color: #c9dcfa;
+  color: #0d58cf;
+  background: #eaf2ff;
+}
+
+.queue-console-state.blocked .queue-console-state-icon {
+  border-color: #f0d69c;
+  color: #8a5406;
+  background: #fdf1da;
+}
+
+.worker-lock {
+  color: #8a5406;
+  background: #fdf5e6;
+}
+
+/* Insights: storage trend card */
+.storage-pressure-trend {
+  border-color: #cfe9ef;
+  background: linear-gradient(135deg, #ecfbfe, #f8fafc 62%);
+}
+
+.storage-pressure-head span,
+.storage-pressure-foot span {
+  color: #0f5b6b;
+}
+
+.storage-pressure-head small {
+  color: var(--faint);
+}
+
+.storage-pressure-head button {
+  border-color: #bfe3ec;
+  color: #0f5b6b;
+  background: #e6f8fc;
+}
+
+.storage-pressure-kpis article {
+  border-color: var(--border);
+  background: #ffffff;
+}
+
+.storage-pressure-kpis span {
+  color: var(--faint);
+}
+
+.storage-pressure-kpis strong {
+  color: var(--text);
+}
+
+.storage-pressure-bars {
+  background: #eef4f8;
+}
+
+.storage-pressure-foot em {
+  border-color: #f0d69c;
+  color: #8a5406;
+  background: #fdf5e6;
+}
+
+/* Insights: triage console */
+.storage-triage-console {
+  border-color: var(--border);
+  background: linear-gradient(135deg, #f1f7ff, #f4fbf6 70%);
+}
+
+.storage-triage-head strong {
+  border-color: #c9dcfa;
+  color: #0d58cf;
+  background: #eaf2ff;
+}
+
+.storage-triage-grid article {
+  border-color: var(--border);
+  background: #ffffff;
+}
+
+.storage-triage-grid span,
+.storage-triage-grid small {
+  color: var(--faint);
+}
+
+.storage-triage-grid strong {
+  color: var(--text);
+}
+
+.storage-triage-grid small {
+  color: var(--muted);
+}
+
+.storage-triage-actions button {
+  border-color: var(--border);
+  color: var(--text);
+  background: #ffffff;
+}
+
+.storage-triage-actions button:hover {
+  border-color: #9fd6b4;
+  background: #eef9f1;
+}
+
+.storage-orphan-kind-filter button {
+  border-color: var(--border);
+  color: var(--muted);
+  background: #ffffff;
+}
+
+.storage-orphan-kind-filter button.active {
+  border-color: #f0d69c;
+  color: #8a5406;
+  background: #fdf5e6;
+}
+
+/* Insights: drift response list */
+.channel-storage-drift article {
+  border-color: #f0d69c;
+  background: #fdf9ef;
+}
+
+/*
+ * Narrow screens: the backup status banner used a multi-column grid that let
+ * its action button collide with the heading and clip the message on phones.
+ * Switch to a wrapping flex row so the icon and message stay together and the
+ * trailing controls drop to their own full-width line beneath.
+ */
+@media (max-width: 760px) {
+  .channel-backup-status,
+  .channel-backup-status.is-running,
+  .channel-backup-status.is-attention {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+  }
+
+  .channel-backup-status > svg {
+    flex: 0 0 auto;
+  }
+
+  .channel-backup-status > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .channel-backup-status > span,
+  .channel-backup-status > button,
+  .channel-backup-status .channel-backup-attention-action {
+    flex: 1 0 100%;
+    justify-content: center;
+    font-size: 0.82rem;
+  }
+}
