@@ -36,6 +36,7 @@ from app.services.storage_orphans import (
     restore_quarantined_sidecar,
 )
 from app.services.storage_pressure import (
+    _runway_label,
     build_storage_channel_pressure_trend,
     build_storage_pressure_trend,
     capture_storage_pressure_snapshot,
@@ -47,6 +48,16 @@ def test_sqlite_path_from_url_resolves_relative_path(tmp_path: Path) -> None:
     resolved = sqlite_path_from_url("sqlite+aiosqlite:///./metadata/app.db", cwd=tmp_path)
 
     assert resolved == tmp_path / "metadata" / "app.db"
+
+
+def test_runway_label_tiers_and_ceiling() -> None:
+    assert _runway_label(None) == "stable"
+    assert _runway_label(12.0) == "12.0 days"
+    assert _runway_label(90.0) == "3.0 months"
+    assert _runway_label(730.0) == "2.0 years"
+    # Near-zero growth pushes the raw runway to astronomical values; the label
+    # must clamp instead of rendering figures like "5475685.0 years".
+    assert _runway_label(2_000_000_000.0) == "10+ years"
 
 
 def test_backup_sqlite_database_creates_timestamped_copy(tmp_path: Path) -> None:
