@@ -296,6 +296,8 @@ def _runway_days(*, latest: StoragePressureSnapshotRead | None, daily_growth_byt
 def _runway_label(runway_days: float | None) -> str:
     if runway_days is None:
         return "stable"
+    if runway_days >= 3650:
+        return "10+ years"
     if runway_days >= 365:
         return f"{round(runway_days / 365, 1)} years"
     if runway_days >= 30:
