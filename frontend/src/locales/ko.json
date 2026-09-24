@@ -596,7 +596,7 @@
   "backup.missing.label": "미보관",
   "backup.missing.detail": "sync 후 다운로드 대상",
   "backup.removedSaved.label": "보존됨",
-  "backup.removedSaved.detail": "NAS에 남은 마지막 사본",
+  "backup.removedSaved.detail": "원본 목록에는 없고 NAS에 보관됨",
   "backup.latest.label": "마지막 업로드",
   "backup.latest.detail": "sync로 감지",
   "backup.next.label": "다음 예상",

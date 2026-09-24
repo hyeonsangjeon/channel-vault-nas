@@ -34,12 +34,39 @@ docker compose -f compose.release.yml up -d
     `compose.release.yml` 옆에 `.env`를 만들고 두 이미지 오버라이드를 지정하세요:
 
     ```bash
-    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.3.0
-    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.3.0
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.3.1
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.3.1
     ```
 
     `CVN_API_IMAGE`와 `CVN_WEB_IMAGE`는 **항상 함께** 설정하세요. GHCR 미러와
     기본 Docker Hub 이미지 모두 로그인 없이 받을 수 있습니다.
+
+## 기존 설치 업그레이드
+
+먼저 메타데이터, 아카이브 사이드카, 런타임 설정을 백업하세요
+([백업 절차](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/backup-restore.md)). 기존 `.env`, 액세스 토큰, 호스트 경로,
+Compose 프로젝트 이름은 유지합니다. `.env`에서 **두 이미지**를 함께 바꾸세요:
+
+```bash
+CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.1
+CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.1
+```
+
+GHCR을 사용한다면 위에 안내한 GHCR 이미지 이름 두 개를 쓰세요. 기존 설치
+디렉터리에서 이미지를 받고 두 컨테이너를 갱신합니다:
+
+```bash
+docker compose -f compose.release.yml pull api web
+docker compose -f compose.release.yml up -d api web
+docker compose -f compose.release.yml ps
+curl -fsS http://127.0.0.1:5173/api/health
+```
+
+헬스 체크에는 실제 웹 포트를 사용하세요. 버전은 `0.3.1`이어야 합니다.
+호스트 폴더를 지우거나 `down -v`를 실행하지 마세요. 이미지가 게시되어도 실행
+중인 설치는 자동 갱신되지 않습니다. 메타데이터 DB 하나에는 **API 프로세스·복제본
+하나만** 실행하세요. 재시작으로 중단된 다운로드는 실패로 표시됩니다. 명시적으로
+재시도하면 남아 있는 부분 파일에서 이어받기를 시도합니다.
 
 ## 소스에서 빌드 { #build-from-source }
 
@@ -82,8 +109,8 @@ Compose 스택은 다음을 실행합니다:
 별칭이 필요합니다.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.0
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.0
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.1
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.1
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

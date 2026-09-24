@@ -36,6 +36,7 @@ from app.services.download_worker import (
     get_download_worker_run_summary,
     list_download_worker_runs,
     run_download_worker_once,
+    start_download_worker_run,
     stop_running_download_job,
 )
 from app.services.metadata_scheduler import (
@@ -263,6 +264,12 @@ async def run_metadata_sync_scheduler_once() -> MetadataSyncTickRead:
 async def run_download_worker(payload: DownloadWorkerRunRequest, db: DbSession) -> DownloadWorkerRunResult:
     """Run one bounded worker pass; default request is a safe dry-run."""
     return await run_download_worker_once(db=db, payload=payload)
+
+
+@router.post("/downloads/worker/start", response_model=DownloadWorkerRunRead, status_code=202)
+async def start_download_worker(payload: DownloadWorkerRunRequest, db: DbSession) -> DownloadWorkerRunRead:
+    """Accept a worker pass without holding a reverse-proxy request open."""
+    return await start_download_worker_run(db=db, payload=payload)
 
 
 @router.post("/downloads/{job_id:int}/stop", response_model=DownloadJobActionResult)

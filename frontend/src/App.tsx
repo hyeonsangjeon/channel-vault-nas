@@ -173,10 +173,12 @@ import {
   type StorageScan,
   type SyncJob,
 } from "./api/channels";
+import { connectArchiveEvents } from "./api/event-stream";
 import { ChannelBackupOverview } from "./components/channel/ChannelBackupOverview";
 import { ChannelRegistrationPanel } from "./components/channel/ChannelRegistrationPanel";
 import { SimpleHome } from "./components/dashboard/SimpleHome";
 import { MetricTile } from "./components/MetricTile";
+import { SchedulerCountdown } from "./components/SchedulerCountdown";
 import {
   backupStats,
   fidelityChecks,
@@ -688,7 +690,6 @@ function App() {
   const [runtimeApplyStatus, setRuntimeApplyStatus] = useState<"idle" | "applying" | "saved" | "error">("idle");
   const [runtimeApplyMessage, setRuntimeApplyMessage] = useState("");
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft>(() => defaultRuntimeDraft());
-  const [runtimeClockNow, setRuntimeClockNow] = useState(() => Date.now());
   const [activeChannelTab, setActiveChannelTab] = useState<ChannelDetailTab>(
     initialRoute?.channelTab ?? (initialRoute?.nav === "library" ? "library" : "overview"),
   );
@@ -1583,11 +1584,9 @@ function App() {
   const metadataSchedulerDetailLabel = metadataSchedulerStatus
     ? metadataSchedulerStateDetail(metadataSchedulerStatus, t)
     : t("runtime.checking");
-  const schedulerNextTickLabel = schedulerStatus ? schedulerNextTick(schedulerStatus, t, runtimeClockNow) : t("runtime.checking");
+  const schedulerNextTickLabel = <SchedulerCountdown status={schedulerStatus} />;
   const schedulerLastTickLabel = schedulerStatus ? schedulerLastTick(schedulerStatus, t, language) : t("runtime.checking");
-  const metadataSchedulerNextTickLabel = metadataSchedulerStatus
-    ? metadataSchedulerNextTick(metadataSchedulerStatus, t, runtimeClockNow)
-    : t("runtime.checking");
+  const metadataSchedulerNextTickLabel = <SchedulerCountdown status={metadataSchedulerStatus} />;
   const metadataSchedulerLastTickLabel = metadataSchedulerStatus
     ? metadataSchedulerLastTick(metadataSchedulerStatus, t, language)
     : t("runtime.checking");
@@ -1815,12 +1814,6 @@ function App() {
   };
 
   useEffect(() => {
-    if (!runtimeGuideOpen && !schedulerStatus?.next_tick_at && !metadataSchedulerStatus?.next_tick_at) return;
-    const timer = window.setInterval(() => setRuntimeClockNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [metadataSchedulerStatus?.next_tick_at, runtimeGuideOpen, schedulerStatus?.next_tick_at]);
-
-  useEffect(() => {
     activeNavIdRef.current = activeNavId;
   }, [activeNavId]);
 
@@ -1937,14 +1930,8 @@ function App() {
     }
     loadDashboard();
 
-    const socket = new WebSocket(wsEventsUrl());
-    setEventStreamStatus("connecting");
-    socket.onopen = () => {
-      setEventStreamStatus("live");
-    };
-    socket.onmessage = (message) => {
+    function handleEvent(event: ArchiveEvent) {
       try {
-        const event = JSON.parse(message.data) as ArchiveEvent;
         setEventStreamStatus("live");
         setEvents((current) => [event, ...current.filter((item) => item.occurred_at !== event.occurred_at)].slice(0, 100));
         if (event.type.startsWith("runtime.restart")) {
@@ -1996,17 +1983,23 @@ function App() {
       } catch {
         // Ignore malformed development events.
       }
-    };
-    socket.onerror = () => {
-      setEventStreamStatus("error");
-    };
-    socket.onclose = (event) => {
-      if (!cancelled && event.code === 1008) {
+    }
+    const disconnect = connectArchiveEvents({
+      url: wsEventsUrl,
+      onEvent: handleEvent,
+      onStatus: setEventStreamStatus,
+      onAuthRequired: () => {
         setAuthRequired(true);
         setAuthMessageKey("auth.gate.required");
-      }
-      if (!cancelled) setEventStreamStatus("closed");
-    };
+      },
+      onReconnect: () => {
+        void loadDashboard();
+        void refreshQueueConsoleState().catch(() => undefined);
+        if (registeredChannelIdRef.current) {
+          void loadChannelState(registeredChannelIdRef.current).catch(() => undefined);
+        }
+      },
+    });
 
     return () => {
       cancelled = true;
@@ -2014,7 +2007,7 @@ function App() {
       if (queueRefreshTimer !== null) window.clearTimeout(queueRefreshTimer);
       if (channelRefreshTimer !== null) window.clearTimeout(channelRefreshTimer);
       if (insightsRefreshTimer !== null) window.clearTimeout(insightsRefreshTimer);
-      socket.close();
+      disconnect();
     };
   }, []);
 
@@ -13293,32 +13286,6 @@ function isRuntimeDraftValid(draft: RuntimeDraft) {
 function parseRuntimeBool(value: string | undefined, fallback: boolean) {
   if (value === undefined) return fallback;
   return value.toLowerCase() === "true";
-}
-
-function schedulerNextTick(status: RuntimeSettings["scheduler_status"], t: (key: TranslationKey) => string, nowMs: number) {
-  if (status.running) return t("runtime.scheduler.runningNow");
-  if (!status.next_tick_at) return t("runtime.scheduler.none");
-  const seconds = Math.max(0, Math.ceil((new Date(status.next_tick_at).getTime() - nowMs) / 1000));
-  if (seconds <= 0) return t("runtime.scheduler.due");
-  if (seconds < 60) return t("runtime.scheduler.inSeconds").replace("{seconds}", String(seconds));
-  return t("runtime.scheduler.inMinutes")
-    .replace("{minutes}", String(Math.floor(seconds / 60)))
-    .replace("{seconds}", String(seconds % 60));
-}
-
-function metadataSchedulerNextTick(
-  status: RuntimeSettings["metadata_scheduler_status"],
-  t: (key: TranslationKey) => string,
-  nowMs: number,
-) {
-  if (status.running) return t("runtime.scheduler.runningNow");
-  if (!status.next_tick_at) return t("runtime.scheduler.none");
-  const seconds = Math.max(0, Math.ceil((new Date(status.next_tick_at).getTime() - nowMs) / 1000));
-  if (seconds <= 0) return t("runtime.scheduler.due");
-  if (seconds < 60) return t("runtime.scheduler.inSeconds").replace("{seconds}", String(seconds));
-  return t("runtime.scheduler.inMinutes")
-    .replace("{minutes}", String(Math.floor(seconds / 60)))
-    .replace("{seconds}", String(seconds % 60));
 }
 
 function demoSeedMessage(result: DemoWorkspaceResult, t: (key: TranslationKey) => string) {

@@ -1,5 +1,7 @@
 """Tests for DB backup and sidecar recovery contracts."""
 
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -64,7 +66,10 @@ def test_backup_sqlite_database_creates_timestamped_copy(tmp_path: Path) -> None
     metadata_dir = tmp_path / "metadata"
     metadata_dir.mkdir()
     database_path = metadata_dir / "app.db"
-    database_path.write_text("sqlite bytes", encoding="utf-8")
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute("CREATE TABLE proof (value TEXT)")
+        database.execute("INSERT INTO proof VALUES ('saved')")
+        database.commit()
 
     backup_path = backup_sqlite_database(
         f"sqlite+aiosqlite:///{database_path}",
@@ -73,7 +78,25 @@ def test_backup_sqlite_database_creates_timestamped_copy(tmp_path: Path) -> None
     )
 
     assert backup_path == metadata_dir / "db-backups" / "app.backup-20260530-113000.db"
-    assert backup_path.read_text(encoding="utf-8") == "sqlite bytes"
+    with closing(sqlite3.connect(backup_path)) as backup:
+        assert backup.execute("SELECT value FROM proof").fetchone() == ("saved",)
+        assert backup.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+
+def test_backup_sqlite_database_includes_committed_wal_rows(tmp_path: Path) -> None:
+    database_path = tmp_path / "app.db"
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute("PRAGMA journal_mode=WAL")
+        database.execute("PRAGMA wal_autocheckpoint=0")
+        database.execute("CREATE TABLE proof (value TEXT)")
+        database.execute("INSERT INTO proof VALUES ('still in WAL')")
+        database.commit()
+        assert Path(f"{database_path}-wal").stat().st_size > 0
+        backup_path = backup_sqlite_database(f"sqlite+aiosqlite:///{database_path}", tmp_path)
+        with closing(sqlite3.connect(backup_path)) as backup:
+            assert backup.execute("SELECT value FROM proof").fetchone() == ("still in WAL",)
+            assert backup.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    assert not list((tmp_path / "db-backups").glob(".snapshot-*"))
 
 
 def test_archive_rescan_plan_discovers_video_info_sidecars(tmp_path: Path) -> None:

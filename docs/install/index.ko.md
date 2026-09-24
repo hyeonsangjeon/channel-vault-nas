@@ -42,7 +42,7 @@ Channel Vault NAS를 실행하는 방법은 세 가지입니다. 하나를 고�
 === "로컬 개발"
 
     - Python 3.11+
-    - Node.js 20+ (CI는 Node.js 24로 검증)
+    - Node.js 20.x는 20.19 이상, 또는 22.12 이상 (CI는 Node.js 24로 검증)
     - `yt-dlp`
     - `ffmpeg` / `ffprobe`
 

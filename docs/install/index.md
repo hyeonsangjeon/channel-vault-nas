@@ -43,7 +43,7 @@ There are three ways to run Channel Vault NAS. Pick one:
 === "Local development"
 
     - Python 3.11+
-    - Node.js 20+ (CI verifies with Node.js 24)
+    - Node.js 20.x from 20.19, or 22.12+ (CI verifies with Node.js 24)
     - `yt-dlp`
     - `ffmpeg` / `ffprobe`
 

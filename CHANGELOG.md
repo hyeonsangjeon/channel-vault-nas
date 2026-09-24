@@ -6,11 +6,50 @@ The project is actively developed and out of alpha. Dates use Korea Standard Tim
 
 ## Unreleased
 
-Repository-hardening and positioning polish (docs and workflow metadata only —
-no image rebuild required).
+No unreleased changes.
+
+## 0.3.1 - 2026-09-24
+
+Reliability fixes for long downloads, reconnecting consoles, SQLite recovery,
+and image releases. Upgrade **both API and web images** together and retain your
+metadata, archive, runtime folders, and access token. No schema change is needed.
+
+### Fixed
+
+- Claim queued jobs atomically so overlapping scheduler and manual passes cannot
+  start the same transfer twice.
+- Stop the downloader process group on cancellation, retain retryable partial
+  files, and recover interrupted jobs and run audits after an API restart.
+- Accept manual transfers with HTTP 202 and poll persisted run summaries instead
+  of holding a download request open through the reverse proxy.
+- Isolate slow or disconnected WebSocket clients from download progress; reconnect
+  the console with backoff and refresh its state after a connection returns.
+- Keep empty event-filter results empty, preserve filters during database fallback,
+  and search beyond the newest 1,000 unrelated events. Export supports up to 2,000
+  matching events and reports unavailable storage instead of an empty success.
+- Take transactional SQLite startup backups, including committed WAL data, verify
+  the snapshot before publishing it, and use the application's resolved DB path.
+- Complete the light theme for queue and storage controls, fix the mobile backup
+  banner overlap, cap long capacity estimates at `10+ years`, and refresh the
+  operational screenshots (PRs #19–#21).
+- Update transitive PostCSS and Nano ID dependencies to patched versions.
 
 ### Changed
 
+- Report Preservation Watch as channel-list absence plus local preservation, not
+  proof of deletion or the world's last copy. Document the default 500-upload
+  probe and 24-hour threshold measured from the last recorded sighting, not from
+  the first absent sync; earlier release descriptions overstated these guarantees.
+- Keep one API process/replica per metadata database. Startup recovery relies on
+  that deployment model; interrupted downloads require an explicit retry.
+- Move scheduler countdown timers out of the app root to avoid whole-console
+  renders every second. Declare the supported Node.js minimum for Vite.
+- Refresh README screenshots and the core English/Korean manual screens from
+  the current UI using an isolated, paused demo workspace.
+- Gate image publishing on backend, frontend, browser, docs, and container checks;
+  verify version agreement, both architectures, source revision, authentication,
+  WebSocket upgrades, and asynchronous worker acceptance on each published pair
+  from Docker Hub and GHCR.
 - Hardened GitHub Actions to least privilege: top-level read-only `permissions`,
   per-job `timeout-minutes`, and `persist-credentials: false` on checkouts across
   the CI, release-images, and docs Pages workflows.
@@ -33,6 +72,11 @@ no image rebuild required).
 
 ### Added
 
+- Isolated temporary test databases and archive/runtime folders; regression tests
+  for competing workers, cancellation, background acceptance, startup recovery,
+  event delivery/filtering, WAL backups, and browser reconnection.
+- Python 3.11/3.12 CI coverage, strict documentation checks, and a no-transfer
+  asynchronous worker smoke check through the production Nginx proxy.
 - Benchmarks and attribution ledger in `CONTRIBUTING.md` recording the MIT
   reference studied for repository-shaping patterns (independently
   re-implemented; no code, prose, or assets copied).

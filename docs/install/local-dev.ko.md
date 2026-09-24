@@ -6,7 +6,7 @@ FastAPI 백엔드와 Vite 개발 서버를 직접 실행합니다 — 코드를 
 ## 사전 준비
 
 - Python 3.11+
-- Node.js 20+ (CI는 Node.js 24로 검증)
+- Node.js 20.x는 20.19 이상, 또는 22.12 이상 (CI는 Node.js 24로 검증)
 - `yt-dlp`
 - `ffmpeg` / `ffprobe`
 
@@ -24,7 +24,7 @@ CVN_DB_MIGRATE_ON_STARTUP=true uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ```bash
 cd frontend
-npm install
+npm ci --include=dev
 VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 

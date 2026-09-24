@@ -596,7 +596,7 @@
   "backup.missing.label": "Missing",
   "backup.missing.detail": "download target after sync",
   "backup.removedSaved.label": "Preserved",
-  "backup.removedSaved.detail": "last copy kept on your NAS",
+  "backup.removedSaved.detail": "absent from source, archived locally",
   "backup.latest.label": "Last upload",
   "backup.latest.detail": "detected by sync",
   "backup.next.label": "Next expected",

@@ -596,7 +596,7 @@
   "backup.missing.label": "मिसिंग",
   "backup.missing.detail": "sync के बाद download target",
   "backup.removedSaved.label": "सुरक्षित",
-  "backup.removedSaved.detail": "आपके NAS पर रखी आख़िरी प्रति",
+  "backup.removedSaved.detail": "स्रोत सूची में नहीं, NAS पर सुरक्षित",
   "backup.latest.label": "अंतिम अपलोड",
   "backup.latest.detail": "sync ने पकड़ा",
   "backup.next.label": "अगला अनुमान",

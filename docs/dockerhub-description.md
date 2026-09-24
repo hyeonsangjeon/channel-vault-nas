@@ -38,8 +38,8 @@ Both images are required, and both are multi-arch (`linux/amd64` +
 
 | Image | Role | You still need |
 | --- | --- | --- |
-| `modenaf360/channel-vault-nas-api:0.3.0` | Backend API + scheduler + `yt-dlp` | `…-web` |
-| `modenaf360/channel-vault-nas-web:0.3.0` | Browser UI, proxies `/api` and `/ws` to the API | `…-api` |
+| `modenaf360/channel-vault-nas-api:0.3.1` | Backend API + scheduler + `yt-dlp` | `…-web` |
+| `modenaf360/channel-vault-nas-web:0.3.1` | Browser UI, proxies `/api` and `/ws` to the API | `…-api` |
 
 The `compose.release.yml` above pulls and connects both for you. GHCR mirrors
 (`ghcr.io/hyeonsangjeon/channel-vault-nas-api` / `-web`) are also available.
@@ -104,5 +104,5 @@ archive, or have already exported from your own account.
 - GitHub: <https://github.com/hyeonsangjeon/channel-vault-nas>
 - Manual: <https://hyeonsangjeon.github.io/channel-vault-nas/>
 - Compatibility reports: <https://github.com/hyeonsangjeon/channel-vault-nas/discussions/7>
-- Release: <https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.3.0>
+- Release: <https://github.com/hyeonsangjeon/channel-vault-nas/releases/tag/v0.3.1>
 - Security notes: <https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/SECURITY.md>

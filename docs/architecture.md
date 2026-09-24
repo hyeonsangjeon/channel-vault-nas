@@ -401,6 +401,8 @@ GET    /api/jobs/downloads
 GET    /api/jobs/downloads/preflight
 GET    /api/jobs/downloads/worker/plan
 GET    /api/jobs/downloads/worker/runs?channel_id=&status=&dry_run=&failed_only=&limit=
+GET    /api/jobs/downloads/worker/summary?run_id=
+POST   /api/jobs/downloads/worker/start
 POST   /api/jobs/downloads/worker/run-once
 POST   /api/jobs/downloads/bulk
 POST   /api/jobs/downloads/{job_id}/retry
@@ -425,6 +427,20 @@ PATCH  /api/settings
 
 WS     /ws/events
 ```
+
+Manual transfers use `POST /api/jobs/downloads/worker/start` with a bounded
+`limit`, optional `channel_id`, and explicit `dry_run: false`. The server persists
+an audit record and returns **202** with its `id` before starting the transfer in
+a background task. Poll `GET /api/jobs/downloads/worker/summary?run_id=<id>` until
+`run.completed_at` is non-null, then inspect the terminal status and job counts.
+Closing the browser does not cancel the accepted run. The synchronous `run-once`
+endpoint remains compatible; the UI uses it only for dry runs.
+
+The supported runtime has one API process/replica per database. Queued jobs are
+claimed with conditional database updates, so overlapping manual and scheduled
+passes cannot both own a job. Shutdown terminates downloader process groups;
+startup marks stale running jobs and audits failed. See
+[process and recovery limits](reference/runtime-flags.md#process-and-recovery-model).
 
 `Quick Download` can later be exposed separately:
 

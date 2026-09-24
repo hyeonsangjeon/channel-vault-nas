@@ -24,8 +24,16 @@ The same path checks and copyable command templates are available in the app at
 | Runtime overrides | `CVN_RUNTIME_HOST_DIR` → `.env.runtime` (`CVN_RUNTIME_ENV_FILE`) | non-secret runtime flags |
 | Operator token / `.env` | wherever you store `CVN_AUTH_TOKEN` | secret — keep in a password manager / secrets store, **not** beside the public archive |
 
-The metadata folder already retains the last `CVN_DB_BACKUP_KEEP` (default `5`)
-startup backups, created before each migrate-on-startup.
+With `CVN_DB_BACKUP_ON_STARTUP=true` (the default), the metadata folder retains
+the last `CVN_DB_BACKUP_KEEP` (default `5`) startup backups, created before any
+startup migration. The backup uses SQLite's transactional backup API, includes
+committed data still in the WAL, and reads the same resolved database path as the
+application. A temporary snapshot must pass `PRAGMA quick_check` before it replaces
+the timestamped backup; older backups are pruned only after success.
+
+These startup snapshots are not an off-NAS backup or an archive-media backup.
+Run only one API process/replica against a metadata database, including during
+backup and restore.
 
 ## Back up
 

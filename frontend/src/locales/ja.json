@@ -596,7 +596,7 @@
   "backup.missing.label": "未保存",
   "backup.missing.detail": "sync 後の取得対象",
   "backup.removedSaved.label": "保存済み",
-  "backup.removedSaved.detail": "NAS に残る最後のコピー",
+  "backup.removedSaved.detail": "元の一覧にはなく、NAS に保存済み",
   "backup.latest.label": "最終アップロード",
   "backup.latest.detail": "sync で検出",
   "backup.next.label": "次回予測",

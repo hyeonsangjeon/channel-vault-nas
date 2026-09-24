@@ -596,7 +596,7 @@
   "backup.missing.label": "未保存",
   "backup.missing.detail": "同步后的下载目标",
   "backup.removedSaved.label": "已留存",
-  "backup.removedSaved.detail": "NAS 上仅存的副本",
+  "backup.removedSaved.detail": "源列表中已无，本地已存档",
   "backup.latest.label": "最后上传",
   "backup.latest.detail": "由 sync 检测",
   "backup.next.label": "预计下次",

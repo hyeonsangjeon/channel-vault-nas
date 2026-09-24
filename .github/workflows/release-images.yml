@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag to publish (for example 0.3.0)"
+        description: "Version matching the checked-out app (for example 0.3.1)"
         required: true
-        default: "0.3.0"
+        default: "0.3.1"
 
 permissions:
   contents: read
@@ -20,10 +20,52 @@ env:
   DOCKERHUB_NAMESPACE: modenaf360
 
 jobs:
+  checks:
+    name: Release checks
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  version:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check backend and frontend version agreement
+        id: version
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["REQUESTED_TAG"].removeprefix("v")
+          if not re.fullmatch(r"\d+\.\d+\.\d+", tag):
+              raise SystemExit("A stable semantic version is required")
+          backend = tomllib.loads(Path("backend/pyproject.toml").read_text())["project"]["version"]
+          frontend = json.loads(Path("frontend/package.json").read_text())["version"]
+          runtime = re.search(r'app_version: str = "([^"]+)"', Path("backend/app/config.py").read_text()).group(1)
+          if {backend, frontend, runtime} != {tag}:
+              raise SystemExit(f"Version mismatch: tag={tag}, backend={backend}, frontend={frontend}, runtime={runtime}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"tag={tag}\n")
+          print(f"Verified release version {tag}")
+          PY
+
   images:
     name: Build and push ${{ matrix.image }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    needs: [checks, version]
     strategy:
       fail-fast: false
       matrix:
@@ -70,9 +112,10 @@ jobs:
             docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ needs.version.outputs.tag }}
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
@@ -83,3 +126,82 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: false
+
+      - name: Record immutable image digest
+        env:
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "$IMAGE $DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+  verify-published:
+    name: Verify published pair on ${{ matrix.registry }}
+    needs: [version, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        registry: [dockerhub, ghcr]
+    env:
+      RELEASE_VERSION: ${{ needs.version.outputs.tag }}
+      REGISTRY_KIND: ${{ matrix.registry }}
+      COMPOSE_PROJECT_NAME: cvn-release-${{ matrix.registry }}-${{ github.run_id }}
+      COMPOSE_FILE: compose.release.yml
+      CVN_WEB_PORT: "15173"
+      CVN_AUTH_TOKEN: cvn-isolated-release-verification-token
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Resolve published images
+        run: |
+          echo "CVN_METADATA_HOST_DIR=$RUNNER_TEMP/cvn/metadata" >> "$GITHUB_ENV"
+          echo "CVN_DOWNLOAD_HOST_DIR=$RUNNER_TEMP/cvn/archive" >> "$GITHUB_ENV"
+          echo "CVN_RUNTIME_HOST_DIR=$RUNNER_TEMP/cvn/runtime" >> "$GITHUB_ENV"
+          registry="docker.io/${DOCKERHUB_NAMESPACE}"
+          if [ "$REGISTRY_KIND" = ghcr ]; then
+            registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          fi
+          echo "CVN_API_IMAGE=$registry/channel-vault-nas-api:$RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "CVN_WEB_IMAGE=$registry/channel-vault-nas-web:$RELEASE_VERSION" >> "$GITHUB_ENV"
+      - name: Verify architectures and source revision
+        run: |
+          mkdir -p "$CVN_METADATA_HOST_DIR" "$CVN_DOWNLOAD_HOST_DIR" "$CVN_RUNTIME_HOST_DIR"
+          docker compose pull
+          for image in "$CVN_API_IMAGE" "$CVN_WEB_IMAGE"; do
+            docker buildx imagetools inspect --raw "$image" | jq -e '
+              [.manifests[].platform | select(.os == "linux") | .architecture] |
+              (index("amd64") != null and index("arm64") != null)'
+            revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
+            test "$revision" = "$GITHUB_SHA"
+            docker image inspect --format '{{json .RepoDigests}}' "$image" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Start published pair
+        run: docker compose up -d --wait --wait-timeout 120
+      - name: Verify deployed version and guarded endpoints
+        env:
+          CVN_DEPLOYMENT_SMOKE_WEB_URL: http://127.0.0.1:15173
+          CVN_DEPLOYMENT_SMOKE_REQUIRE_TOKEN: "true"
+        run: |
+          curl -fsS http://127.0.0.1:15173/api/health | jq -e --arg version "$RELEASE_VERSION" '.version == $version'
+          scripts/deployment-smoke.sh
+          python3 scripts/async-worker-smoke.py http://127.0.0.1:15173
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color --tail=100
+      - name: Stop isolated published stack
+        if: always()
+        run: docker compose down --remove-orphans

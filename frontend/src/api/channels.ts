@@ -1234,7 +1234,27 @@ export async function getDownloadWorkerPlan(channelId?: number, limit = 3): Prom
 }
 
 export async function runDownloadWorkerOnce(payload: DownloadWorkerRunRequest): Promise<DownloadWorkerRunResult> {
-  return postJson("/api/jobs/downloads/worker/run-once", payload);
+  if (payload.dry_run !== false) return postJson("/api/jobs/downloads/worker/run-once", payload);
+  const accepted = await postJson<DownloadWorkerRunAudit>("/api/jobs/downloads/worker/start", payload);
+  while (true) {
+    const summary = await getDownloadWorkerRunSummary(undefined, accepted.id);
+    const run = summary.run;
+    if (!run) throw new Error(`Download worker run ${accepted.id} was not found.`);
+    if (run.completed_at !== null) {
+      const plan = await getDownloadWorkerPlan(payload.channel_id ?? undefined, payload.limit);
+      return {
+        enabled: plan.enabled,
+        dry_run: run.dry_run,
+        started: run.started_count,
+        completed: run.completed_count,
+        failed: run.status === "failed" ? Math.max(1, run.failed_count) : run.failed_count,
+        skipped_reason: run.skipped_reason,
+        plan,
+        jobs: summary.latest_worker_jobs,
+      };
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 1_000));
+  }
 }
 
 export type DownloadWorkerRunFilters = {

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-import shutil
+import sqlite3
+import tempfile
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
@@ -39,7 +41,16 @@ def backup_sqlite_database(
 
     timestamp = (now or datetime.now(UTC)).strftime("%Y%m%d-%H%M%S")
     backup_path = backup_dir / f"{database_path.stem}.backup-{timestamp}{database_path.suffix}"
-    shutil.copy2(database_path, backup_path)
+    with tempfile.NamedTemporaryFile(dir=backup_dir, prefix=".snapshot-", suffix=".db", delete=False) as temporary:
+        temporary_path = Path(temporary.name)
+    try:
+        with closing(sqlite3.connect(database_path)) as source, closing(sqlite3.connect(temporary_path)) as destination:
+            source.backup(destination)
+            if destination.execute("PRAGMA quick_check").fetchone() != ("ok",):
+                raise sqlite3.DatabaseError("SQLite backup failed its integrity check")
+        temporary_path.replace(backup_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
     _prune_old_backups(backup_dir=backup_dir, database_path=database_path, keep=keep)
     return backup_path
 

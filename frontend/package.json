@@ -1,8 +1,11 @@
 {
   "name": "channel-vault-nas-frontend",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",

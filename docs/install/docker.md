@@ -33,12 +33,39 @@ Then open **`http://127.0.0.1:5173/`** and jump to
     Create a `.env` beside `compose.release.yml` and set both image overrides:
 
     ```bash
-    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.3.0
-    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.3.0
+    CVN_API_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-api:0.3.1
+    CVN_WEB_IMAGE=ghcr.io/hyeonsangjeon/channel-vault-nas-web:0.3.1
     ```
 
     Always set `CVN_API_IMAGE` **and** `CVN_WEB_IMAGE` together. Both the GHCR
     mirror and the default Docker Hub images support anonymous pulls.
+
+## Upgrade an existing installation
+
+Back up metadata, archive sidecars, and runtime overrides first (see the
+[backup runbook](https://github.com/hyeonsangjeon/channel-vault-nas/blob/main/docs/backup-restore.md)). Keep your existing `.env`, access token,
+host paths, and Compose project name. In `.env`, update **both** image overrides:
+
+```bash
+CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.1
+CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.1
+```
+
+For GHCR, use the two GHCR image names above instead. From the same installation
+directory, pull and recreate the pair:
+
+```bash
+docker compose -f compose.release.yml pull api web
+docker compose -f compose.release.yml up -d api web
+docker compose -f compose.release.yml ps
+curl -fsS http://127.0.0.1:5173/api/health
+```
+
+Use your configured web port for the health check; it should report `0.3.1`.
+Do not delete host folders or run `down -v`. Publishing a new image does not
+upgrade an already-running installation. Run only **one API process/replica** per
+metadata database. Interrupted downloads are marked failed on restart; retry
+them explicitly to attempt to resume their partial files.
 
 ## Build from source
 
@@ -81,8 +108,8 @@ one Docker network. The `api` network alias is required because the web image
 proxies `/api` and `/ws` to `http://api:8000`.
 
 ```bash
-export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.0
-export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.0
+export CVN_API_IMAGE=modenaf360/channel-vault-nas-api:0.3.1
+export CVN_WEB_IMAGE=modenaf360/channel-vault-nas-web:0.3.1
 
 mkdir -p metadata downfolder runtime
 docker network create channel-vault-nas 2>/dev/null || true

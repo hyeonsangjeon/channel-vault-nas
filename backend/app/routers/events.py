@@ -2,13 +2,14 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.schemas.events import ArchiveEvent, ArchiveEventPruneResult
 from app.security import websocket_token_valid
 from app.services.audit_export import audit_export_response
 from app.services.event_bus import event_bus
-from app.services.event_log import list_archive_events, prune_archive_events
+from app.services.event_log import filter_archive_events, list_archive_events, prune_archive_events
 
 router = APIRouter(tags=["events"])
 
@@ -24,15 +25,11 @@ async def get_recent_events(
 ) -> list[ArchiveEvent]:
     """Return recent persisted archive events, falling back to in-process history."""
     await event_bus.flush_persistence()
-    events = await list_archive_events(
-        limit=limit,
-        event_id=event_id,
-        type_prefix=type_prefix,
-        channel_id=channel_id,
-        job_id=job_id,
-        video_id=video_id,
-    )
-    return events or event_bus.history(limit)
+    filters = dict(limit=limit, event_id=event_id, type_prefix=type_prefix, channel_id=channel_id, job_id=job_id, video_id=video_id)
+    try:
+        return await list_archive_events(**filters)
+    except SQLAlchemyError:
+        return filter_archive_events(event_bus.history(500), **filters)
 
 
 @router.get("/api/events/recent/export", response_class=Response)
@@ -47,14 +44,17 @@ async def export_recent_events(
 ) -> Response:
     """Download persisted realtime event audits as NDJSON or CSV."""
     await event_bus.flush_persistence()
-    events = await list_archive_events(
-        limit=limit,
-        event_id=event_id,
-        type_prefix=type_prefix,
-        channel_id=channel_id,
-        job_id=job_id,
-        video_id=video_id,
-    )
+    try:
+        events = await list_archive_events(
+            limit=limit,
+            event_id=event_id,
+            type_prefix=type_prefix,
+            channel_id=channel_id,
+            job_id=job_id,
+            video_id=video_id,
+        )
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Archive event storage is temporarily unavailable.") from exc
     return audit_export_response(
         rows=[event.model_dump(mode="json") for event in events],
         filename_prefix="archive-event-log",

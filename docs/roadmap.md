@@ -14,8 +14,8 @@ The app should answer:
 - What is already archived?
 - What is safe to download next?
 - What can be recovered from the filesystem if the database disappears?
-- Which archived videos have vanished from the source, leaving my NAS as the
-  last copy?
+- Which archived videos are absent from the channel listing, and what local
+  preservation records do I have for them?
 
 ## Public Release Gate
 
@@ -34,6 +34,24 @@ The public release is ready when these are true:
 - The support bundle is server-generated and redacted.
 - Public issue templates, contributing guide, security policy, and demo
   runbook are present.
+
+## 0.3.1 — Reliability and release verification
+
+- [x] Atomic job claiming, cancellable downloader process groups, and interrupted
+  job/run recovery under the single-API-process deployment model.
+- [x] Asynchronous manual-run acceptance and persisted status polling.
+- [x] Slow-client isolation and browser WebSocket reconnection with state refresh.
+- [x] Filter-correct event history/export and transactional, verified SQLite backups.
+- [x] Temporary test storage, Python 3.11/3.12 coverage, strict docs checks, and
+  production-proxy container smoke tests in the release gate.
+- [x] Published API/web pair verification on Docker Hub and GHCR, including source
+  revision, image architecture manifests, authentication, and worker acceptance.
+- [x] Correct preservation wording: listing absence is not proof of deletion or
+  uniqueness. The 24-hour threshold is since the last sighting, not first absence.
+
+The 0.3.0 notes below retain the original release framing; their stronger
+"last copy" and confirmation-window claims are superseded by the
+[current detection limits](reference/runtime-flags.md#preservation-watch-limits).
 
 ## 0.3.0 — Preservation Watch
 

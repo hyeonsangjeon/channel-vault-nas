@@ -18,14 +18,16 @@ CVN_FFPROBE_BINARY=ffprobe
 ```
 
 The channel button and **Settings** tab hot-apply these worker/scheduler values;
-no container restart is required. Restart only when you edit `.env` manually.
+no container restart is required. Recreate the API container when you edit
+Compose `.env` values manually.
 
 === "Docker / Compose"
 
-    Add the values to `.env` (or `.env.runtime`) and restart the `api` service:
+    Add the values to `.env` and recreate the `api` service so Compose applies
+    the changed environment (host-mounted archive data is retained):
 
     ```bash
-    docker compose -f compose.release.yml restart api
+    docker compose -f compose.release.yml up -d --force-recreate api
     ```
 
 === "Local development"
@@ -53,7 +55,7 @@ NAS or your network:
   batch size each time it runs, never the whole channel at once.
 - The advanced **Manual one-pass test** runs up to that same batch size **once**,
   behind a confirmation modal.
-- API `run-once` limits are capped.
+- Both asynchronous `worker/start` and legacy `run-once` limits are capped.
 - Per-channel policy can **pause** worker claims.
 - New uploads may still be discovered and added to the waiting list while a
   channel is paused; they are not downloaded until you resume it.
@@ -62,6 +64,14 @@ NAS or your network:
   ![Automatic download schedule](../assets/user-manual/en/04-backup-schedule.png){ loading=lazy }
   <figcaption>Choose the interval and per-run limit, then select Start automatic backup. Each scheduled pass claims only the configured batch size.</figcaption>
 </figure>
+
+## Interrupted downloads
+
+Run one API process/replica per metadata database. On shutdown the worker stops
+its downloader process group. On restart, stale running jobs and run audits are
+marked failed instead of staying stuck. Open Queue, review the failure, and retry
+explicitly; partial files are retained and `yt-dlp` attempts to resume them.
+Closing the browser alone does not cancel a manual pass accepted by the API.
 
 !!! warning "Verify before you expose"
     Enabling downloads does not expose your NAS. Keep the raw API loopback-bound,

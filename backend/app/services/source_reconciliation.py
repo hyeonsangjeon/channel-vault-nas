@@ -2,9 +2,8 @@
 
 Channel Vault treats the filesystem as the source of truth, so when a video
 disappears from a channel's listing we keep the local media and record the
-source as removed. That turns "this video is gone from YouTube" into a
-first-class, reviewable *preservation* signal ("you hold the last copy")
-instead of silent index drift.
+source as removed. This is a reviewable listing-absence signal, not proof of
+deletion, an access restriction, or the absence of copies elsewhere.
 
 The detection is deliberately conservative so an outage or a truncated probe
 never mass-flags healthy videos:
@@ -15,9 +14,10 @@ never mass-flags healthy videos:
   recency window (newer than the oldest returned upload) are judged. Older
   uploads beyond the window are left untouched because their absence is
   expected, not evidence of removal.
-* A newly-absent upload is only confirmed removed once it has been unseen for
-  at least ``preservation_confirm_hours`` (default 24h), which survives
-  transient single-sync gaps. Until then it is merely *suspected*.
+* An absent upload is marked removed when its last recorded sighting is at
+  least ``preservation_confirm_hours`` old (default 24h). This can happen on
+  the first absent sync and does not establish continuous absence. Until
+  the threshold is met it is merely *suspected*.
 * An upload that reappears in a later listing is resurrected back to available.
 """
 

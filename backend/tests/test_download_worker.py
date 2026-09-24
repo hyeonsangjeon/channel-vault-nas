@@ -5,10 +5,12 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select
 
 from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
+from app.main import app
 from app.models.archive import (
     Channel,
     ChannelPolicy,
@@ -653,3 +655,198 @@ async def _clear_db() -> None:
         await session.execute(delete(Video))
         await session.execute(delete(Channel))
         await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_workers_claim_a_job_only_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+    monkeypatch.setattr(settings, "download_worker_enabled", True)
+    async with AsyncSessionLocal() as session:
+        _, _, job = await _create_queued_worker_job(session)
+    barrier = asyncio.Barrier(2)
+    original_claim = download_worker_service._claim_download_job
+    executed: list[int] = []
+
+    async def synchronized_claim(**kwargs):
+        await asyncio.wait_for(barrier.wait(), timeout=5)
+        return await original_claim(**kwargs)
+
+    async def complete_job(*, db, job, video, channel):
+        executed.append(job.id)
+        await db.refresh(job)
+        job.status = "completed"
+        job.progress = 100
+        await db.commit()
+        return True
+
+    async def run_pass():
+        async with AsyncSessionLocal() as db:
+            return await run_download_worker_once(db=db, payload=DownloadWorkerRunRequest(dry_run=False))
+
+    monkeypatch.setattr(download_worker_service, "_claim_download_job", synchronized_claim)
+    monkeypatch.setattr(download_worker_service, "_run_one_job", complete_job)
+    results = await asyncio.gather(run_pass(), run_pass())
+    assert executed == [job.id]
+    assert sum(result.started for result in results) == 1
+    async with AsyncSessionLocal() as db:
+        saved = await db.get(DownloadJob, job.id)
+        assert saved.attempt_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cancelled_worker_cleans_process_and_persists_retryable_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+    fake_ytdlp = tmp_path / "slow-ytdlp.py"
+    fake_ytdlp.write_text(
+        '#!/usr/bin/env python3\nimport time\nprint("[download]  10.0% of 10.00MiB at 1.00MiB/s ETA 00:09", flush=True)\ntime.sleep(30)\n',
+        encoding="utf-8",
+    )
+    fake_ytdlp.chmod(0o755)
+    monkeypatch.setattr(settings, "download_worker_enabled", True)
+    monkeypatch.setattr(settings, "ytdlp_binary", str(fake_ytdlp))
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path / "archive"))
+    progress = asyncio.Event()
+
+    async def capture_progress(event_type, data):
+        if event_type == "download.progress":
+            progress.set()
+
+    monkeypatch.setattr(download_worker_service.event_bus, "publish", capture_progress)
+    async with AsyncSessionLocal() as db:
+        _, _, job = await _create_queued_worker_job(db)
+        task = asyncio.create_task(run_download_worker_once(db=db, payload=DownloadWorkerRunRequest(dry_run=False)))
+        try:
+            await asyncio.wait_for(progress.wait(), timeout=5)
+            process = download_worker_service._RUNNING_PROCESSES[job.id]
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert process.returncode is not None
+            assert job.id not in download_worker_service._RUNNING_PROCESSES
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+    async with AsyncSessionLocal() as db:
+        saved = await db.get(DownloadJob, job.id)
+        audit = await db.scalar(select(DownloadWorkerRun))
+        assert saved.status == "failed"
+        assert "interrupted" in saved.error_message
+        assert audit.status == "failed"
+        assert audit.failed_job_ids == [job.id]
+
+
+@pytest.mark.asyncio
+async def test_start_worker_returns_before_transfer_completes(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+    monkeypatch.setattr(settings, "download_worker_enabled", True)
+    async with AsyncSessionLocal() as db:
+        await _create_queued_worker_job(db)
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def slow_job(*, db, job, video, channel):
+        started.set()
+        await finish.wait()
+        await db.refresh(job)
+        job.status = "completed"
+        job.progress = 100
+        await db.commit()
+        return True
+
+    monkeypatch.setattr(download_worker_service, "_run_one_job", slow_job)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await asyncio.wait_for(
+                client.post("/api/jobs/downloads/worker/start", json={"dry_run": False, "limit": 1}), timeout=3
+            )
+            assert response.status_code == 202
+            run_id = response.json()["id"]
+            task = download_worker_service._BACKGROUND_RUNS[run_id]
+            await asyncio.wait_for(started.wait(), timeout=5)
+            active = await client.get(f"/api/jobs/downloads/worker/summary?run_id={run_id}")
+            assert active.json()["run"]["status"] == "running"
+            assert active.json()["run"]["started_count"] == 1
+            finish.set()
+            await asyncio.wait_for(task, timeout=5)
+            completed = await client.get(f"/api/jobs/downloads/worker/summary?run_id={run_id}")
+            assert completed.json()["run"]["status"] == "completed"
+            assert completed.json()["run"]["completed_count"] == 1
+    finally:
+        finish.set()
+        await download_worker_service.stop_background_download_runs()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["planning", "indexing"])
+async def test_background_failure_leaves_a_terminal_audit(
+    failure_stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+    monkeypatch.setattr(settings, "download_worker_enabled", True)
+    monkeypatch.setattr(settings, "download_dir", str(tmp_path / "archive"))
+    fake_ytdlp = tmp_path / "fake-ytdlp.py"
+    fake_ytdlp.write_text("#!/usr/bin/env python3\nprint('download finished')\n", encoding="utf-8")
+    fake_ytdlp.chmod(0o755)
+    monkeypatch.setattr(settings, "ytdlp_binary", str(fake_ytdlp))
+
+    async def fail(*arguments, **keywords):
+        raise RuntimeError(f"simulated {failure_stage} failure")
+
+    target = "build_download_worker_plan" if failure_stage == "planning" else "apply_rescan_target"
+    monkeypatch.setattr(download_worker_service, target, fail)
+    async with AsyncSessionLocal() as db:
+        _, _, job = await _create_queued_worker_job(db)
+        job_id = job.id
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            accepted = await client.post("/api/jobs/downloads/worker/start", json={"dry_run": False, "limit": 1})
+            assert accepted.status_code == 202
+            await asyncio.wait_for(
+                asyncio.gather(*tuple(download_worker_service._BACKGROUND_RUNS.values())), timeout=5
+            )
+            response = await client.get(f"/api/jobs/downloads/worker/summary?run_id={accepted.json()['id']}")
+            audit = response.json()["run"]
+            assert audit["status"] == "failed"
+            assert audit["completed_at"] is not None
+            assert audit["failed_count"] == 1
+            assert failure_stage in audit["skipped_reason"]
+        async with AsyncSessionLocal() as db:
+            saved = await db.get(DownloadJob, job_id)
+            assert saved.status == ("queued" if failure_stage == "planning" else "failed")
+            assert audit["failed_job_ids"] == ([] if failure_stage == "planning" else [job_id])
+    finally:
+        await download_worker_service.stop_background_download_runs()
+
+
+@pytest.mark.asyncio
+async def test_startup_recovers_interrupted_worker_state() -> None:
+    run_migrations()
+    await init_db()
+    await _clear_db()
+    async with AsyncSessionLocal() as db:
+        _, _, job = await _create_queued_worker_job(db)
+        job.status = "running"
+        job.progress = 45
+        audit = download_worker_service._new_worker_run(DownloadWorkerRunRequest(dry_run=False))
+        db.add(audit)
+        await db.commit()
+        recovered = await download_worker_service.recover_interrupted_downloads(db=db)
+        await db.refresh(job)
+        await db.refresh(audit)
+        assert recovered == 1
+        assert job.status == "failed"
+        assert job.progress == 45
+        assert "restart" in job.error_message
+        assert audit.status == "failed"
+        assert await download_worker_service.recover_interrupted_downloads(db=db) == 0

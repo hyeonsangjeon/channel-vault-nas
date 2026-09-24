@@ -6,6 +6,7 @@ import {
   RefreshCcw,
   Save,
 } from "lucide-react";
+import type { ReactNode } from "react";
 
 import type { TranslationKey } from "../../i18n";
 
@@ -24,7 +25,7 @@ type ChannelBackupOverviewProps = {
   lastRun: string;
   limit: number;
   manualDisabled: boolean;
-  nextRun: string;
+  nextRun: ReactNode;
   onCheckNow: () => void;
   onIntervalChange: (minutes: number) => void;
   onLimitChange: (limit: number) => void;

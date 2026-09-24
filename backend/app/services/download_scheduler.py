@@ -144,6 +144,11 @@ async def run_download_worker_scheduler_tick() -> DownloadWorkerRunResult | None
                 ),
             )
             await session.commit()
+    except asyncio.CancelledError:
+        interrupted = RuntimeError("Download scheduler interrupted during shutdown")
+        scheduler_state.mark_failed(interrupted)
+        await _mark_scheduler_tick_failed(tick_id=tick_id, exc=interrupted)
+        raise
     except Exception as exc:
         scheduler_state.mark_failed(exc)
         await _mark_scheduler_tick_failed(tick_id=tick_id, exc=exc)

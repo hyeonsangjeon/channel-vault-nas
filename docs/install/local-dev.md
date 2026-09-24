@@ -6,7 +6,7 @@ for editing the code.
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 20+ (CI verifies with Node.js 24)
+- Node.js 20.19+ within the 20.x line, or 22.12+ (CI verifies with Node.js 24)
 - `yt-dlp`
 - `ffmpeg` / `ffprobe`
 
@@ -24,7 +24,7 @@ CVN_DB_MIGRATE_ON_STARTUP=true uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ```bash
 cd frontend
-npm install
+npm ci --include=dev
 VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 

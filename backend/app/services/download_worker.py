@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 import shlex
+import signal
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import AsyncSessionLocal
 from app.models.archive import (
     Channel,
     ChannelPolicy,
     DownloadJob,
+    DownloadSchedulerTick,
     DownloadWorkerRun,
     MediaFile,
     Video,
@@ -39,6 +44,94 @@ from app.services.ytdlp_progress import parse_ytdlp_progress_line
 
 OUTPUT_TEMPLATE = "video.%(ext)s"
 _RUNNING_PROCESSES: dict[int, asyncio.subprocess.Process] = {}
+_BACKGROUND_RUNS: dict[int, asyncio.Task[None]] = {}
+logger = logging.getLogger(__name__)
+
+
+def _new_worker_run(payload: DownloadWorkerRunRequest) -> DownloadWorkerRun:
+    now = datetime.now(UTC)
+    return DownloadWorkerRun(
+        channel_id=payload.channel_id,
+        status="running",
+        dry_run=payload.dry_run,
+        started_count=0,
+        completed_count=0,
+        failed_count=0,
+        planned_job_ids=[],
+        started_job_ids=[],
+        completed_job_ids=[],
+        failed_job_ids=[],
+        skipped_reason=None,
+        started_at=now,
+        created_at=now,
+    )
+
+
+async def start_download_worker_run(
+    *, db: AsyncSession, payload: DownloadWorkerRunRequest
+) -> DownloadWorkerRunRead:
+    audit = _new_worker_run(payload)
+    db.add(audit)
+    await _commit_worker_state(db)
+    channel = await db.get(Channel, payload.channel_id) if payload.channel_id is not None else None
+    result = _to_worker_run_read(audit, channel)
+    task = asyncio.create_task(_run_background_worker(audit.id, payload), name=f"download-run-{audit.id}")
+    _BACKGROUND_RUNS[audit.id] = task
+    task.add_done_callback(lambda finished, run_id=audit.id: _BACKGROUND_RUNS.pop(run_id, None))
+    return result
+
+
+async def _run_background_worker(run_id: int, payload: DownloadWorkerRunRequest) -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await run_download_worker_once(db=db, payload=payload, run_id=run_id)
+        except (asyncio.CancelledError, Exception) as exc:
+            interrupted = isinstance(exc, asyncio.CancelledError)
+            if not interrupted:
+                logger.exception("Background download run %s failed", run_id)
+            try:
+                await db.rollback()
+                audit = await db.get(DownloadWorkerRun, run_id)
+                if audit is not None and audit.status == "running":
+                    audit.status = "failed"
+                    audit.completed_at = datetime.now(UTC)
+                    audit.skipped_reason = "Worker interrupted during shutdown" if interrupted else str(exc)
+                    audit.failed_count = max(1, audit.failed_count)
+                    await _commit_worker_state(db)
+            except Exception:
+                logger.exception("Could not finalize background download run %s", run_id)
+            if interrupted:
+                raise
+
+
+async def stop_background_download_runs() -> None:
+    tasks = tuple(_BACKGROUND_RUNS.values())
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def recover_interrupted_downloads(*, db: AsyncSession) -> int:
+    now = datetime.now(UTC)
+    reason = "Download interrupted by an API restart. Retry the job to resume its partial files."
+    result = await db.execute(
+        update(DownloadJob)
+        .where(DownloadJob.status == "running")
+        .values(status="failed", error_message=reason, completed_at=now, updated_at=now)
+    )
+    await db.execute(
+        update(DownloadWorkerRun)
+        .where(DownloadWorkerRun.status == "running")
+        .values(status="failed", skipped_reason=reason, completed_at=now)
+    )
+    await db.execute(
+        update(DownloadSchedulerTick)
+        .where(DownloadSchedulerTick.status == "running")
+        .values(status="failed", error_message=reason, completed_at=now)
+    )
+    await _commit_worker_state(db)
+    return result.rowcount
 
 
 async def build_download_worker_plan(
@@ -94,30 +187,22 @@ async def run_download_worker_once(
     *,
     db: AsyncSession,
     payload: DownloadWorkerRunRequest,
+    run_id: int | None = None,
 ) -> DownloadWorkerRunResult:
     """Run one bounded worker pass, defaulting to a non-mutating dry-run."""
     plan = await build_download_worker_plan(db=db, channel_id=payload.channel_id, limit=payload.limit)
-    planned_job_ids = [item.job.id for item in plan.jobs]
+    audit = await db.get(DownloadWorkerRun, run_id) if run_id is not None else _new_worker_run(payload)
+    if audit is None:
+        raise DownloadJobNotFoundError(f"Download worker run {run_id} was not found.")
+    audit.planned_job_ids = [item.job.id for item in plan.jobs]
+    db.add(audit)
     if payload.dry_run or not settings.download_worker_enabled:
         skipped_reason = plan.locked_reason if not settings.download_worker_enabled else "dry-run requested"
-        audit = DownloadWorkerRun(
-            channel_id=payload.channel_id,
-            status="locked" if not settings.download_worker_enabled else "dry_run",
-            dry_run=True,
-            started_count=0,
-            completed_count=0,
-            failed_count=0,
-            planned_job_ids=planned_job_ids,
-            started_job_ids=[],
-            completed_job_ids=[],
-            failed_job_ids=[],
-            skipped_reason=skipped_reason,
-            started_at=datetime.now(UTC),
-            completed_at=datetime.now(UTC),
-            created_at=datetime.now(UTC),
-        )
-        db.add(audit)
-        await db.flush()
+        audit.status = "locked" if not settings.download_worker_enabled else "dry_run"
+        audit.dry_run = True
+        audit.skipped_reason = skipped_reason
+        audit.completed_at = datetime.now(UTC)
+        await _commit_worker_state(db)
         return DownloadWorkerRunResult(
             enabled=settings.download_worker_enabled,
             dry_run=True,
@@ -129,23 +214,7 @@ async def run_download_worker_once(
             jobs=[item.job for item in plan.jobs],
         )
 
-    audit = DownloadWorkerRun(
-        channel_id=payload.channel_id,
-        status="running",
-        dry_run=False,
-        started_count=0,
-        completed_count=0,
-        failed_count=0,
-        planned_job_ids=planned_job_ids,
-        started_job_ids=[],
-        completed_job_ids=[],
-        failed_job_ids=[],
-        skipped_reason=None,
-        started_at=datetime.now(UTC),
-        completed_at=None,
-        created_at=datetime.now(UTC),
-    )
-    db.add(audit)
+    audit.dry_run = False
     await _commit_worker_state(db)
 
     started = 0
@@ -155,31 +224,46 @@ async def run_download_worker_once(
     completed_job_ids: list[int] = []
     failed_job_ids: list[int] = []
     results = []
-    for item in plan.jobs:
-        row = await db.execute(
-            _queued_download_query(channel_id=payload.channel_id).where(DownloadJob.id == item.job.id)
+    try:
+        for item in plan.jobs:
+            if not await _claim_download_job(db=db, job_id=item.job.id, channel_id=payload.channel_id):
+                continue
+            started += 1
+            started_job_ids.append(item.job.id)
+            audit.started_count = started
+            audit.started_job_ids = list(started_job_ids)
+            await _commit_worker_state(db)
+            row = (await db.execute(_download_job_query(job_id=item.job.id))).one()
+            job, video, channel = row
+            ok = await _run_one_job(db=db, job=job, video=video, channel=channel)
+            completed += int(ok)
+            failed += int(not ok)
+            if ok:
+                completed_job_ids.append(job.id)
+            else:
+                failed_job_ids.append(job.id)
+            audit.completed_count = completed
+            audit.failed_count = failed
+            audit.completed_job_ids = list(completed_job_ids)
+            audit.failed_job_ids = list(failed_job_ids)
+            await _commit_worker_state(db)
+            results.append(to_download_job(job, video, channel))
+    except (asyncio.CancelledError, Exception) as exc:
+        await db.rollback()
+        await db.refresh(audit)
+        reason = "Worker interrupted during shutdown" if isinstance(exc, asyncio.CancelledError) else str(exc)
+        await db.execute(
+            update(DownloadJob)
+            .where(DownloadJob.id.in_(started_job_ids), DownloadJob.status == "running")
+            .values(status="failed", error_message=reason, completed_at=datetime.now(UTC), updated_at=datetime.now(UTC))
         )
-        result = row.one_or_none()
-        if result is None:
-            continue
-        job, video, channel = result
-        started += 1
-        started_job_ids.append(job.id)
-        ok = await _run_one_job(db=db, job=job, video=video, channel=channel)
-        completed += int(ok)
-        failed += int(not ok)
-        if ok:
-            completed_job_ids.append(job.id)
-        else:
-            failed_job_ids.append(job.id)
-        audit.started_count = started
-        audit.completed_count = completed
-        audit.failed_count = failed
-        audit.started_job_ids = list(started_job_ids)
-        audit.completed_job_ids = list(completed_job_ids)
-        audit.failed_job_ids = list(failed_job_ids)
+        audit.status = "failed"
+        audit.completed_at = datetime.now(UTC)
+        audit.skipped_reason = reason
+        audit.failed_job_ids = [job_id for job_id in started_job_ids if job_id not in completed_job_ids]
+        audit.failed_count = max(1, len(audit.failed_job_ids))
         await _commit_worker_state(db)
-        results.append(to_download_job(job, video, channel))
+        raise
 
     audit.status = "completed" if failed == 0 else "failed"
     audit.completed_at = datetime.now(UTC)
@@ -198,6 +282,27 @@ async def run_download_worker_once(
         plan=refreshed_plan,
         jobs=results,
     )
+
+
+async def _claim_download_job(*, db: AsyncSession, job_id: int, channel_id: int | None) -> bool:
+    now = datetime.now(UTC)
+    eligible = _queued_download_query(channel_id=channel_id).with_only_columns(DownloadJob.id)
+    result = await db.execute(
+        update(DownloadJob)
+        .where(DownloadJob.id == job_id, DownloadJob.status == "queued", DownloadJob.id.in_(eligible))
+        .values(
+            status="running",
+            started_at=now,
+            completed_at=None,
+            updated_at=now,
+            progress=0,
+            attempt_count=DownloadJob.attempt_count + 1,
+            error_message=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    await _commit_worker_state(db)
+    return result.rowcount == 1
 
 
 async def list_download_worker_runs(
@@ -367,8 +472,7 @@ async def stop_running_download_job(*, db: AsyncSession, job_id: int) -> Downloa
         job.updated_at = now
         process = _RUNNING_PROCESSES.get(job.id)
         await _commit_worker_state(db)
-        if process is not None and process.returncode is None:
-            process.terminate()
+        await _terminate_process(process)
         await event_bus.publish(
             "download.stop_requested" if previous_status == "running" else "download.cancelled",
             {
@@ -595,15 +699,7 @@ def _to_worker_plan_job(*, job: DownloadJob, video: Video, channel: Channel) -> 
 
 async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, channel: Channel) -> bool:
     archive_dir, command = _worker_command(job=job, video=video, channel=channel)
-    Path(archive_dir).mkdir(parents=True, exist_ok=True)
-    now = datetime.now(UTC)
-    job.status = "running"
-    job.started_at = now
-    job.updated_at = now
-    job.progress = 0
-    job.attempt_count += 1
-    job.error_message = None
-    await _commit_worker_state(db)
+    await db.refresh(job)
     await event_bus.publish(
         "download.started",
         {
@@ -620,10 +716,12 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
     last_line = ""
     process: asyncio.subprocess.Process | None = None
     try:
+        Path(archive_dir).mkdir(parents=True, exist_ok=True)
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            start_new_session=os.name == "posix",
         )
         _RUNNING_PROCESSES[job.id] = process
         assert process.stdout is not None
@@ -653,6 +751,17 @@ async def _run_one_job(*, db: AsyncSession, job: DownloadJob, video: Video, chan
                     },
                 )
         return_code = await process.wait()
+    except asyncio.CancelledError:
+        await _terminate_process(process)
+        await db.rollback()
+        await _refresh_job_state(db, job)
+        if job.status == "running":
+            job.status = "failed"
+            job.error_message = "Download interrupted during shutdown. Retry to resume its partial files."
+            job.completed_at = datetime.now(UTC)
+            job.updated_at = job.completed_at
+            await _commit_worker_state(db)
+        raise
     except Exception as exc:  # pragma: no cover - requires a real yt-dlp process
         await _terminate_process(process)
         await _refresh_job_state(db, job)
@@ -800,9 +909,22 @@ async def _refresh_job_state(db: AsyncSession, job: DownloadJob) -> None:
 async def _terminate_process(process: asyncio.subprocess.Process | None) -> None:
     if process is None or process.returncode is not None:
         return
-    process.terminate()
+    try:
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGTERM)
+        else:
+            process.terminate()
+    except ProcessLookupError:
+        await process.wait()
+        return
     try:
         await asyncio.wait_for(process.wait(), timeout=5)
     except TimeoutError:
-        process.kill()
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except ProcessLookupError:
+            pass
         await process.wait()

@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import init_db, run_migrations
+from app.database import AsyncSessionLocal, database_url, init_db, run_migrations
 from app.routers import (
     channels,
     dashboard,
@@ -24,6 +24,10 @@ from app.routers import (
 from app.routers import settings as settings_router
 from app.security import require_optional_auth
 from app.services.download_scheduler import download_worker_scheduler
+from app.services.download_worker import (
+    recover_interrupted_downloads,
+    stop_background_download_runs,
+)
 from app.services.event_bus import event_bus
 from app.services.metadata_scheduler import metadata_sync_scheduler
 from app.services.runtime_settings import apply_managed_runtime_overrides
@@ -38,13 +42,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Path(settings.download_dir, ".incomplete").mkdir(parents=True, exist_ok=True)
     if settings.db_backup_on_startup:
         backup_sqlite_database(
-            database_url=settings.database_url,
+            database_url=database_url,
             metadata_dir=settings.metadata_dir,
             keep=settings.db_backup_keep,
         )
     if settings.db_migrate_on_startup:
         run_migrations()
     await init_db()
+    async with AsyncSessionLocal() as session:
+        await recover_interrupted_downloads(db=session)
     apply_managed_runtime_overrides()
     metadata_sync_scheduler.start()
     download_worker_scheduler.start()
@@ -53,6 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         await metadata_sync_scheduler.stop()
         await download_worker_scheduler.stop()
+        await stop_background_download_runs()
+        await event_bus.close()
         await event_bus.flush_persistence(timeout=2.0)
 
 

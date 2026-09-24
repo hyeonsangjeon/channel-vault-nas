@@ -37,31 +37,47 @@ async def list_archive_events(
     video_id: int | None = None,
 ) -> list[ArchiveEvent]:
     """Return persisted archive events newest-first, with lightweight operator filters."""
-    bounded_limit = max(1, min(limit, 500))
+    bounded_limit = max(1, min(limit, 2_000))
     has_data_filter = channel_id is not None or job_id is not None or video_id is not None
-    fetch_limit = min(1000, max(bounded_limit, bounded_limit * 10 if has_data_filter else bounded_limit))
-    try:
-        async with AsyncSessionLocal() as session:
-            query = select(ArchiveEventLog)
-            if event_id is not None:
-                query = query.where(ArchiveEventLog.id == event_id)
-            if type_prefix:
-                query = query.where(ArchiveEventLog.type.like(f"{type_prefix}%"))
-            result = await session.execute(
-                query.order_by(desc(ArchiveEventLog.occurred_at), desc(ArchiveEventLog.id)).limit(fetch_limit)
-            )
-            rows = result.scalars().all()
-    except SQLAlchemyError:
-        return []
+    events: list[ArchiveEvent] = []
+    async with AsyncSessionLocal() as session:
+        query = select(ArchiveEventLog).order_by(desc(ArchiveEventLog.occurred_at), desc(ArchiveEventLog.id))
+        if event_id is not None:
+            query = query.where(ArchiveEventLog.id == event_id)
+        if type_prefix:
+            query = query.where(ArchiveEventLog.type.startswith(type_prefix, autoescape=True))
+        if not has_data_filter:
+            query = query.limit(bounded_limit)
+        rows = await session.stream_scalars(query.execution_options(yield_per=250))
+        try:
+            async for row in rows:
+                event = _to_archive_event(row)
+                if _event_matches(event, channel_id=channel_id, job_id=job_id, video_id=video_id):
+                    events.append(event)
+                if len(events) >= bounded_limit:
+                    break
+        finally:
+            await rows.close()
+    return events
 
-    events = [_to_archive_event(row) for row in rows]
-    if has_data_filter:
-        events = [
-            event
-            for event in events
-            if _event_matches(event, channel_id=channel_id, job_id=job_id, video_id=video_id)
-        ]
-    return events[:bounded_limit]
+
+def filter_archive_events(
+    events: list[ArchiveEvent],
+    *,
+    limit: int,
+    event_id: int | None = None,
+    type_prefix: str | None = None,
+    channel_id: int | None = None,
+    job_id: int | None = None,
+    video_id: int | None = None,
+) -> list[ArchiveEvent]:
+    return [
+        event
+        for event in events
+        if (event_id is None or event.id == event_id)
+        and (not type_prefix or event.type.startswith(type_prefix))
+        and _event_matches(event, channel_id=channel_id, job_id=job_id, video_id=video_id)
+    ][:limit]
 
 
 async def prune_archive_events(*, keep_latest: int = 500) -> ArchiveEventPruneResult:
