@@ -57,6 +57,23 @@ fast non-browser release-gate pass while iterating locally.
 - Keep empty states actionable.
 - Test desktop and mobile for layout overflow when changing panels or drawers.
 
+## Docker Hub Descriptions
+
+`docs/dockerhub-description.md` is the shared description for the API and web
+images. Changes to it on `main` trigger the `Docker Hub descriptions` workflow,
+which updates both repositories and verifies the published text.
+
+The workflow uses the existing `DOCKERHUB_USERNAME` Actions secret and a separate
+`DOCKERHUB_DESCRIPTION_TOKEN` secret. The description action requires a Docker Hub
+personal access token with **Read, Write, Delete** permissions. For repositories
+owned by an organization, the account also needs repository **Admin** access.
+Store the token only in Actions secrets, not in source files or issue comments.
+
+Keep `DOCKERHUB_TOKEN` for image publishing. A token that can push images may
+still receive HTTP 403 when editing repository descriptions. After configuring
+the description token, run `Docker Hub descriptions` manually from Actions on
+`main`. Updating descriptions does not rebuild images or restart a NAS.
+
 ## Reporting Private Details
 
 Do not paste private archive paths, source URLs, support bundles, logs, or

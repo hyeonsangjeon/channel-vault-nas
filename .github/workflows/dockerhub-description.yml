@@ -29,6 +29,15 @@ jobs:
           - channel-vault-nas-api
           - channel-vault-nas-web
     steps:
+      - name: Check description token
+        env:
+          DOCKERHUB_DESCRIPTION_TOKEN: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_DESCRIPTION_TOKEN" ]; then
+            echo "::error::Set DOCKERHUB_DESCRIPTION_TOKEN to a Docker Hub PAT with Read, Write, Delete permissions before publishing descriptions."
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v6
         with:
@@ -38,7 +47,7 @@ jobs:
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN }}
           repository: modenaf360/${{ matrix.image }}
           readme-filepath: docs/dockerhub-description.md
 

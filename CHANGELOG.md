@@ -10,6 +10,7 @@ The project is actively developed and out of alpha. Dates use Korea Standard Tim
 
 - Automatically sync both Docker Hub image descriptions from the repository
   and verify the published text, keeping image examples and release links current.
+  Use a separate description token without changing image-publishing credentials.
 
 ## 0.3.1 - 2026-09-24
 
