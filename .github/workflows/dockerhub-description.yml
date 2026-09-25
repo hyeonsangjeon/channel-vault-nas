@@ -1,0 +1,67 @@
+name: Docker Hub descriptions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/dockerhub-description.md"
+      - ".github/workflows/dockerhub-description.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-description
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Update ${{ matrix.image }} description
+    if: github.repository == 'hyeonsangjeon/channel-vault-nas' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - channel-vault-nas-api
+          - channel-vault-nas-web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Publish Docker Hub description
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: modenaf360/${{ matrix.image }}
+          readme-filepath: docs/dockerhub-description.md
+
+      - name: Verify published description
+        env:
+          DOCKERHUB_REPOSITORY: modenaf360/${{ matrix.image }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from pathlib import Path
+          from urllib.request import urlopen
+
+          expected = Path("docs/dockerhub-description.md").read_text(encoding="utf-8").strip()
+          repository = os.environ["DOCKERHUB_REPOSITORY"]
+          for attempt in range(6):
+              with urlopen(f"https://hub.docker.com/v2/repositories/{repository}/", timeout=20) as response:
+                  published = json.load(response).get("full_description", "").strip()
+              if published == expected:
+                  print(f"Verified {repository}: published description matches the repository")
+                  break
+              if attempt == 5:
+                  raise SystemExit(f"Published description does not match the repository: {repository}")
+              time.sleep(5)
+          PY

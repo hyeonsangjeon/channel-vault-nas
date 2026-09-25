@@ -6,7 +6,10 @@ The project is actively developed and out of alpha. Dates use Korea Standard Tim
 
 ## Unreleased
 
-No unreleased changes.
+### Changed
+
+- Automatically sync both Docker Hub image descriptions from the repository
+  and verify the published text, keeping image examples and release links current.
 
 ## 0.3.1 - 2026-09-24
 
