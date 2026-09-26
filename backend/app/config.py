@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     ffprobe_binary: str = "ffprobe"
     media_probe_timeout_seconds: int = 20
     channel_probe_timeout_seconds: int = 90
-    channel_probe_video_limit: int = 500
+    channel_probe_video_limit: int = Field(default=500, ge=1)
     preservation_confirm_hours: int = 24
     download_worker_enabled: bool = False
     download_worker_plan_limit: int = 3

@@ -145,6 +145,7 @@ class RuntimeSettingsRead(BaseModel):
     """Operator-facing runtime settings snapshot."""
 
     download_worker_enabled: bool
+    ytdlp_ejs_available: bool = False
     download_worker_scheduler_enabled: bool
     download_worker_scheduler_interval_seconds: int
     download_worker_scheduler_limit: int

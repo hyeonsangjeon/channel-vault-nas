@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import delete
 
+from app.config import settings
 from app.database import AsyncSessionLocal, init_db, run_migrations
 from app.models.archive import (
     Channel,
@@ -264,3 +265,33 @@ async def test_coverage_without_archive_root_trusts_index() -> None:
     assert detail is not None
     assert detail.archived_count == 1
     assert detail.missing_count == 0
+
+
+@pytest.mark.asyncio
+async def test_coverage_exposes_tracked_scope_instead_of_reported_source_total(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrations()
+    await init_db()
+    await _reset_archive_tables()
+    channel_id, video_id = await _seed_channel_and_video()
+    monkeypatch.setattr(settings, "channel_probe_video_limit", 75)
+    media_dir = tmp_path / CHANNEL_DIR
+    media_dir.mkdir(parents=True)
+    (media_dir / "video.mp4").write_bytes(b"local-media")
+    await _add_media_file(video_id=video_id, size_bytes=11)
+    async with AsyncSessionLocal() as session:
+        channel = await session.get(Channel, channel_id)
+        assert channel is not None
+        channel.source_video_count = 1_200
+        await session.commit()
+        coverage = await build_channel_coverage_from_db(session, channel_id, download_dir=tmp_path)
+        detail = await get_channel_detail(session, channel_id, download_dir=tmp_path)
+    assert coverage is not None
+    assert coverage.scope == "tracked_videos"
+    assert coverage.probe_limit == 75
+    assert coverage.source == coverage.archived == 1
+    assert coverage.missing == 0
+    assert detail is not None
+    assert detail.video_count == 1_200
+    assert detail.coverage == coverage

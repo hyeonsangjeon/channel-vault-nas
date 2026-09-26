@@ -199,6 +199,8 @@ jobs:
           curl -fsS http://127.0.0.1:15173/api/health | jq -e --arg version "$RELEASE_VERSION" '.version == $version'
           scripts/deployment-smoke.sh
           python3 scripts/async-worker-smoke.py http://127.0.0.1:15173
+      - name: Verify published downloader and isolated index recovery
+        run: docker compose exec -T api python scripts/verify_download_recovery.py
       - name: Container logs
         if: failure()
         run: docker compose logs --no-color --tail=100

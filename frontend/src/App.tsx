@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
+import { backupProgress } from "./components/channel/backup-progress";
 import {
   applyLibraryRescan,
   ApiAuthError,
@@ -1646,25 +1647,23 @@ function App() {
       schedulerStatus.limit !== runtimeDraftLimitNumber ||
       metadataSchedulerStatus?.interval_seconds !== runtimeDraftMetadataIntervalNumber ||
       channelDetail?.sync_interval_minutes !== channelSchedulerIntervalMinutes);
-  const channelScheduleTotalCount = Math.max(
-    activeCounts?.video_count ?? 0,
-    library?.total ?? 0,
-    channelVideos.length,
-    simpleFlowStats.seen,
-    activeArchivedCount + activeMissingCount,
-  );
-  const channelScheduleDownloadedCount = Math.min(
-    channelScheduleTotalCount,
-    activeArchivedCount,
-  );
-  const channelScheduleRemainingCount = Math.max(
-    0,
-    activeMissingCount || channelScheduleTotalCount - channelScheduleDownloadedCount,
-  );
-  const channelScheduleComplete = channelScheduleTotalCount > 0 && channelScheduleRemainingCount === 0;
+  const channelProgressCoverage = channelDetail?.coverage
+    ?? (channelCoverage?.channel_id === String(registeredChannelId) ? channelCoverage : null);
+  const channelProgress = backupProgress(channelProgressCoverage);
+  const channelScheduleTotalCount = channelProgress.total;
+  const channelScheduleDownloadedCount = channelProgress.downloaded;
+  const channelScheduleRemainingCount = channelProgress.remaining;
+  const channelScheduleComplete = channelProgress.complete;
+  const missingDownloadDependencies = runtimeSettings
+    ? [
+        ...runtimeSettings.binaries.filter((binary) => !binary.available).map((binary) => binary.name),
+        ...(runtimeSettings.ytdlp_ejs_available === false ? ["yt-dlp-ejs"] : []),
+      ]
+    : [];
   const channelRuntimeNeedsAttention = Boolean(
     runtimeSettings &&
-      (runtimeSettings.pending_restart ||
+      (missingDownloadDependencies.length > 0 ||
+        runtimeSettings.pending_restart ||
         !runtimeSettings.download_worker_enabled ||
         !schedulerStatus?.enabled ||
         !metadataSchedulerStatus?.enabled ||
@@ -1681,8 +1680,9 @@ function App() {
     channelAutomaticBackupIntended &&
       (failedDownloadJobIds.length > 0 || channelRuntimeNeedsAttention),
   );
-  const channelAttentionMessage =
-    failedDownloadJobs[0]?.error_message || runtimeApplyMessage || t("detail.simple.attentionDetail");
+  const channelAttentionMessage = missingDownloadDependencies.length > 0
+    ? t("runtime.dependenciesMissing").replace("{dependencies}", missingDownloadDependencies.join(", "))
+    : failedDownloadJobs[0]?.error_message || runtimeApplyMessage || t("detail.simple.attentionDetail");
   const channelSchedulerSummaryLabel = channelScheduleComplete ? t("detail.automation.complete") : channelSchedulerSummary;
   const binaryStateLabel = (binary: RuntimeSettings["binaries"][number] | null) =>
     !binary ? t("runtime.checking") : binary.available ? t("runtime.available") : t("runtime.missing");
@@ -6351,7 +6351,10 @@ function App() {
               <ChannelBackupOverview
                 attention={channelBackgroundNeedsAttention || runtimeApplyStatus === "error"}
                 applying={runtimeApplyStatus === "applying" || workflowStatus === "syncing" || workflowStatus === "bulk"}
+                checked={channelProgress.checked}
                 complete={channelScheduleComplete}
+                probeLimit={channelProgressCoverage?.probe_limit ?? null}
+                unavailable={channelProgress.unavailable}
                 dirty={channelSchedulerDirty}
                 downloaded={channelScheduleDownloadedCount}
                 failedCount={failedDownloadJobIds.length}
@@ -7102,24 +7105,26 @@ function App() {
                 </button>
               </div>
             </article>
-            <article className={`runtime-card ${ytdlpBinary?.available ? "good" : "warn"}`}>
-              <div className="runtime-card-icon">
-                <Rocket size={18} />
-              </div>
-              <div>
-                <span>yt-dlp</span>
-                <strong>{binaryStateLabel(ytdlpBinary)}</strong>
-                <small>{binaryDetailLabel(ytdlpBinary)}</small>
-              </div>
-            </article>
-            <article className={`runtime-card ${ffprobeBinary?.available ? "good" : "warn"}`}>
+            {runtimeSettings?.binaries.map((binary) => (
+              <article className={`runtime-card ${binary.available ? "good" : "warn"}`} key={binary.name}>
+                <div className="runtime-card-icon">
+                  <Rocket size={18} />
+                </div>
+                <div>
+                  <span>{binary.name}</span>
+                  <strong>{binaryStateLabel(binary)}</strong>
+                  <small>{binaryDetailLabel(binary)}</small>
+                </div>
+              </article>
+            ))}
+            <article className={`runtime-card ${runtimeSettings?.ytdlp_ejs_available ? "good" : "warn"}`}>
               <div className="runtime-card-icon">
                 <Database size={18} />
               </div>
               <div>
-                <span>ffprobe</span>
-                <strong>{binaryStateLabel(ffprobeBinary)}</strong>
-                <small>{binaryDetailLabel(ffprobeBinary)}</small>
+                <span>yt-dlp-ejs</span>
+                <strong>{!runtimeSettings ? t("runtime.checking") : runtimeSettings.ytdlp_ejs_available ? t("runtime.available") : t("runtime.missing")}</strong>
+                <small>{t("runtime.youtubeDependenciesHint")}</small>
               </div>
             </article>
           </div>
@@ -7171,7 +7176,10 @@ function App() {
             <ChannelBackupOverview
               attention={channelBackgroundNeedsAttention || runtimeApplyStatus === "error"}
               applying={runtimeApplyStatus === "applying" || workflowStatus === "syncing" || workflowStatus === "bulk"}
+              checked={channelProgress.checked}
               complete={channelScheduleComplete}
+              probeLimit={channelProgressCoverage?.probe_limit ?? null}
+              unavailable={channelProgress.unavailable}
               dirty={channelSchedulerDirty}
               downloaded={channelScheduleDownloadedCount}
               failedCount={failedDownloadJobIds.length}

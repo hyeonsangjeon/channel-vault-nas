@@ -46,6 +46,37 @@ Compose `.env` values manually.
     overrides. See the
     [Settings tour](product-tour.md#settings).
 
+## Verify the downloader and recovery
+
+The API build includes Deno and `yt-dlp[default]` with its matching EJS package.
+**Settings → Technical settings** reports missing binaries and EJS. A successful
+health check or channel preview alone does not verify a media download.
+
+Images built with `scripts/verify_download_recovery.py` support an isolated check
+with **no mounts and no external network**:
+
+```bash
+docker run --rm --network none YOUR_API_IMAGE python scripts/verify_download_recovery.py
+```
+
+Use the exact image tag or digest being evaluated in place of `YOUR_API_IMAGE`.
+This generates a one-second local clip, transfers it with the worker's real
+`yt-dlp` command, probes it with `ffprobe`, and rebuilds its index in a second,
+empty SQLite database. It also checks a SQLite snapshot and verifies archive
+file hashes are unchanged. All data is temporary. **This is not a YouTube test.**
+
+For a separate, opt-in YouTube check, use a video you own or are authorized to
+archive. It must be non-live, at most 30 seconds, and fit within the 50 MiB limit:
+
+```bash
+docker run --rm YOUR_API_IMAGE python scripts/verify_download_recovery.py \
+  --youtube-video-id YOUR_VIDEO_ID --allow-network
+```
+
+Only a successful report with `youtube_verified: true` verifies that particular
+source at that time. This does not guarantee other channels, regions, authenticated
+sources, or future YouTube behavior. The existing `0.3.1` images predate this check.
+
 ## The pass is always bounded
 
 Worker passes are intentionally capped so an accidental click can't saturate your

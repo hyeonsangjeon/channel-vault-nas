@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.archive import ChannelCoverage
 from app.schemas.source import RegisteredChannel
 
 
@@ -49,6 +50,7 @@ class ChannelDetail(BaseModel):
     """Registered channel detail for the post-registration screen."""
 
     id: int
+    coverage: ChannelCoverage | None = None
     title: str
     external_id: str | None
     handle: str | None

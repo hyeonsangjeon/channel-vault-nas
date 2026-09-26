@@ -220,6 +220,7 @@ def to_channel_detail(
     removed_saved_count = channel.removed_saved_count if coverage is None else coverage.removed_saved
     return ChannelDetail(
         id=channel.id,
+        coverage=coverage,
         title=channel.title,
         external_id=channel.external_id,
         handle=channel.handle,

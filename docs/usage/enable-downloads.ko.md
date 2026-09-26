@@ -44,6 +44,35 @@ CVN_FFPROBE_BINARY=ffprobe
     **런타임 env 매니페스트**에서 현재 적용값과 저장 대기값을 확인할 수
     있습니다. [설정 둘러보기](product-tour.md#settings) 참고.
 
+## 다운로드와 복구 검증
+
+API 빌드에는 Deno와 EJS 패키지를 포함한 `yt-dlp[default]`가 들어갑니다.
+**설정 → 기술 설정**에서 누락된 항목을 확인할 수 있습니다. 상태 확인이나
+채널 미리보기 성공만으로 실제 다운로드를 검증한 것은 아닙니다.
+
+검증 스크립트가 포함된 이미지는 마운트와 외부 네트워크 없이 확인할 수 있습니다.
+`YOUR_API_IMAGE`를 검증할 정확한 이미지 태그나 digest로 바꾸세요.
+
+```bash
+docker run --rm --network none YOUR_API_IMAGE python scripts/verify_download_recovery.py
+```
+
+직접 생성한 1초 영상을 실제 `yt-dlp`로 전송하고 `ffprobe`로 읽은 뒤, 새 SQLite
+DB에 색인을 재구축합니다. DB 백업과 복구 전후 파일 해시도 확인합니다. 모든
+데이터는 임시 폴더에만 남습니다. **이 검사는 YouTube 다운로드 검증이 아닙니다.**
+
+YouTube는 별도로 확인합니다. 소유하거나 보관 권한이 있는 30초 이하 영상의 ID를
+넣으세요. 라이브 영상은 제외하며 전송 크기는 50 MiB로 제한합니다.
+
+```bash
+docker run --rm YOUR_API_IMAGE python scripts/verify_download_recovery.py \
+  --youtube-video-id YOUR_VIDEO_ID --allow-network
+```
+
+성공 결과의 `youtube_verified: true`는 그 시점의 해당 영상만 검증합니다. 다른
+채널·지역·인증이 필요한 소스나 향후 YouTube 동작까지 보장하지 않습니다. 기존
+`0.3.1` 이미지는 이 검증 스크립트가 추가되기 전에 배포됐습니다.
+
 ## 패스는 항상 제한됩니다
 
 워커 패스는 실수로 클릭해도 NAS나 네트워크를 포화시키지 못하도록 의도적으로

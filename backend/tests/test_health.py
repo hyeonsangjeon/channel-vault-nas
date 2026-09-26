@@ -129,8 +129,25 @@ async def test_runtime_settings_endpoint_exposes_non_secret_worker_health() -> N
     assert data["scheduler_ticks"] == []
     assert data["restart_adapter"]["manual_required"] is True
     assert data["restart_adapter"]["command"]
-    assert {binary["name"] for binary in data["binaries"]} == {"yt-dlp", "ffprobe"}
+    assert {binary["name"] for binary in data["binaries"]} == {"yt-dlp", "deno", "ffmpeg", "ffprobe"}
+    assert isinstance(data["ytdlp_ejs_available"], bool)
     assert "secret" not in data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("available", [False, True])
+async def test_runtime_reports_youtube_dependencies(monkeypatch: pytest.MonkeyPatch, available: bool) -> None:
+    run_migrations()
+    await init_db()
+    monkeypatch.setattr("app.services.runtime_settings.find_spec", lambda name: object() if available else None)
+    monkeypatch.setattr("app.services.runtime_settings.which", lambda command: f"/usr/bin/{command}" if available else None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/settings/runtime")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ytdlp_ejs_available"] is available
+    assert all(binary["available"] is available for binary in data["binaries"])
 
 
 @pytest.mark.asyncio

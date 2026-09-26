@@ -6,7 +6,7 @@ read the backup status.
 !!! info "Before you start"
     From your computer, open **`http://<NAS-IP>:<web-port>/`** using the NAS
     address and web port chosen during installation. Use
-    **`http://127.0.0.1:5173/`** only for local frontend development. The
+    **`http://127.0.0.1:5173/`** only when the app and browser run on the same computer. The
     screenshots use the deterministic `Channel Vault Guide` example at
     `https://www.youtube.com/@channelvaultguide`; replace it with a channel you
     own. Channel Vault NAS is for archiving **your own** channels.
@@ -81,9 +81,16 @@ without requiring another screen.
 </figure>
 
 !!! success "Your automatic backup is ready"
-    When the remaining count reaches zero, the heading changes to **Every video
-    on this channel is backed up**. Keep **Automatic backup is on** if Channel
+    When every tracked video has a local media file, the heading changes to
+    **Tracked videos are backed up**. Keep **Automatic backup is on** if Channel
     Vault should collect future uploads.
+
+!!! warning "Tracked videos are not necessarily the entire channel"
+    Counts cover indexed videos. A channel check reads up to
+    `CVN_CHANNEL_PROBE_VIDEO_LIMIT` uploads (`500` by default); older videos may
+    not have been scanned. Zero remaining downloads alone does not establish a
+    complete backup. Source-absent videos without local files are shown separately
+    and prevent the tracked-video backup from being marked complete.
 
 To add another channel, open **Channels**, select **Add channel**, and repeat
 these three steps.

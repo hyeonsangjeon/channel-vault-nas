@@ -27,7 +27,9 @@ docker compose -f compose.release.yml up -d
 사용하세요. 같은 릴리스 파일을 Compose v2와 레거시 Compose 1.28.5에서 모두
 검증했습니다.
 
-그런 다음 **`http://127.0.0.1:5173/`** 을 열고
+NAS에 설치했다면 컴퓨터 브라우저에서 **`http://<NAS-IP>:5173/`** 을 여세요.
+Docker와 브라우저가 같은 컴퓨터에 있을 때만 **`http://127.0.0.1:5173/`** 을
+사용합니다. `CVN_WEB_PORT`를 바꿨다면 해당 포트로 접속하고,
 [채널 백업 시작](../usage/first-backup.md)으로 이동하세요.
 
 ??? note "GHCR 이미지를 선호하나요?"

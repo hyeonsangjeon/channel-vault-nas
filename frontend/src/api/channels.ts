@@ -113,6 +113,7 @@ export type ChannelRegistrationPayload = {
 };
 
 export type ChannelDetail = RegisteredChannel & {
+  coverage: ChannelCoverage | null;
   description: string | null;
   thumbnail_url: string | null;
   removed_saved_count: number;
@@ -153,6 +154,8 @@ export type ChannelVideo = {
 
 export type ChannelCoverage = {
   channel_id: string;
+  scope: "tracked_videos";
+  probe_limit: number;
   source: number;
   archived: number;
   missing: number;
@@ -679,6 +682,7 @@ export type BinaryHealth = {
 
 export type RuntimeSettings = {
   download_worker_enabled: boolean;
+  ytdlp_ejs_available: boolean;
   download_worker_scheduler_enabled: boolean;
   download_worker_scheduler_interval_seconds: number;
   download_worker_scheduler_limit: number;

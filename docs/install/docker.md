@@ -26,7 +26,9 @@ Older Synology Docker packages expose `docker-compose` instead of
 `docker compose`. The same release file is verified with Compose v2 and legacy
 Compose 1.28.5.
 
-Then open **`http://127.0.0.1:5173/`** and jump to
+From your computer, open **`http://<NAS-IP>:5173/`** if Docker runs on the NAS.
+Use **`http://127.0.0.1:5173/`** only if Docker and the browser run on the same
+computer. Substitute your configured `CVN_WEB_PORT` if it is not `5173`, then jump to
 [Your first channel backup](../usage/first-backup.md).
 
 ??? note "Prefer GHCR images?"

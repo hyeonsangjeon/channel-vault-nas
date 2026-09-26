@@ -133,6 +133,8 @@ jobs:
         run: scripts/deployment-smoke.sh
       - name: Check asynchronous worker API through Nginx
         run: python3 scripts/async-worker-smoke.py http://127.0.0.1:15173
+      - name: Verify real local media transfer and isolated index recovery
+        run: docker compose exec -T api python scripts/verify_download_recovery.py
       - name: Container logs
         if: failure()
         run: docker compose logs --no-color --tail=100
@@ -175,6 +177,11 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: npm ci
+
+      - name: Set up downloader JavaScript runtime
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed
+        with:
+          deno-version: v2.9.7
 
       - name: Install Playwright Chromium
         working-directory: frontend

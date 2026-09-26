@@ -108,7 +108,9 @@ On older Synology Docker packages, use `docker-compose` in place of
 `docker compose`. The release file is verified with both Compose v2 and legacy
 Compose 1.28.5.
 
-Open **`http://127.0.0.1:5173/`**, then:
+If Docker runs on your NAS, open **`http://<NAS-IP>:5173/`** from your computer.
+Use **`http://127.0.0.1:5173/`** only when Docker and your browser run on the same
+computer. Replace `5173` if you changed `CVN_WEB_PORT`. Then:
 
 1. On **Home**, select **Register channel**, paste a channel URL or `@handle`,
    select **Check channel**, then confirm with **Register channel**.
@@ -116,6 +118,11 @@ Open **`http://127.0.0.1:5173/`**, then:
    **Start automatic backup**.
 3. Confirm the channel shows **Automatic backup is on** or **Automatic backup
    is running**. The same screen shows saved, remaining, and next-run details.
+
+Backup progress covers **tracked videos**, not proof that the entire channel
+has been scanned. Each check reads at most `CVN_CHANNEL_PROBE_VIDEO_LIMIT`
+uploads (`500` by default). Source-absent videos without local files are not
+counted as backed up.
 
 Already have files or an `archive.txt`? Follow
 [Bring an existing archive](docs/usage/migrate-existing-archive.md) first so

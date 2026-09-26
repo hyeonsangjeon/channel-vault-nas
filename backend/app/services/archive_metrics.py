@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.archive import Channel, MediaFile, Video
 from app.schemas.archive import (
     CadenceBucket,
@@ -58,6 +59,7 @@ async def build_channel_coverage_from_db(
     percent = round((archived_count / source_count) * 100, 1) if source_count else 0.0
     return ChannelCoverage(
         channel_id=str(channel.id),
+        probe_limit=settings.channel_probe_video_limit,
         source=source_count,
         archived=archived_count,
         missing=missing_count,

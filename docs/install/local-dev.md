@@ -7,8 +7,13 @@ for editing the code.
 
 - Python 3.11+
 - Node.js 20.19+ within the 20.x line, or 22.12+ (CI verifies with Node.js 24)
-- `yt-dlp`
+- `yt-dlp[default]` including `yt-dlp-ejs` (installed by the backend requirements)
+- [Deno](https://docs.deno.com/runtime/getting_started/installation/) 2.3+ on `PATH`
 - `ffmpeg` / `ffprobe`
+
+The frontend's Node.js process does not supply a JavaScript runtime to the
+backend. YouTube extraction uses Deno and the EJS package. Check their availability
+in **Settings → Technical settings** before starting a backup.
 
 ## Backend
 

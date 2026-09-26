@@ -7,8 +7,13 @@ FastAPI 백엔드와 Vite 개발 서버를 직접 실행합니다 — 코드를 
 
 - Python 3.11+
 - Node.js 20.x는 20.19 이상, 또는 22.12 이상 (CI는 Node.js 24로 검증)
-- `yt-dlp`
+- `yt-dlp-ejs`를 포함한 `yt-dlp[default]` (백엔드 의존성과 함께 설치)
+- `PATH`에 등록된 [Deno](https://docs.deno.com/runtime/getting_started/installation/) 2.3 이상
 - `ffmpeg` / `ffprobe`
+
+프런트엔드의 Node.js 프로세스는 백엔드에 JavaScript 실행 환경을 제공하지 않습니다.
+YouTube 처리에는 Deno와 EJS 패키지를 사용합니다. 백업을 시작하기 전에
+**설정 → 기술 설정**에서 필요한 항목이 있는지 확인하세요.
 
 ## 백엔드
 

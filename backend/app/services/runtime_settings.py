@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 from datetime import UTC, datetime, timedelta
+from importlib.util import find_spec
 from pathlib import Path
 from shutil import which
 
@@ -95,6 +96,7 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
     pending_overrides = _pending_overrides()
     return RuntimeSettingsRead(
         download_worker_enabled=settings.download_worker_enabled,
+        ytdlp_ejs_available=find_spec("yt_dlp_ejs") is not None,
         download_worker_scheduler_enabled=settings.download_worker_scheduler_enabled,
         download_worker_scheduler_interval_seconds=settings.download_worker_scheduler_interval_seconds,
         download_worker_scheduler_limit=settings.download_worker_scheduler_limit,
@@ -114,6 +116,8 @@ async def get_runtime_settings(*, db: AsyncSession) -> RuntimeSettingsRead:
         metadata_sync_ticks=metadata_sync_ticks,
         binaries=[
             _binary_health(name="yt-dlp", command=settings.ytdlp_binary),
+            _binary_health(name="deno", command="deno"),
+            _binary_health(name="ffmpeg", command="ffmpeg"),
             _binary_health(name="ffprobe", command=settings.ffprobe_binary),
         ],
     )

@@ -1,14 +1,17 @@
 """Archive priority API schemas."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
 class ChannelCoverage(BaseModel):
-    """Completeness snapshot for one channel."""
+    """Disk-aware counts of indexed videos, not a complete source listing."""
 
     channel_id: str
+    scope: Literal["tracked_videos"] = "tracked_videos"
+    probe_limit: int = Field(default=500, ge=1)
     source: int
     archived: int
     missing: int

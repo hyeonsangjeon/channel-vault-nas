@@ -6,11 +6,29 @@ The project is actively developed and out of alpha. Dates use Korea Standard Tim
 
 ## Unreleased
 
+### Fixed
+
+- Bundle a pinned Deno runtime and `yt-dlp[default]` with its matching EJS package
+  in the API build. Expose missing download dependencies in runtime settings.
+- Calculate backup completion from the disk-aware tracked-video coverage, not
+  source totals or filtered library results. Unavailable videos without local
+  media prevent completion; show the probe limit without claiming a whole-channel
+  backup. No database migration is needed.
+- Distinguish the NAS address from browser-local loopback in English and Korean
+  installation instructions.
+
 ### Changed
 
 - Automatically sync both Docker Hub image descriptions from the repository
   and verify the published text, keeping image examples and release links current.
   Use a separate description token without changing image-publishing credentials.
+
+### Added
+
+- An isolated downloader/recovery check using generated local media, real
+  `yt-dlp`/`ffprobe`, fresh SQLite indexes, and archive hashes. CI and release
+  image checks run it without touching deployment data. YouTube verification is
+  a separate opt-in check using an authorized short video.
 
 ## 0.3.1 - 2026-09-24
 

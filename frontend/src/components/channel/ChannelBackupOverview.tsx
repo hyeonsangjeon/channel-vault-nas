@@ -15,6 +15,7 @@ type Translate = (key: TranslationKey) => string;
 type ChannelBackupOverviewProps = {
   attention: boolean;
   applying: boolean;
+  checked: boolean;
   complete: boolean;
   dirty: boolean;
   downloaded: number;
@@ -36,6 +37,7 @@ type ChannelBackupOverviewProps = {
   onStart: () => void;
   onStop: () => void;
   onUpdate: () => void;
+  probeLimit: number | null;
   remaining: number;
   schedulerEnabled: boolean;
   schedulerRunning: boolean;
@@ -43,6 +45,7 @@ type ChannelBackupOverviewProps = {
   t: Translate;
   title: string;
   total: number;
+  unavailable: number;
 };
 
 const intervalPresets = [15, 30, 60, 360, 720, 1440];
@@ -51,6 +54,7 @@ const limitPresets = [1, 3, 5, 10, 20];
 export function ChannelBackupOverview({
   attention,
   applying,
+  checked,
   complete,
   dirty,
   downloaded,
@@ -72,6 +76,7 @@ export function ChannelBackupOverview({
   onStart,
   onStop,
   onUpdate,
+  probeLimit,
   remaining,
   schedulerEnabled,
   schedulerRunning,
@@ -79,10 +84,18 @@ export function ChannelBackupOverview({
   t,
   title,
   total,
+  unavailable,
 }: ChannelBackupOverviewProps) {
   const intervals = withCurrent(intervalPresets, intervalMinutes);
   const limits = withCurrent(limitPresets, limit);
   const isRunning = schedulerEnabled && schedulerRunning;
+  const headline = !checked
+    ? "detail.simple.checkingTitle"
+    : complete
+      ? "detail.simple.completeTitle"
+      : remaining === 0
+        ? unavailable > 0 ? "detail.simple.unavailableTitle" : "detail.simple.emptyTitle"
+        : "detail.simple.title";
 
   return (
     <section className="channel-backup-overview">
@@ -95,16 +108,16 @@ export function ChannelBackupOverview({
           </div>
         </div>
         <dl className="channel-backup-counts" aria-label={t("detail.automation.counts")}>
-          <div><dt>{t("detail.automation.totalVideos")}</dt><dd>{total}</dd></div>
-          <div><dt>{t("detail.automation.downloadedVideos")}</dt><dd>{downloaded}</dd></div>
-          <div><dt>{t("detail.automation.remainingVideos")}</dt><dd>{remaining}</dd></div>
+          <div><dt>{t("detail.simple.trackedVideos")}</dt><dd>{checked ? total : "—"}</dd></div>
+          <div><dt>{t("detail.automation.downloadedVideos")}</dt><dd>{checked ? downloaded : "—"}</dd></div>
+          <div><dt>{t("detail.automation.remainingVideos")}</dt><dd>{checked ? remaining : "—"}</dd></div>
         </dl>
       </header>
 
       <div className="channel-backup-command">
         <div className="channel-backup-copy">
           <h3>
-            {(complete ? t("detail.simple.completeTitle") : t("detail.simple.title")).replace(
+            {t(headline).replace(
               "{remaining}",
               String(remaining),
             )}
@@ -114,6 +127,12 @@ export function ChannelBackupOverview({
               .replace("{downloaded}", String(downloaded))
               .replace("{remaining}", String(remaining))}
           </p>
+          {probeLimit !== null ? (
+            <p>{t("detail.simple.scopeHint").replace("{limit}", String(probeLimit))}</p>
+          ) : null}
+          {unavailable > 0 ? (
+            <p role="status">{t("detail.simple.unavailableHint").replace("{count}", String(unavailable))}</p>
+          ) : null}
         </div>
 
         <div className="channel-backup-controls">
